@@ -1039,6 +1039,15 @@ def StreamGetOp : Allo_Op<"stream_get"> {
   }];
 }
 
+def StreamEmptyOp : Allo_Op<"stream_empty"> {
+  let summary = "Non-blocking probe: whether a stream has no data available";
+  let arguments = (ins StreamLike:$stream, DenseI64ArrayAttr:$indices);
+  let results = (outs I1:$res);
+  let assemblyFormat = [{
+      `(` $stream `,` $indices `)` attr-dict `:` qualified(type($stream)) `->` type($res)
+  }];
+}
+
 def StreamPutOp : Allo_Op<"stream_put"> {
   let summary = "Put an object into a stream";
   let arguments = (ins StreamLike:$stream, DenseI64ArrayAttr:$indices, AnyType:$data);

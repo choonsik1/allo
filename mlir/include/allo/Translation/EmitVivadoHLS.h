@@ -68,6 +68,7 @@ public:
   /// Stream operation emitters.
   void emitStreamConstruct(allo::StreamConstructOp op) override;
   void emitStreamGet(allo::StreamGetOp op) override;
+  void emitStreamEmpty(allo::StreamEmptyOp op) override;
   void emitStreamPut(allo::StreamPutOp op) override;
 
   /// Top-level MLIR module emitter.

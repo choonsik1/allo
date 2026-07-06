@@ -664,6 +664,9 @@ public:
     return emitter.emitStreamConstruct(op), true;
   }
   bool visitOp(allo::StreamGetOp op) { return emitter.emitStreamGet(op), true; }
+  bool visitOp(allo::StreamEmptyOp op) {
+    return emitter.emitStreamEmpty(op), true;
+  }
   bool visitOp(allo::StreamPutOp op) { return emitter.emitStreamPut(op), true; }
 
 private:
@@ -1903,6 +1906,22 @@ void allo::hls::VhlsModuleEmitter::emitStreamGet(StreamGetOp op) {
       os << "}\n";
     }
   }
+  emitInfoAndNewLine(op);
+}
+
+void allo::hls::VhlsModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
+  Value result = op.getResult();
+  auto stream = op->getOperand(0);
+  indent();
+  emitValue(result);
+  os << " = ";
+  emitValue(stream, 0, false);
+  if (llvm::isa<ShapedType>(stream.getType())) {
+    auto denseArrayAttr = op->getAttrOfType<DenseI64ArrayAttr>("indices");
+    for (int64_t v : denseArrayAttr.asArrayRef())
+      os << "[" << v << "]";
+  }
+  os << ".empty();";
   emitInfoAndNewLine(op);
 }
 

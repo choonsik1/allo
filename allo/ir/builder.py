@@ -2611,6 +2611,27 @@ class ASTTransformer(ASTBuilder):
                     if isinstance(node.func.value.dtype.dtype, UInt):
                         get_op.attributes["unsigned"] = UnitAttr.get()
                     return get_op
+                if node.func.attr == "empty":
+                    new_name, symbolic_slice, iterator_infos = (
+                        ASTTransformer.get_stream_name(ctx, node.func.value)
+                    )
+                    # insert after the last stream construct op to preserve ordering
+                    stream = ctx.get_symbol(new_name).clone(
+                        ip=ctx.get_stream_construct_ip()
+                    )
+                    if symbolic_slice is not None:
+                        stream.attributes["symbolic_slice"] = StringAttr.get(
+                            symbolic_slice
+                        )
+                        stream.attributes["iterators"] = DictAttr.get(iterator_infos)
+                    # result type is fixed to i1 in the .td (buildable type),
+                    # so the generated constructor takes no result type
+                    empty_op = allo_d.StreamEmptyOp(
+                        stream.result,
+                        [],
+                        ip=ctx.get_ip(),
+                    )
+                    return empty_op
                 if node.func.attr == "bitcast":
                     val = build_stmt(ctx, node.func.value)
                     op = arith_d.BitcastOp(

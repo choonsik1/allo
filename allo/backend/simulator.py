@@ -205,11 +205,14 @@ def _process_function_streams(
         # Collect and replace `stream_get`s and `stream_put`s
         func_stream_ops = []
         recursive_collect_ops(
-            func_def_op, (allo_d.StreamGetOp, allo_d.StreamPutOp), func_stream_ops
+            func_def_op,
+            (allo_d.StreamGetOp, allo_d.StreamPutOp, allo_d.StreamEmptyOp),
+            func_stream_ops,
         )
         for stream_access_op in func_stream_ops:
             assert isinstance(
-                stream_access_op, (allo_d.StreamGetOp, allo_d.StreamPutOp)
+                stream_access_op,
+                (allo_d.StreamGetOp, allo_d.StreamPutOp, allo_d.StreamEmptyOp),
             )
             replace_ip = InsertionPoint(beforeOperation=stream_access_op)
             # Have to leverage weak typing here
@@ -263,6 +266,21 @@ def _process_function_streams(
                 index=2,
                 ip=replace_ip,
             )
+            # Non-blocking probe: empty <=> head == tail. No spin, no pointer
+            # advance -- just compare and replace the i1 result.
+            if isinstance(stream_access_op, allo_d.StreamEmptyOp):
+                head_val_op = memref_d.LoadOp(
+                    memref=head_ptr, indices=[], ip=replace_ip
+                )
+                tail_val_op = memref_d.LoadOp(
+                    memref=tail_ptr, indices=[], ip=replace_ip
+                )
+                empty_cmp_op = arith_d.CmpIOp(
+                    0, lhs=head_val_op, rhs=tail_val_op, ip=replace_ip
+                )
+                stream_access_op.res.replace_all_uses_with(empty_cmp_op.result)
+                stream_access_op.operation.erase()
+                continue
             fifo_ptr = allo_d.StructGetOp(
                 output=stream_type, input=stream_struct, index=0, ip=replace_ip
             )
@@ -496,7 +514,9 @@ def _process_function_streams(
     # (streams defined locally and used locally via stream_get/put, not passed to callees)
     local_stream_ops = []
     recursive_collect_ops(
-        func, (allo_d.StreamGetOp, allo_d.StreamPutOp), local_stream_ops
+        func,
+        (allo_d.StreamGetOp, allo_d.StreamPutOp, allo_d.StreamEmptyOp),
+        local_stream_ops,
     )
 
     for stream_access_op in local_stream_ops:
@@ -538,6 +558,17 @@ def _process_function_streams(
             index=2,
             ip=replace_ip,
         )
+        # Non-blocking probe: empty <=> head == tail. No spin, no pointer
+        # advance -- just compare and replace the i1 result.
+        if isinstance(stream_access_op, allo_d.StreamEmptyOp):
+            head_val_op = memref_d.LoadOp(memref=head_ptr, indices=[], ip=replace_ip)
+            tail_val_op = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=replace_ip)
+            empty_cmp_op = arith_d.CmpIOp(
+                0, lhs=head_val_op, rhs=tail_val_op, ip=replace_ip
+            )
+            stream_access_op.res.replace_all_uses_with(empty_cmp_op.result)
+            stream_access_op.operation.erase()
+            continue
         fifo_ptr = allo_d.StructGetOp(
             output=stream_type, input=stream_struct, index=0, ip=replace_ip
         )

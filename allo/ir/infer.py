@@ -1082,6 +1082,28 @@ class TypeInferer(ASTVisitor):
                     # stream type itself
                     node.func.value.shape = tuple()
                     node.func.value.dtype = val.dtype
+                elif node.func.attr == "empty":
+                    vid = (
+                        node.func.value.id
+                        if isinstance(node.func.value, ast.Name)
+                        else node.func.value.value.id
+                    )
+                    if isinstance(node.func.value, ast.Subscript):
+                        _, loops_to_unroll = get_symbolic_expr(
+                            copy.deepcopy(node.func.value.slice),
+                            ctx.symbolic,
+                            ctx.global_vars,
+                            ctx.get_alive_var_names(),
+                        )
+                        if os.getenv("FORCE_UNROLL_INDEX") == "1":
+                            ctx.meta_fors_to_unroll.update(loops_to_unroll)
+                    # return value: 1-bit boolean scalar
+                    val = ctx.get_symbol(vid)
+                    node.shape = tuple()
+                    node.dtype = uint1
+                    # stream type itself
+                    node.func.value.shape = tuple()
+                    node.func.value.dtype = val.dtype
                 elif node.func.attr == "bitcast":
                     visit_stmt(ctx, node.func.value)
                     # single-element operation

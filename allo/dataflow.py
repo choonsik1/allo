@@ -109,7 +109,8 @@ def move_stream_to_interface(
                 stream_signed += "u" if "unsigned" in op.attributes else "_"
                 for use in op.result.uses:
                     # get use's parent operation
-                    if isinstance(use.owner, allo_d.StreamGetOp):
+                    # empty() probes are reader-side, so they classify as "in"
+                    if isinstance(use.owner, (allo_d.StreamGetOp, allo_d.StreamEmptyOp)):
                         direction = "in"
                     elif isinstance(use.owner, allo_d.StreamPutOp):
                         direction = "out"
@@ -298,7 +299,8 @@ def move_stream_to_interface(
                 stream_types.append(op.result.type)
                 stream_signed += "u" if "unsigned" in op.attributes else "_"
                 for use in op.result.uses:
-                    if isinstance(use.owner, allo_d.StreamGetOp):
+                    # empty() probes are reader-side, so they classify as "in"
+                    if isinstance(use.owner, (allo_d.StreamGetOp, allo_d.StreamEmptyOp)):
                         direction = "in"
                     elif isinstance(use.owner, allo_d.StreamPutOp):
                         direction = "out"
