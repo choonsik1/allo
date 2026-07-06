@@ -82,6 +82,30 @@ def test_stream_empty_simulator():
     print(f"SIMULATOR OK (all {N} values received, empty() fired {bubbles} times)")
 
 
+def test_stream_empty_csynth():
+    # Vitis HLS C-synthesis: proves the emitted `.empty()` is real synthesizable
+    # HLS, not just text. Skips unless vitis_hls is on PATH. NOTE: use
+    # target="vitis_hls" (target="vhls" invokes the broken vivado_hls wrapper).
+    import shutil
+
+    if shutil.which("vitis_hls") is None:
+        import pytest
+
+        pytest.skip("vitis_hls not on PATH")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        prj = os.path.join(tmpdir, "stream_empty_csynth.prj")
+        mod = df.build(top_codegen, target="vitis_hls", mode="csyn", project=prj)
+        with open(os.path.join(prj, "kernel.cpp")) as f:
+            assert ".empty()" in f.read(), "no .empty() in generated HLS code"
+        mod()  # raises RuntimeError if synthesis fails
+        rpt = os.path.join(
+            prj, "out.prj/solution1/syn/report/consumer_0_csynth.rpt"
+        )
+        assert os.path.exists(rpt), "no consumer synthesis report produced"
+        print("CSYNTH OK (design synthesized; report at", rpt, ")")
+
+
 if __name__ == "__main__":
     test_stream_empty_vhls_codegen()
     test_stream_empty_simulator()
+    test_stream_empty_csynth()
