@@ -1301,6 +1301,7 @@ class Schedule:
             "tapa",
             "ihls",
             "catapult",
+            "systemc",
         }:
             match target:
                 case "vitis_hls":
@@ -1313,6 +1314,8 @@ class Schedule:
                     platform = "pynq"
                 case "catapult":
                     platform = "catapult"
+                case "systemc":
+                    platform = "systemc"
                 case _:
                     platform = "vivado_hls"
             return HLSModule(
