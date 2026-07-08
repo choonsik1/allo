@@ -29,6 +29,54 @@ using namespace mlir;
 using namespace allo;
 
 //===----------------------------------------------------------------------===//
+// Type name for SC interface (ports / channels). Mirrors the Vhls emitter's
+// (file-local, uncallable) getTypeName so port/channel types MATCH the reused
+// body: i8/16/32/64 -> (u)intN_t, other widths -> ap_(u)int<N> (aliased to
+// ac_int in the emitted header), f16 -> half, f32 -> float, fixed -> ap_(u)fixed.
+//===----------------------------------------------------------------------===//
+
+static SmallString<32> getSCTypeName(Type valType) {
+  if (auto arrayType = llvm::dyn_cast<ShapedType>(valType))
+    valType = arrayType.getElementType();
+
+  if (llvm::isa<Float16Type>(valType))
+    return SmallString<32>("half");
+  else if (llvm::isa<Float32Type>(valType))
+    return SmallString<32>("float");
+  else if (llvm::isa<Float64Type>(valType))
+    return SmallString<32>("double");
+  else if (llvm::isa<IndexType>(valType))
+    return SmallString<32>("int");
+  else if (auto intType = llvm::dyn_cast<IntegerType>(valType)) {
+    if (intType.getWidth() == 1)
+      return SmallString<32>("bool");
+    std::string sign =
+        (intType.getSignedness() == IntegerType::SignednessSemantics::Unsigned)
+            ? "u"
+            : "";
+    switch (intType.getWidth()) {
+    case 8:
+    case 16:
+    case 32:
+    case 64:
+      return SmallString<32>(sign + "int" + std::to_string(intType.getWidth()) +
+                             "_t");
+    default:
+      return SmallString<32>("ap_" + sign + "int<" +
+                             std::to_string(intType.getWidth()) + ">");
+    }
+  } else if (auto fx = llvm::dyn_cast<allo::FixedType>(valType))
+    return SmallString<32>("ap_fixed<" + std::to_string(fx.getWidth()) + ", " +
+                           std::to_string(fx.getWidth() - fx.getFrac()) + ">");
+  else if (auto ufx = llvm::dyn_cast<allo::UFixedType>(valType))
+    return SmallString<32>("ap_ufixed<" + std::to_string(ufx.getWidth()) + ", " +
+                           std::to_string(ufx.getWidth() - ufx.getFrac()) + ">");
+
+  assert(false && "getSCTypeName: unsupported type");
+  return SmallString<32>();
+}
+
+//===----------------------------------------------------------------------===//
 // SystemC emitter — subclass of the Vhls emitter (reuse body emission).
 //===----------------------------------------------------------------------===//
 
@@ -81,12 +129,11 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
       // stream arg -> sc_fifo_in/out<T> port (direction from stypes)
       char d = streamDir(func, i);
       os << (d == 'o' ? "sc_fifo_out< " : "sc_fifo_in< ");
-      // TODO: getTypeName on the element type (reuse base helper); i32 for now.
-      os << "int > " << addName(v, /*isPtr=*/false) << ";\n";
-      (void)st;
+      os << getSCTypeName(st.getBaseType()) << " > " << addName(v, /*isPtr=*/false)
+         << ";\n";
     } else if (auto mt = llvm::dyn_cast<MemRefType>(v.getType())) {
       // memref arg -> plain array member (TODO: I/O policy — ports vs channels)
-      os << "int " << addName(v, /*isPtr=*/false);
+      os << getSCTypeName(mt.getElementType()) << " " << addName(v, /*isPtr=*/false);
       for (auto s : mt.getShape())
         os << "[" << s << "]";
       os << ";\n";
@@ -123,10 +170,12 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       calls.push_back(call);
   }
 
-  // Channel members: sc_fifo<int> vN;
+  // Channel members: sc_fifo<T> vN;
   for (auto sc : channels) {
+    auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
     indent();
-    os << "sc_fifo< int > " << addName(sc.getResult(), /*isPtr=*/false) << ";\n";
+    os << "sc_fifo< " << getSCTypeName(st.getBaseType()) << " > "
+       << addName(sc.getResult(), /*isPtr=*/false) << ";\n";
   }
   // Submodule instance members: <callee> uN;
   SmallVector<std::string, 4> instNames;
