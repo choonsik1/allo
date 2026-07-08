@@ -301,6 +301,8 @@ class HLSModule:
                 success = allo_d.emit_ihls(self.module, buf)
             case "catapult":
                 success = allo_d.emit_catapult(self.module, buf)
+            case "systemc":
+                success = allo_d.emit_systemc(self.module, buf)
             case _:
                 # wrap_io=True has already linearized array indexing in
                 # generate_input_output_buffers, so we don't need to do it again
