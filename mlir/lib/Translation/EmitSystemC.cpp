@@ -95,6 +95,16 @@ private:
 
   // direction of stream arg `i` from the func's "stypes" attr: 'i','o', or 0.
   char streamDir(func::FuncOp func, unsigned i);
+
+  // Top-level array I/O: which submodule instance.member holds each array
+  // (recorded in emitTopModule, driven/printed by the sc_main testbench).
+  struct IOArray {
+    std::string inst;   // submodule instance (e.g. "u0")
+    std::string member; // array member name  (e.g. "v0")
+    int64_t total;      // flattened element count
+    unsigned rank;      // number of dimensions (for the [0]...[0] flatten)
+  };
+  SmallVector<IOArray> ioArrays;
 };
 
 } // namespace
@@ -203,7 +213,8 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   }
   os << " {\n";
   addIndent();
-  // Bind each call's STREAM operand to the channel (skip memref operands).
+  // Bind each call's STREAM operand to the channel; record each MEMREF operand
+  // as a top-level I/O array (instance.member) for the testbench to drive/read.
   for (auto it : llvm::enumerate(calls)) {
     auto call = it.value();
     auto callee = parent.lookupSymbol<func::FuncOp>(call.getCallee());
@@ -213,6 +224,15 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
         os << instNames[it.index()] << "."
            << getName(callee.getArgument(opnd.index())) << "("
            << getName(opnd.value()) << ");\n";
+      } else if (auto mt =
+                     llvm::dyn_cast<MemRefType>(opnd.value().getType())) {
+        int64_t total = 1;
+        for (auto d : mt.getShape())
+          total *= d;
+        ioArrays.push_back(
+            {instNames[it.index()],
+             std::string(getName(callee.getArgument(opnd.index())).str()),
+             total, (unsigned)mt.getShape().size()});
       }
     }
   }
@@ -236,6 +256,7 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
 #include <systemc.h>
 #include <ac_int.h>
 #include <stdint.h>
+#include <iostream>
 // The reused Vivado-emitter body prints Vitis ap_(u)int types; alias them to
 // Catapult's ac_int so the same body compiles under SystemC. (TODO: emit ac_int
 // natively via a type-name override, like the Catapult emitter.)
@@ -256,15 +277,41 @@ template <int W> using ap_uint = ac_int<W, false>;
     // else: helper funcs — TODO
   }
 
-  // Minimal sc_main testbench: instantiate top and run.
-  // TODO: drive/check the memref I/O (test vectors) — needs an I/O policy.
+  // sc_main testbench: drive top-level input arrays with a known pattern
+  // ([f] = f, flattened), run, then print every top-level array so the data
+  // is observable/checkable. Arrays live inside submodule instances, accessed
+  // as top_inst.<inst>.<member>; flattened via a pointer to element 0.
   if (!topName.empty()) {
     os << "int sc_main(int, char *[]) {\n";
     addIndent();
     indent();
     os << topName << " top_inst(\"top_inst\");\n";
+
+    auto flatPtr = [&](const IOArray &a) {
+      std::string s = "top_inst." + a.inst + "." + a.member;
+      for (unsigned r = 0; r < a.rank; ++r)
+        s += "[0]";
+      return "&" + s;
+    };
+
+    // drive inputs
+    for (auto &a : ioArrays) {
+      indent();
+      os << "{ auto *p = " << flatPtr(a) << "; for (int f = 0; f < " << a.total
+         << "; ++f) p[f] = f; }\n";
+    }
+
     indent();
     os << "sc_start();\n";
+
+    // print all top-level arrays after the run
+    for (auto &a : ioArrays) {
+      indent();
+      os << "{ auto *p = " << flatPtr(a) << "; std::cout << \"" << a.inst << "."
+         << a.member << ":\"; for (int f = 0; f < " << a.total
+         << "; ++f) std::cout << ' ' << p[f]; std::cout << std::endl; }\n";
+    }
+
     indent();
     os << "return 0;\n";
     reduceIndent();
