@@ -170,6 +170,16 @@ bool SystemCModuleEmitter::isSeqStreamable(Value v) {
     } else {
       return false; // any other use -> not a clean sequential scan
     }
+    // Reject re-reads/re-writes: an identity a[iv] under an OUTER loop touches
+    // each element more than once, which a stream (one element per handshake)
+    // cannot reproduce. A 1-D single-pass scan sits inside exactly ONE loop.
+    unsigned loops = 0;
+    for (Operation *p = op->getParentOp();
+         p && !llvm::isa<func::FuncOp>(p); p = p->getParentOp())
+      if (llvm::isa<affine::AffineForOp>(p))
+        loops++;
+    if (loops != 1)
+      return false;
   }
   return true;
 }

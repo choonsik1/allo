@@ -44,6 +44,82 @@ def _producer_consumer():
     return top
 
 
+def _systolic_chain(P=4, N=8):
+    """array->stream feed + mapping=[P] PE chain (each +1) + stream->array drain."""
+
+    @df.region()
+    def top(A: int32[N], B: int32[N]):
+        link: Stream[int32, 4][P + 1]
+
+        @df.kernel(mapping=[1], args=[A])
+        def feed(a: int32[N]):
+            for k in range(N):
+                link[0].put(a[k])
+
+        @df.kernel(mapping=[P])
+        def pe():
+            i = df.get_pid()
+            for k in range(N):
+                v: int32 = link[i].get()
+                w: int32 = v + 1
+                link[i + 1].put(w)
+
+        @df.kernel(mapping=[1], args=[B])
+        def drain(b: int32[N]):
+            for k in range(N):
+                b[k] = link[P].get()
+
+    return top, P, N
+
+
+def test_systemc_golden():
+    """The designs the SystemC backend emits are functionally correct, checked
+    against the backend-agnostic Allo simulator. This makes the reference
+    trustworthy for the csim / RTL-cosim checks (numpy -> simulator -> csim -> RTL)."""
+    # producer/consumer: B = A + 1
+    top = _producer_consumer()
+    A = np.arange(8, dtype=np.int32)
+    B = np.zeros(8, dtype=np.int32)
+    df.build(top, target="simulator")(A, B)
+    np.testing.assert_array_equal(B, A + 1)
+    # systolic chain: B = A + P
+    chain, P, N = _systolic_chain()
+    A2 = np.arange(N, dtype=np.int32)
+    B2 = np.zeros(N, dtype=np.int32)
+    df.build(chain, target="simulator")(A2, B2)
+    np.testing.assert_array_equal(B2, A2 + P)
+    print("simulator golden OK: producer/consumer B=A+1, chain B=A+P")
+
+
+def test_systemc_rejects_reread():
+    """A re-read (identity a[k] under an OUTER loop, each element touched twice)
+    is not a single-pass scan and must be rejected, not silently mis-streamed."""
+
+    N = 8
+
+    @df.region()
+    def top(A: int32[N], B: int32[N]):
+        fifo: Stream[int32, 4][1]
+
+        @df.kernel(mapping=[1], args=[A])
+        def producer(a: int32[N]):
+            for r in range(2):
+                for k in range(N):
+                    fifo[0].put(a[k])  # a[k] re-read across the r loop
+
+        @df.kernel(mapping=[1], args=[B])
+        def consumer(b: int32[N]):
+            for i in range(N):
+                s: int32 = 0
+                for r in range(2):
+                    s = fifo[0].get()
+                b[i] = s
+
+    with pytest.raises(Exception, match="Failed to emit"):
+        df.build(top, target="systemc")
+    print("re-read correctly rejected")
+
+
 def test_systemc_emit():
     """Pure codegen — no toolchain needed. Checks the Connections stream shape."""
     top = _producer_consumer()
