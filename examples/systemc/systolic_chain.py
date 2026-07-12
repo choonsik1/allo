@@ -55,4 +55,7 @@ if __name__ == "__main__":
         mod = df.build(top, target="systemc", mode="csim", project="systolic_chain.prj")
         A = np.arange(N, dtype=np.int32)
         B = np.zeros(N, dtype=np.int32)
-        mod(A, B)  # prints the B stream = A + P
+        mod(A, B)  # Option B fills B with the design's output
+        print("A =", A)
+        print("B =", B, "(expected A + P =", A + P, ")")
+        print("PASS" if np.array_equal(B, A + P) else "FAIL")

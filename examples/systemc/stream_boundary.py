@@ -65,4 +65,7 @@ if __name__ == "__main__":
         mod = df.build(top, target="systemc", mode="csim", project="stream_boundary.prj")
         A = np.arange(N, dtype=np.int32)
         B = np.zeros(N, dtype=np.int32)
-        mod(A, B)  # prints the boundary arrays; B = A + 1
+        mod(A, B)  # Option B fills B with the design's output
+        print("A =", A)
+        print("B =", B, "(expected A + 1 =", A + 1, ")")
+        print("PASS" if np.array_equal(B, A + 1) else "FAIL")
