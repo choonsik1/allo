@@ -90,6 +90,41 @@ def test_systemc_rejects_random_access():
     print("Non-sequential access correctly rejected")
 
 
+def test_systemc_grid():
+    """mapping=[P] is unrolled into P kernel SC_MODULEs, wired as a neighbor chain."""
+
+    P, N = 4, 8
+
+    @df.region()
+    def top(A: int32[N], B: int32[N]):
+        link: Stream[int32, 4][P + 1]
+
+        @df.kernel(mapping=[1], args=[A])
+        def feed(a: int32[N]):
+            for k in range(N):
+                link[0].put(a[k])
+
+        @df.kernel(mapping=[P])
+        def pe():
+            i = df.get_pid()
+            for k in range(N):
+                v: int32 = link[i].get()
+                w: int32 = v + 1
+                link[i + 1].put(w)
+
+        @df.kernel(mapping=[1], args=[B])
+        def drain(b: int32[N]):
+            for k in range(N):
+                b[k] = link[P].get()
+
+    code = df.build(top, target="systemc").hls_code
+    for p in range(P):  # each grid instance is its own module
+        assert f"SC_MODULE(pe_{p})" in code
+    # P+1 link channels in the top (+ tb channels), so at least P+1
+    assert code.count("Connections::Combinational<") >= P + 1
+    print(f"grid of {P} PEs emitted + wired")
+
+
 @pytest.mark.skipif(
     not os.environ.get("MGC_HOME"),
     reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
