@@ -64,6 +64,32 @@ def test_systemc_emit():
     print("SystemC emit shape OK")
 
 
+def test_systemc_rejects_random_access():
+    """Non-sequential boundary access must be rejected, not silently mis-streamed."""
+
+    N = 8
+
+    @df.region()
+    def top(A: int32[N], B: int32[N]):
+        fifo: Stream[int32, 4][1]
+
+        @df.kernel(mapping=[1], args=[A])
+        def producer(a: int32[N]):
+            for i in range(N):
+                fifo[0].put(a[N - 1 - i])  # reversed = non-identity index
+
+        @df.kernel(mapping=[1], args=[B])
+        def consumer(b: int32[N]):
+            for i in range(N):
+                b[i] = fifo[0].get() + 1
+
+    # the guard's "not a sequential 1-D scan" goes to the MLIR diagnostic; the
+    # Python-level failure is "Failed to emit HLS code".
+    with pytest.raises(Exception, match="Failed to emit"):
+        df.build(top, target="systemc")
+    print("Non-sequential access correctly rejected")
+
+
 @pytest.mark.skipif(
     not os.environ.get("MGC_HOME"),
     reason="Catapult (MGC_HOME) not available — csim needs zhang-21",

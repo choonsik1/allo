@@ -105,6 +105,8 @@ private:
   void emitAffineStore(affine::AffineStoreOp op) override;
   // If `v` is a df.kernel memref arg turned into a stream, its dir ('i'/'o'); else 0.
   char streamArgDir(Value v);
+  // True iff memref `v` is safe to stream: 1-D + only identity a[iv] load/stores.
+  bool isSeqStreamable(Value v);
 
   // direction of stream arg `i` from the func's "stypes" attr: 'i','o', or 0.
   char streamDir(func::FuncOp func, unsigned i);
@@ -148,6 +150,30 @@ char SystemCModuleEmitter::argDir(func::FuncOp func, unsigned i) {
   return (c == 'i' || c == 'o' || c == 'b') ? c : 0;
 }
 
+// Safe-to-stream check: sequential single-pass access only. The stream transform
+// ignores the load/store index, so it is correct ONLY if the array is 1-D and
+// every access is an identity a[iv] (each element once, in order). Anything else
+// (2-D, strided, reversed, gathered, re-read, or a non-load/store use) is NOT
+// sequential and must use a memory port instead.
+bool SystemCModuleEmitter::isSeqStreamable(Value v) {
+  auto mt = llvm::dyn_cast<MemRefType>(v.getType());
+  if (!mt || mt.getRank() != 1)
+    return false;
+  for (auto &use : v.getUses()) {
+    Operation *op = use.getOwner();
+    if (auto ld = llvm::dyn_cast<affine::AffineLoadOp>(op)) {
+      if (!ld.getAffineMap().isIdentity())
+        return false;
+    } else if (auto st = llvm::dyn_cast<affine::AffineStoreOp>(op)) {
+      if (!st.getAffineMap().isIdentity())
+        return false;
+    } else {
+      return false; // any other use -> not a clean sequential scan
+    }
+  }
+  return true;
+}
+
 // A df.kernel memref arg with a pure in/out direction is stream-ified into a
 // Connections port; return that direction ('i'/'o'), else 0 (emit normally).
 char SystemCModuleEmitter::streamArgDir(Value v) {
@@ -158,7 +184,8 @@ char SystemCModuleEmitter::streamArgDir(Value v) {
   if (!func || !func->hasAttr("df.kernel"))
     return 0;
   char d = argDir(func, barg.getArgNumber());
-  return (d == 'i' || d == 'o') ? d : 0; // 'both' stays a real memref
+  // stream only pure in/out AND sequentially-safe args ('both' / random stay memref)
+  return ((d == 'i' || d == 'o') && isSeqStreamable(v)) ? d : 0;
 }
 
 // Sequential-stream read:  <result> = <port>.Pop();   (index ignored — in order)
@@ -222,6 +249,10 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
       if (d == 'i' || d == 'o') {
         // sequential-stream: boundary array arg -> Connections stream port
         // (body's a[i]/b[i]=v become .Pop()/.Push() via the affine overrides)
+        if (!isSeqStreamable(v))
+          emitError(func, "SystemC backend: boundary array arg is not a "
+                          "sequential 1-D scan (random/strided/2-D access) — "
+                          "needs a memory port, not yet supported.");
         std::string pn = std::string(addName(v, /*isPtr=*/false).str());
         streamPorts.push_back(pn);
         os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
