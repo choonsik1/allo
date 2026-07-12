@@ -228,29 +228,51 @@ def test_systemc_mem_port_emit():
     print("random INPUT access -> memory port emitted")
 
 
-def test_systemc_rejects_store_side_mem_port():
-    """The store side of a memory port (random-access OUTPUT/BOTH) is not wired
-    yet and must still be rejected cleanly, not silently mis-emitted."""
-
+def _mem_port_scatter():
+    """B[N-1-i] = A[i] + 1 : B WRITTEN reversed -> random-access OUTPUT (write-
+    only AlloMemW) memory port; A is a sequential input stream. No stream output,
+    so completion is time-based.  B == (A+1)[::-1]."""
     N = 8
 
     @df.region()
     def top(A: int32[N], B: int32[N]):
-        fifo: Stream[int32, 4][1]
+        @df.kernel(mapping=[1], args=[A, B])
+        def scat(a: int32[N], b: int32[N]):
+            for i in range(N):
+                b[N - 1 - i] = a[i] + 1
 
+    return top, N
+
+
+def test_systemc_mem_port_store_emit():
+    """A non-sequential OUTPUT array routes to a write-only AlloMemW addressed by
+    STORE reqs (opcode bit0=1), no response port; the tb reads mem[] out after a
+    time-based run (no stream output)."""
+    top, _ = _mem_port_scatter()
+    code = df.build(top, target="systemc").hls_code
+    assert "AlloMemW<" in code  # write-only internal memory
+    assert "_req.Push(" in code  # STORE handshake (no _rsp.Pop for this port)
+    assert "sc_start(" in code and "SC_NS);" in code  # time-based completion
+    assert "_mem.mem[f] <<" in code  # tb reads the memory out to output file
+    print("random OUTPUT access -> write memory port emitted")
+
+
+def test_systemc_rejects_both_mem_port():
+    """An array both read AND written at random indices ('both') is not wired yet
+    and must still be rejected cleanly."""
+
+    N = 8
+
+    @df.region()
+    def top(A: int32[N]):
         @df.kernel(mapping=[1], args=[A])
-        def producer(a: int32[N]):
+        def rw(a: int32[N]):
             for i in range(N):
-                fifo[0].put(a[i])
-
-        @df.kernel(mapping=[1], args=[B])
-        def consumer(b: int32[N]):
-            for i in range(N):
-                b[N - 1 - i] = fifo[0].get()  # reversed WRITE -> store-side port
+                a[N - 1 - i] = a[i] + 1  # random read AND write of a -> 'both'
 
     with pytest.raises(Exception, match="Failed to emit"):
         df.build(top, target="systemc")
-    print("store-side memory port correctly rejected")
+    print("both-direction memory port correctly rejected")
 
 
 @pytest.mark.skipif(
@@ -268,6 +290,24 @@ def test_systemc_mem_port_csim():
         mod(A, B)
         np.testing.assert_array_equal(B, A[::-1] + 1)
     print("SystemC memory-port csim B == A[::-1] + 1")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_mem_port_store_csim():
+    """Compile + simulate the store-side design: A streamed in, +1, scattered to B
+    reversed via STORE reqs into AlloMemW, read out after a time-based run. Assert
+    B == (A+1)[::-1]."""
+    top, N = _mem_port_scatter()
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(top, target="systemc", mode="csim", project=tmp)
+        A = np.arange(N, dtype=np.int32)
+        B = np.zeros(N, dtype=np.int32)
+        mod(A, B)
+        np.testing.assert_array_equal(B, (A + 1)[::-1])
+    print("SystemC store-side memory-port csim B == (A+1)[::-1]")
 
 
 def test_systemc_grid():
