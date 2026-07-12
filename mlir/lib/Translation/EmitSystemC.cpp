@@ -563,6 +563,7 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
 #include <ac_fixed.h>
 #include <stdint.h>
 #include <iostream>
+#include <fstream>
 // The reused Vivado-emitter body prints Vitis ap_(u)int types; alias them to
 // Catapult's ac_int so the same body compiles. (TODO: emit ac_int/ac_fixed
 // natively via a type-name override, like getCatapultTypeName in the Catapult
@@ -616,33 +617,42 @@ template <int W> using ap_uint = ac_int<W, false>;
                     "async_reset_signal_is(rst, false);\n";
     reduceIndent();
     indent(); os << "}\n";
-    // src: drive inputs
+    // src: drive each INPUT port from input<k>.data (written by hls.py from A)
     indent(); os << "void src() {\n";
     addIndent();
     for (auto &a : ioArrays)
       if (a.dir == 'i') { indent(); os << "ch_" << a.member << ".ResetWrite();\n"; }
     indent(); os << "wait();\n";
-    for (auto &a : ioArrays)
-      if (a.dir == 'i') {
-        indent();
-        os << "for (int f = 0; f < " << a.total << "; ++f) ch_" << a.member
-           << ".Push(f);\n";
-      }
+    {
+      int inIdx = 0;
+      for (auto &a : ioArrays)
+        if (a.dir == 'i') {
+          indent();
+          os << "{ std::ifstream _f(\"input" << inIdx << ".data\"); " << a.ctype
+             << " _v; for (int f = 0; f < " << a.total << "; ++f) { _f >> _v; ch_"
+             << a.member << ".Push(_v); } }\n";
+          inIdx++;
+        }
+    }
     reduceIndent();
     indent(); os << "}\n";
-    // snk: read outputs, then stop
+    // snk: write each OUTPUT port to output<k>.data (read back into B by hls.py)
     indent(); os << "void snk() {\n";
     addIndent();
     for (auto &a : ioArrays)
       if (a.dir == 'o') { indent(); os << "ch_" << a.member << ".ResetRead();\n"; }
     indent(); os << "wait();\n";
-    for (auto &a : ioArrays)
-      if (a.dir == 'o') {
-        indent();
-        os << "std::cout << \"" << a.member << ":\"; for (int f = 0; f < "
-           << a.total << "; ++f) std::cout << ' ' << ch_" << a.member
-           << ".Pop(); std::cout << std::endl;\n";
-      }
+    {
+      int outIdx = 0;
+      for (auto &a : ioArrays)
+        if (a.dir == 'o') {
+          indent();
+          os << "{ std::ofstream _f(\"output" << outIdx
+             << ".data\"); for (int f = 0; f < " << a.total << "; ++f) _f << ch_"
+             << a.member << ".Pop() << \"\\n\"; }\n";
+          outIdx++;
+        }
+    }
     indent(); os << "sc_stop();\n";
     reduceIndent();
     indent(); os << "}\n";

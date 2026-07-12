@@ -264,16 +264,32 @@ def test_systemc_grid():
     reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
 )
 def test_systemc_csim():
-    """Compile + simulate the emitted SystemC through Catapult's SystemC."""
+    """Compile + simulate the emitted SystemC; results flow back into B (Option B:
+    A -> input0.data -> design -> output0.data -> B), so we assert B == A + 1."""
     top = _producer_consumer()
     with tempfile.TemporaryDirectory() as tmp:
-        mod = df.build(top, target="systemc", mode="csim", project="test_systemc_backend")
+        mod = df.build(top, target="systemc", mode="csim", project=tmp)
         A = np.arange(8, dtype=np.int32)
         B = np.zeros(8, dtype=np.int32)
-        mod(A, B)  # prints v11: 0..7 (A in) and v12: 1..8 (B = A + 1)
-    # NOTE: Option A's self-contained testbench prints results to stdout; it does
-    # not read them back into B yet, so we only assert the run completed.
-    print("SystemC csim ran")
+        mod(A, B)
+        np.testing.assert_array_equal(B, A + 1)
+    print("SystemC csim B == A + 1")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_csim_grid():
+    """End-to-end csim of a mapping=[P] grid with data-through-args: B == A + P."""
+    chain, P, N = _systolic_chain()
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(chain, target="systemc", mode="csim", project=tmp)
+        A = np.arange(N, dtype=np.int32)
+        B = np.zeros(N, dtype=np.int32)
+        mod(A, B)
+        np.testing.assert_array_equal(B, A + P)
+    print(f"SystemC csim grid B == A + {P}")
 
 
 if __name__ == "__main__":

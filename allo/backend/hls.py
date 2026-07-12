@@ -869,11 +869,20 @@ class HLSModule:
                 ) as outfile:
                     outfile.write(header)
 
-                # Write input data
-                # Option A (systemc): the self-contained sc_main drives its own
-                # stimulus and prints results, so it neither reads input*.data nor
-                # writes output*.data. Skip the data-file I/O for systemc.
-                if self.platform != "systemc":
+                # Write input data. A systemc region is a void function whose args
+                # are all "inputs" by signature, so split by actual direction
+                # (arg_dirs): 'in' -> input<k>.data (read by the emitted testbench),
+                # 'out' -> filled from output<k>.data after the run.
+                if self.platform == "systemc":
+                    dirs = analyze_arg_load_store(self.module)[self.top_func_name]
+                    _ii = 0
+                    for (in_dtype, in_shape), arg, d in zip(inputs, args, dirs):
+                        if d == "in":
+                            write_tensor_to_file(
+                                arg, in_shape, f"{self.project}/input{_ii}.data"
+                            )
+                            _ii += 1
+                else:
                     for i, ((in_dtype, in_shape), arg) in enumerate(
                         zip(inputs, args[: len(inputs)])
                     ):
@@ -942,10 +951,21 @@ class HLSModule:
 
                 # Read outputs
                 if self.platform == "systemc":
-                    # Option A: the self-contained testbench prints results to
-                    # stdout and does not write output*.data, so there is nothing
-                    # to read back into `args`. (Option B adds data-file I/O so
-                    # results flow back into the numpy args like the vitis path.)
+                    # Option B: the emitted testbench wrote each 'out' arg to
+                    # output<k>.data; read them back into the numpy args (same
+                    # arg_dirs split as the inputs above; `dirs` is in scope).
+                    _oo = 0
+                    for (out_dtype, out_shape), out_arg, d in zip(inputs, args, dirs):
+                        if d == "out":
+                            fpath = f"{self.project}/output{_oo}.data"
+                            if not os.path.exists(fpath):
+                                raise RuntimeError(
+                                    f"Output file {fpath} not found. Simulation might have failed."
+                                )
+                            out_arg[:] = read_tensor_from_file(
+                                out_dtype, out_shape, fpath
+                            )
+                            _oo += 1
                     return
                 for i, ((out_dtype, out_shape), out_arg) in enumerate(
                     zip(outputs, args[len(inputs) :])
