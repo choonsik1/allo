@@ -286,8 +286,14 @@ def parse_catapult_report(project_path, top):
         m = re.search(r"Max Latency\s*:\s*(\d+)", content)
         if m:
             res["Latency (cycles)"] = m.group(1)
+        else:
+            # hierarchical (SystemC) cycle.rpt: per-process rows
+            #   /top/<kernel>/run  <ops> <latency> <throughput> ...
+            lats = [int(x) for x in re.findall(r"/run\s+\d+\s+(\d+)\s+\d+", content)]
+            if lats:
+                res["Latency (cycles)"] = str(max(lats))
 
-    # --- Area from area.rpt ---
+    # --- Area from area.rpt (function backend) or rtl.rpt (SystemC flow) ---
     area_rpt = os.path.join(sol_dir, "area.rpt")
     if os.path.exists(area_rpt):
         with open(area_rpt, "r") as f:
@@ -295,6 +301,14 @@ def parse_catapult_report(project_path, top):
         m = re.search(r"Total Area\s*:\s*([\d\.]+)", area_content)
         if m:
             res["Area"] = m.group(1)
+    else:
+        rtl_rpt = os.path.join(sol_dir, "rtl.rpt")
+        if os.path.exists(rtl_rpt):
+            with open(rtl_rpt, "r") as f:
+                area_content = f.read()
+            m = re.search(r"TOTAL AREA \(After Assignment\):\s*([\d\.]+)", area_content)
+            if m:
+                res["Area"] = m.group(1)
 
     # --- Power from power.rpt or summary ---
     for power_fname in ("power.rpt", "power_summary.rpt"):
