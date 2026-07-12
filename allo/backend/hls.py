@@ -914,10 +914,14 @@ class HLSModule:
                         lib_dir = os.path.join(systemc_home, "lib")
                     # Connections/matchlib ship under $MGC_HOME/shared/include alongside ac_types
                     # Option A: kernel.cpp is self-contained (its own sc_main); no host.cpp.
+                    # ALLO_CXX_EXTRA: host-specific extra flags (e.g. a newer libstdc++
+                    # dir: libsystemc needs GLIBCXX_3.4.26, absent from zhang-21's system
+                    # libstdc++ -> `-L<conda>/lib -Wl,-rpath,<conda>/lib`).
+                    cxx_extra = os.environ.get("ALLO_CXX_EXTRA", "")
                     cmd = (
                         f"cd {self.project}; g++ -std=c++17 "
                         f"-I{ac_include} -I{systemc_home}/include "
-                        f"kernel.cpp "
+                        f"{cxx_extra} kernel.cpp "
                         f"-L{lib_dir} -Wl,-rpath,{lib_dir} -lsystemc "
                         f"-o sim"
                     )

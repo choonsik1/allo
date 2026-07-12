@@ -91,9 +91,10 @@ def test_systemc_golden():
     print("simulator golden OK: producer/consumer B=A+1, chain B=A+P")
 
 
-def test_systemc_rejects_reread():
+def test_systemc_mem_port_reread():
     """A re-read (identity a[k] under an OUTER loop, each element touched twice)
-    is not a single-pass scan and must be rejected, not silently mis-streamed."""
+    is not a single-pass scan, so the INPUT array a routes to a random-access
+    memory port (AlloMem) — a LOAD may fire many times, which is correct."""
 
     N = 8
 
@@ -105,7 +106,7 @@ def test_systemc_rejects_reread():
         def producer(a: int32[N]):
             for r in range(2):
                 for k in range(N):
-                    fifo[0].put(a[k])  # a[k] re-read across the r loop
+                    fifo[0].put(a[k])  # a[k] re-read across the r loop -> mem port
 
         @df.kernel(mapping=[1], args=[B])
         def consumer(b: int32[N]):
@@ -115,9 +116,10 @@ def test_systemc_rejects_reread():
                     s = fifo[0].get()
                 b[i] = s
 
-    with pytest.raises(Exception, match="Failed to emit"):
-        df.build(top, target="systemc")
-    print("re-read correctly rejected")
+    code = df.build(top, target="systemc").hls_code
+    assert "AlloMem<" in code  # re-read input -> internal memory
+    assert "_req.Push(" in code and "_rsp.Pop()" in code
+    print("re-read input -> memory port")
 
 
 def test_systemc_nonblocking():
@@ -198,8 +200,37 @@ def test_systemc_emit():
     print("SystemC emit shape OK")
 
 
-def test_systemc_rejects_random_access():
-    """Non-sequential boundary access must be rejected, not silently mis-streamed."""
+def _mem_port_reverse():
+    """B[i] = A[N-1-i] + 1 : A read reversed -> random-access INPUT memory port;
+    B is a normal sequential output stream."""
+    N = 8
+
+    @df.region()
+    def top(A: int32[N], B: int32[N]):
+        @df.kernel(mapping=[1], args=[A, B])
+        def rev(a: int32[N], b: int32[N]):
+            for i in range(N):
+                b[i] = a[N - 1 - i] + 1
+
+    return top, N
+
+
+def test_systemc_mem_port_emit():
+    """A non-sequential INPUT array is routed to an internal AlloMem addressed by
+    a Connections req/resp handshake (the only memory kind the SystemC flow
+    supports), NOT silently mis-streamed. The flat address is the reversed index."""
+    top, _ = _mem_port_reverse()
+    code = df.build(top, target="systemc").hls_code
+    assert "AlloMem<" in code  # internal random-access memory instantiated
+    assert "_req.Push(" in code and "_rsp.Pop()" in code  # LOAD handshake
+    assert "_req_ch" in code and "_rsp_ch" in code  # wired at top
+    assert ".mem[f] =" in code  # tb preloads the memory from input file
+    print("random INPUT access -> memory port emitted")
+
+
+def test_systemc_rejects_store_side_mem_port():
+    """The store side of a memory port (random-access OUTPUT/BOTH) is not wired
+    yet and must still be rejected cleanly, not silently mis-emitted."""
 
     N = 8
 
@@ -210,18 +241,33 @@ def test_systemc_rejects_random_access():
         @df.kernel(mapping=[1], args=[A])
         def producer(a: int32[N]):
             for i in range(N):
-                fifo[0].put(a[N - 1 - i])  # reversed = non-identity index
+                fifo[0].put(a[i])
 
         @df.kernel(mapping=[1], args=[B])
         def consumer(b: int32[N]):
             for i in range(N):
-                b[i] = fifo[0].get() + 1
+                b[N - 1 - i] = fifo[0].get()  # reversed WRITE -> store-side port
 
-    # the guard's "not a sequential 1-D scan" goes to the MLIR diagnostic; the
-    # Python-level failure is "Failed to emit HLS code".
     with pytest.raises(Exception, match="Failed to emit"):
         df.build(top, target="systemc")
-    print("Non-sequential access correctly rejected")
+    print("store-side memory port correctly rejected")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_mem_port_csim():
+    """Compile + simulate the memory-port design: A preloaded into AlloMem, read
+    reversed over the req/resp handshake, +1, streamed to B. Assert B == A[::-1]+1."""
+    top, N = _mem_port_reverse()
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(top, target="systemc", mode="csim", project=tmp)
+        A = np.arange(N, dtype=np.int32)
+        B = np.zeros(N, dtype=np.int32)
+        mod(A, B)
+        np.testing.assert_array_equal(B, A[::-1] + 1)
+    print("SystemC memory-port csim B == A[::-1] + 1")
 
 
 def test_systemc_grid():

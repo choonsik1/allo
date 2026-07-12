@@ -22,6 +22,7 @@
 #include "allo/Translation/Utils.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/AffineExpr.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/Support/raw_ostream.h"
@@ -78,6 +79,25 @@ static SmallString<32> getSCTypeName(Type valType) {
   return SmallString<32>();
 }
 
+// Address width for a memory of `total` elements: ceil(log2(total)), min 1.
+static unsigned scAddrW(int64_t total) {
+  unsigned w = 1;
+  while ((int64_t(1) << w) < total)
+    w++;
+  return w;
+}
+
+// Data width (bits) of a memory element type — used to size the packed request.
+static unsigned scDataW(Type elt) {
+  if (auto it = llvm::dyn_cast<IntegerType>(elt))
+    return it.getWidth() < 1 ? 1 : it.getWidth();
+  if (llvm::isa<Float16Type>(elt))
+    return 16;
+  if (llvm::isa<Float64Type>(elt))
+    return 64;
+  return 32; // f32 / index / default
+}
+
 //===----------------------------------------------------------------------===//
 // SystemC emitter — subclass of the Vhls emitter (reuse body emission).
 //===----------------------------------------------------------------------===//
@@ -111,8 +131,21 @@ private:
   void emitAffineStore(affine::AffineStoreOp op) override;
   // If `v` is a df.kernel memref arg turned into a stream, its dir ('i'/'o'); else 0.
   char streamArgDir(Value v);
+  // If `v` is a df.kernel memref arg that is directional but NOT sequentially
+  // streamable (random/strided/2-D), it becomes a random-access MEMORY PORT.
+  // Returns its dir ('i' read-only supported now; 'o'/'b' not yet), else 0.
+  char memPortArgDir(Value v);
   // True iff memref `v` is safe to stream: 1-D + only identity a[iv] load/stores.
   bool isSeqStreamable(Value v);
+
+  // Emit a single affine expr (dims/symbols resolved via `operands`, split at
+  // `numDims`) as a C++ index expression — a local reimplementation of the
+  // base's file-local AffineExprEmitter (not reachable from this file).
+  void emitAffineExprSC(AffineExpr e, ValueRange operands, unsigned numDims);
+  // Emit the row-major FLAT element index of an affine load (memory-port addr).
+  void emitFlatIndex(affine::AffineLoadOp op);
+  // For a region boundary arg, the memory-port dir of the kernel arg it feeds.
+  char regArgMemPort(func::FuncOp top, Value regArg);
 
   // direction of stream arg `i` from the func's "stypes" attr: 'i','o', or 0.
   char streamDir(func::FuncOp func, unsigned i);
@@ -126,8 +159,19 @@ private:
     std::string ctype;  // element C type (for the tb Combinational channel)
     int64_t total;      // flattened element count
     char dir;           // 'i' input (Push), 'o' output (Pop)
+    int fileIdx;        // input<fileIdx>.data / output<fileIdx>.data
   };
   SmallVector<IOArray> ioArrays;
+
+  // Region boundary array routed to an internal AlloMem (random-access port).
+  struct MemArray {
+    std::string base;   // region arg name (kernel binds base_req/base_rsp)
+    std::string ctype;  // element C type
+    int64_t total;      // element count (memory depth)
+    unsigned addrw, dataw;
+    int fileIdx;        // input<fileIdx>.data (preloaded into AlloMem.mem[])
+  };
+  SmallVector<MemArray> memArrays;
 };
 
 } // namespace
@@ -204,8 +248,136 @@ char SystemCModuleEmitter::streamArgDir(Value v) {
   return ((d == 'i' || d == 'o') && isSeqStreamable(v)) ? d : 0;
 }
 
+// A df.kernel memref arg that is directional but NOT sequentially streamable is
+// a random-access memory port. Only INPUT (read-only, LOAD) is wired for now;
+// 'o'/'b' (store side) return their dir so the caller can error cleanly.
+char SystemCModuleEmitter::memPortArgDir(Value v) {
+  auto barg = llvm::dyn_cast<BlockArgument>(v);
+  if (!barg || !llvm::isa<MemRefType>(v.getType()))
+    return 0;
+  auto func = llvm::dyn_cast<func::FuncOp>(barg.getOwner()->getParentOp());
+  if (!func || !func->hasAttr("df.kernel"))
+    return 0;
+  char d = argDir(func, barg.getArgNumber());
+  if (d != 'i' && d != 'o' && d != 'b')
+    return 0;
+  return isSeqStreamable(v) ? 0 : d; // streamable -> handled by the stream path
+}
+
+// Local reimplementation of the base's file-local affine-expr emitter: walk the
+// expr, resolving dim/symbol positions to their operand SSA names via emitValue.
+void SystemCModuleEmitter::emitAffineExprSC(AffineExpr e, ValueRange operands,
+                                            unsigned numDims) {
+  switch (e.getKind()) {
+  case AffineExprKind::Constant:
+    os << llvm::cast<AffineConstantExpr>(e).getValue();
+    return;
+  case AffineExprKind::DimId:
+    emitValue(operands[llvm::cast<AffineDimExpr>(e).getPosition()]);
+    return;
+  case AffineExprKind::SymbolId:
+    emitValue(operands[numDims + llvm::cast<AffineSymbolExpr>(e).getPosition()]);
+    return;
+  default:
+    break;
+  }
+  auto bin = llvm::cast<AffineBinaryOpExpr>(e);
+  if (e.getKind() == AffineExprKind::CeilDiv) {
+    os << "((";
+    emitAffineExprSC(bin.getLHS(), operands, numDims);
+    os << " + ";
+    emitAffineExprSC(bin.getRHS(), operands, numDims);
+    os << " - 1) / ";
+    emitAffineExprSC(bin.getRHS(), operands, numDims);
+    os << ")";
+    return;
+  }
+  const char *opstr = " + ";
+  switch (e.getKind()) {
+  case AffineExprKind::Add: opstr = " + "; break;
+  case AffineExprKind::Mul: opstr = " * "; break;
+  case AffineExprKind::Mod: opstr = " % "; break;
+  case AffineExprKind::FloorDiv: opstr = " / "; break;
+  default: assert(false && "unexpected affine expr kind"); break;
+  }
+  os << "(";
+  emitAffineExprSC(bin.getLHS(), operands, numDims);
+  os << opstr;
+  emitAffineExprSC(bin.getRHS(), operands, numDims);
+  os << ")";
+}
+
+// Row-major flatten of a (multi-dim) affine load index -> one C++ expression.
+void SystemCModuleEmitter::emitFlatIndex(affine::AffineLoadOp op) {
+  auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
+  auto shape = mt.getShape();
+  auto map = op.getAffineMap();
+  SmallVector<Value> operands(op.getMapOperands().begin(),
+                              op.getMapOperands().end());
+  unsigned n = map.getNumResults();
+  SmallVector<int64_t> stride(n);
+  int64_t s = 1;
+  for (int k = (int)n - 1; k >= 0; --k) {
+    stride[k] = s;
+    s *= shape[k];
+  }
+  os << "(";
+  for (unsigned k = 0; k < n; ++k) {
+    if (k)
+      os << " + ";
+    os << "(";
+    emitAffineExprSC(map.getResult(k), operands, map.getNumDims());
+    os << ")";
+    if (stride[k] != 1)
+      os << " * " << stride[k];
+  }
+  os << ")";
+}
+
+// For a region boundary arg, look up the kernel arg it feeds and return that
+// kernel arg's memory-port direction (0 if it is a normal stream boundary).
+char SystemCModuleEmitter::regArgMemPort(func::FuncOp top, Value regArg) {
+  auto parent = top->getParentOfType<ModuleOp>();
+  for (auto &op : top.front())
+    if (auto call = llvm::dyn_cast<func::CallOp>(&op))
+      for (auto opnd : llvm::enumerate(call.getOperands()))
+        if (opnd.value() == regArg) {
+          auto callee = parent.lookupSymbol<func::FuncOp>(call.getCallee());
+          if (callee)
+            if (char d = memPortArgDir(callee.getArgument(opnd.index())))
+              return d;
+        }
+  return 0;
+}
+
 // Sequential-stream read:  <result> = <port>.Pop();   (index ignored — in order)
 void SystemCModuleEmitter::emitAffineLoad(affine::AffineLoadOp op) {
+  // Random-access INPUT memory port: LOAD via req/resp handshake.
+  if (memPortArgDir(op.getMemRef()) == 'i') {
+    Value result = op.getResult();
+    fixUnsignedType(result, op->hasAttr("unsigned"));
+    auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
+    int64_t total = 1;
+    for (auto d : mt.getShape())
+      total *= d;
+    std::string reqT = "ac_int<" +
+                       std::to_string(1 + scAddrW(total) +
+                                      scDataW(mt.getElementType())) +
+                       ", false>";
+    auto nm = getName(op.getMemRef());
+    indent();
+    emitValue(result);
+    os << ";\n";
+    indent();
+    os << nm << "_req.Push( (" << reqT << ")(";
+    emitFlatIndex(op);
+    os << ") << 1 );\n"; // opcode bit0 = 0 (LOAD), addr in bits [1..]
+    indent();
+    emitValue(result);
+    os << " = " << nm << "_rsp.Pop();";
+    emitInfoAndNewLine(op);
+    return;
+  }
   if (streamArgDir(op.getMemRef()) != 'i') {
     VhlsModuleEmitter::emitAffineLoad(op); // normal array load
     return;
@@ -262,17 +434,34 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
       os << getSCTypeName(st.getBaseType()) << " > " << pn << ";\n";
     } else if (auto mt = llvm::dyn_cast<MemRefType>(v.getType())) {
       char d = argDir(func, i);
-      if (d == 'i' || d == 'o') {
+      if ((d == 'i' || d == 'o') && isSeqStreamable(v)) {
         // sequential-stream: boundary array arg -> Connections stream port
         // (body's a[i]/b[i]=v become .Pop()/.Push() via the affine overrides)
-        if (!isSeqStreamable(v))
-          emitError(func, "SystemC backend: boundary array arg is not a "
-                          "sequential 1-D scan (random/strided/2-D access) — "
-                          "needs a memory port, not yet supported.");
         std::string pn = std::string(addName(v, /*isPtr=*/false).str());
         streamPorts.push_back(pn);
         os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
         os << getSCTypeName(mt.getElementType()) << " > " << pn << ";\n";
+      } else if (d == 'i') {
+        // random-access INPUT array -> memory port: Out<req> + In<T>.
+        // Body loads become req.Push(LOAD,addr)/result=rsp.Pop() (affine over.).
+        std::string pn = std::string(addName(v, /*isPtr=*/false).str());
+        int64_t total = 1;
+        for (auto s : mt.getShape())
+          total *= s;
+        std::string reqT =
+            "ac_int<" +
+            std::to_string(1 + scAddrW(total) + scDataW(mt.getElementType())) +
+            ", false>";
+        std::string reqn = pn + "_req", rspn = pn + "_rsp";
+        streamPorts.push_back(reqn);
+        streamPorts.push_back(rspn);
+        os << "Connections::Out< " << reqT << " > " << reqn << ";\n";
+        indent();
+        os << "Connections::In< " << getSCTypeName(mt.getElementType()) << " > "
+           << rspn << ";\n";
+      } else if (d == 'o' || d == 'b') {
+        emitError(func, "SystemC backend: random-access OUTPUT/BOTH array "
+                        "(store-side memory port) not yet supported.");
       } else {
         // non-directional memref -> internal array member (fallback)
         os << getSCTypeName(mt.getElementType()) << " " << addName(v, /*isPtr=*/false);
@@ -458,20 +647,31 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   indent(); os << "sc_in<bool> rst;\n";
 
   // Region boundary arrays -> top-level Connections stream ports (In=input,
-  // Out=output; direction from arg_dirs). Recorded in ioArrays for the tb.
+  // Out=output; direction from arg_dirs). A random-access array is routed to an
+  // internal AlloMem instead (memArrays). Input/output file indices are global
+  // over ALL 'i'/'o' args in arg order, matching hls.py's input/output split.
+  int inCount = 0, outCount = 0;
   for (auto arg : llvm::enumerate(func.getArguments())) {
-    if (auto mt = llvm::dyn_cast<MemRefType>(arg.value().getType())) {
-      char d = argDir(func, arg.index());
-      std::string nm = std::string(addName(arg.value(), /*isPtr=*/false).str());
-      std::string ct = std::string(getSCTypeName(mt.getElementType()).str());
-      indent();
-      os << (d == 'o' ? "Connections::Out< " : "Connections::In< ") << ct
-         << " > " << nm << ";\n";
-      int64_t total = 1;
-      for (auto s : mt.getShape())
-        total *= s;
-      ioArrays.push_back({nm, ct, total, d});
+    auto mt = llvm::dyn_cast<MemRefType>(arg.value().getType());
+    if (!mt)
+      continue;
+    std::string nm = std::string(addName(arg.value(), /*isPtr=*/false).str());
+    std::string ct = std::string(getSCTypeName(mt.getElementType()).str());
+    int64_t total = 1;
+    for (auto s : mt.getShape())
+      total *= s;
+    // Random-access INPUT array -> internal memory (no top-level port).
+    if (regArgMemPort(func, arg.value()) == 'i') {
+      memArrays.push_back({nm, ct, total, scAddrW(total),
+                           scDataW(mt.getElementType()), inCount++});
+      continue;
     }
+    char d = argDir(func, arg.index());
+    int fidx = (d == 'o') ? outCount++ : inCount++;
+    indent();
+    os << (d == 'o' ? "Connections::Out< " : "Connections::In< ") << ct
+       << " > " << nm << ";\n";
+    ioArrays.push_back({nm, ct, total, d, fidx});
   }
 
   // The top body is stream_construct(s) + call(s). Collect them.
@@ -499,6 +699,20 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     indent();
     os << it.value().getCallee() << " " << inst << ";\n";
   }
+  // Memory-port members: two Combinational channels + an internal AlloMem.
+  for (auto &m : memArrays) {
+    std::string reqT = "ac_int<" +
+                       std::to_string(1 + m.addrw + m.dataw) + ", false>";
+    indent();
+    os << "Connections::Combinational< " << reqT << " > " << m.base
+       << "_req_ch;\n";
+    indent();
+    os << "Connections::Combinational< " << m.ctype << " > " << m.base
+       << "_rsp_ch;\n";
+    indent();
+    os << "AlloMem< " << m.ctype << ", " << m.total << ", " << m.addrw << ", "
+       << m.dataw << " > " << m.base << "_mem;\n";
+  }
 
   // Constructor: init list (channel names + instance names) + bindings.
   indent();
@@ -518,6 +732,12 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
        << "\")";
     sep = ", ";
   }
+  for (auto &m : memArrays) {
+    os << sep << m.base << "_req_ch(\"" << m.base << "_req_ch\")";
+    os << ", " << m.base << "_rsp_ch(\"" << m.base << "_rsp_ch\")";
+    os << ", " << m.base << "_mem(\"" << m.base << "_mem\")";
+    sep = ", ";
+  }
   os << " {\n";
   addIndent();
   // Fan clk/rst into each instance; bind each STREAM operand to its channel;
@@ -529,15 +749,35 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     indent(); os << instNames[it.index()] << ".rst(rst);\n";
     // Stream operands AND stream-ified memref operands both bind port-to-port:
     //   u<k>.<calleeArg>(<channel-or-top-port>)
+    // A random-access memref operand binds its req/rsp port pair to the two
+    // AlloMem channels instead.
     for (auto opnd : llvm::enumerate(call.getOperands())) {
-      if (llvm::isa<StreamType>(opnd.value().getType()) ||
-          llvm::isa<MemRefType>(opnd.value().getType())) {
+      Value ov = opnd.value();
+      if (llvm::isa<MemRefType>(ov.getType()) &&
+          regArgMemPort(func, ov) == 'i') {
+        std::string ca = std::string(getName(callee.getArgument(opnd.index())).str());
+        std::string rb = std::string(getName(ov).str());
+        indent();
+        os << instNames[it.index()] << "." << ca << "_req(" << rb
+           << "_req_ch);\n";
+        indent();
+        os << instNames[it.index()] << "." << ca << "_rsp(" << rb
+           << "_rsp_ch);\n";
+      } else if (llvm::isa<StreamType>(ov.getType()) ||
+                 llvm::isa<MemRefType>(ov.getType())) {
         indent();
         os << instNames[it.index()] << "."
-           << getName(callee.getArgument(opnd.index())) << "("
-           << getName(opnd.value()) << ");\n";
+           << getName(callee.getArgument(opnd.index())) << "(" << getName(ov)
+           << ");\n";
       }
     }
+  }
+  // Wire each internal AlloMem: clk/rst + req/rsp channels (client = kernel).
+  for (auto &m : memArrays) {
+    indent(); os << m.base << "_mem.clk(clk);\n";
+    indent(); os << m.base << "_mem.rst(rst);\n";
+    indent(); os << m.base << "_mem.req(" << m.base << "_req_ch);\n";
+    indent(); os << m.base << "_mem.rsp(" << m.base << "_rsp_ch);\n";
   }
   reduceIndent();
   indent();
@@ -570,6 +810,40 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
 // emitter, and drop this shim.)
 template <int W> using ap_int = ac_int<W, true>;
 template <int W> using ap_uint = ac_int<W, false>;
+
+// Random-access memory port for a non-sequential boundary array (SystemC/
+// Connections flow — internal memory, the only kind SystemC supports; useref
+// 14.9.1). Request packed into one ac_int: bit0 = opcode (0=LOAD,1=STORE),
+// [ADDRW] addr, [DATAW] wdata. Response = the read value T. One txn/cycle.
+// The kernel is the CLIENT (Out<req>/In<rsp>); this module holds the storage.
+template <typename T, int SIZE, int ADDRW, int DATAW>
+SC_MODULE(AlloMem) {
+  sc_in_clk clk;
+  sc_in<bool> rst;
+  Connections::In< ac_int<1 + ADDRW + DATAW, false> > req;
+  Connections::Out<T> rsp;
+  T mem[SIZE];
+  SC_HAS_PROCESS(AlloMem);
+  AlloMem(sc_module_name n) : sc_module(n), req("req"), rsp("rsp") {
+    SC_THREAD(run);
+    sensitive << clk.pos();
+    async_reset_signal_is(rst, false);
+  }
+  void run() {
+    req.Reset();
+    rsp.Reset();
+    wait();
+    while (1) {
+      ac_int<1 + ADDRW + DATAW, false> r = req.Pop();
+      ac_int<ADDRW, false> a = r.template slc<ADDRW>(1);
+      if (r[0])
+        mem[a] = (T)(int64_t)r.template slc<DATAW>(1 + ADDRW).to_int64();
+      else
+        rsp.Push(mem[a]);
+      wait();
+    }
+  }
+};
 
 )XXX";
   os << device_header;
@@ -623,17 +897,13 @@ template <int W> using ap_uint = ac_int<W, false>;
     for (auto &a : ioArrays)
       if (a.dir == 'i') { indent(); os << "ch_" << a.member << ".ResetWrite();\n"; }
     indent(); os << "wait();\n";
-    {
-      int inIdx = 0;
-      for (auto &a : ioArrays)
-        if (a.dir == 'i') {
-          indent();
-          os << "{ std::ifstream _f(\"input" << inIdx << ".data\"); " << a.ctype
-             << " _v; for (int f = 0; f < " << a.total << "; ++f) { _f >> _v; ch_"
-             << a.member << ".Push(_v); } }\n";
-          inIdx++;
-        }
-    }
+    for (auto &a : ioArrays)
+      if (a.dir == 'i') {
+        indent();
+        os << "{ std::ifstream _f(\"input" << a.fileIdx << ".data\"); " << a.ctype
+           << " _v; for (int f = 0; f < " << a.total << "; ++f) { _f >> _v; ch_"
+           << a.member << ".Push(_v); } }\n";
+      }
     reduceIndent();
     indent(); os << "}\n";
     // snk: write each OUTPUT port to output<k>.data (read back into B by hls.py)
@@ -642,17 +912,13 @@ template <int W> using ap_uint = ac_int<W, false>;
     for (auto &a : ioArrays)
       if (a.dir == 'o') { indent(); os << "ch_" << a.member << ".ResetRead();\n"; }
     indent(); os << "wait();\n";
-    {
-      int outIdx = 0;
-      for (auto &a : ioArrays)
-        if (a.dir == 'o') {
-          indent();
-          os << "{ std::ofstream _f(\"output" << outIdx
-             << ".data\"); for (int f = 0; f < " << a.total << "; ++f) _f << ch_"
-             << a.member << ".Pop() << \"\\n\"; }\n";
-          outIdx++;
-        }
-    }
+    for (auto &a : ioArrays)
+      if (a.dir == 'o') {
+        indent();
+        os << "{ std::ofstream _f(\"output" << a.fileIdx
+           << ".data\"); for (int f = 0; f < " << a.total << "; ++f) _f << ch_"
+           << a.member << ".Pop() << \"\\n\"; }\n";
+      }
     indent(); os << "sc_stop();\n";
     reduceIndent();
     indent(); os << "}\n";
@@ -662,6 +928,14 @@ template <int W> using ap_uint = ac_int<W, false>;
     os << "int sc_main(int, char *[]) {\n";
     addIndent();
     indent(); os << "tb t(\"t\");\n";
+    // Preload each internal random-access memory from its input file (csim only:
+    // direct hierarchical poke of AlloMem.mem[], done before reset is released).
+    for (auto &m : memArrays) {
+      indent();
+      os << "{ std::ifstream _f(\"input" << m.fileIdx << ".data\"); " << m.ctype
+         << " _v; for (int f = 0; f < " << m.total << "; ++f) { _f >> _v; t.dut."
+         << m.base << "_mem.mem[f] = _v; } }\n";
+    }
     indent(); os << "t.rst = 0; sc_start(1, SC_NS);\n";
     indent(); os << "t.rst = 1; sc_start();\n";
     indent(); os << "return 0;\n";
