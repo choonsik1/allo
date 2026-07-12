@@ -13,6 +13,7 @@ from .._mlir.ir import (
     Context,
     Location,
     Module,
+    StringAttr,
     UnitAttr,
 )
 from .._mlir.passmanager import PassManager
@@ -240,7 +241,7 @@ class HLSModule:
         self.num_output_args = None  # Will be set from configs if provided
         user_configs = configs if configs is not None else {}
         # For Catapult (ASIC), start with ASIC-appropriate defaults instead of FPGA defaults.
-        if platform == "catapult":
+        if platform in {"catapult", "systemc"}:
             base_configs = {"device": "nangate-45nm_beh", "frequency": 500}
         else:
             base_configs = DEFAULT_CONFIG.copy()
@@ -254,6 +255,21 @@ class HLSModule:
             self.module = Module.parse(str(mod), ctx)
             func = find_func_in_module(self.module, top_func_name)
             func.attributes["top"] = UnitAttr.get()
+            # Stamp per-arg I/O direction (in/out/both/scalar) so the SystemC
+            # backend can emit the right port direction — analyze_arg_load_store
+            # derives it from actual loads/stores (propagated through calls),
+            # unlike `itypes` which only carries the datatype/signedness.
+            if platform == "systemc":
+                _dir_char = {"in": "i", "out": "o", "both": "b", "scalar": "_"}
+                # stamp EVERY func (top + kernels): the emitter needs each memref
+                # arg's direction — kernel memref args too, to pick Connections::In
+                # vs Out when stream-ifying a boundary array.
+                for _fname, _dirs in analyze_arg_load_store(self.module).items():
+                    _f = find_func_in_module(self.module, _fname)
+                    if _f is not None:
+                        _f.attributes["arg_dirs"] = StringAttr.get(
+                            "".join(_dir_char.get(d, "_") for d in _dirs)
+                        )
             # fix: num_output_args
             if self.num_output_args is None and len(func.type.results) == 0:
                 load_store_mapping = analyze_arg_load_store(self.module)
@@ -322,10 +338,11 @@ class HLSModule:
             os.makedirs(project, exist_ok=True)
             path = os.path.dirname(__file__)
             path = os.path.join(path, "../harness/")
-            if platform in {"vivado_hls", "vitis_hls", "tapa", "pynq", "catapult"}:
-                os.system("cp " + path + f"{platform.split('_')[0]}/* " + project)
+            if platform in {"vivado_hls", "vitis_hls", "tapa", "pynq", "catapult", "systemc"}:
+                harness_dir = "catapult" if platform == "systemc" else platform.split("_")[0]
+                os.system("cp " + path + f"{harness_dir}/* " + project)
                 with open(f"{project}/run.tcl", "w", encoding="utf-8") as outfile:
-                    if platform == "catapult":
+                    if platform in {"catapult", "systemc"}:
                         outfile.write(codegen_tcl_catapult(top_func_name, configs))
                     else:
                         outfile.write(codegen_tcl(top_func_name, configs))
@@ -404,7 +421,7 @@ class HLSModule:
                     self.module,
                     num_output_args=self.num_output_args,
                 )
-            elif self.platform == "catapult":
+            elif self.platform in {"catapult", "systemc"}:
                 assert self.mode in {
                     "csim",
                     "csyn",
@@ -412,10 +429,17 @@ class HLSModule:
                 }, "Invalid mode for catapult"
 
                 if self.mode == "csim":
-                    self.host_code = codegen_host_catapult(
-                        self.top_func_name,
-                        self.module,
-                    )
+                    if self.platform == "systemc":
+                        # Option A: the SystemC emitter produces a self-contained
+                        # kernel.cpp with its own sc_main testbench, so there is no
+                        # separate host.cpp. (Option B will split the testbench out
+                        # into a data-file-driven host.cpp via codegen_systemc_host.)
+                        self.host_code = ""
+                    else:
+                        self.host_code = codegen_host_catapult(
+                            self.top_func_name,
+                            self.module,
+                        )
                 else:
                     self.host_code = ""
 
@@ -826,7 +850,7 @@ class HLSModule:
             )
             args[-1][:] = result
             return
-        if self.platform == "catapult":
+        if self.platform in {"catapult", "systemc"}:
             if self.mode == "csim":
                 # Check for input arguments
                 func = find_func_in_module(self.module, self.top_func_name)
@@ -846,10 +870,14 @@ class HLSModule:
                     outfile.write(header)
 
                 # Write input data
-                for i, ((in_dtype, in_shape), arg) in enumerate(
-                    zip(inputs, args[: len(inputs)])
-                ):
-                    write_tensor_to_file(arg, in_shape, f"{self.project}/input{i}.data")
+                # Option A (systemc): the self-contained sc_main drives its own
+                # stimulus and prints results, so it neither reads input*.data nor
+                # writes output*.data. Skip the data-file I/O for systemc.
+                if self.platform != "systemc":
+                    for i, ((in_dtype, in_shape), arg) in enumerate(
+                        zip(inputs, args[: len(inputs)])
+                    ):
+                        write_tensor_to_file(arg, in_shape, f"{self.project}/input{i}.data")
 
                 # Compilation with g++
                 # Assuming 'g++' is in PATH.
@@ -868,7 +896,24 @@ class HLSModule:
                         f"Catapult headers not found at {ac_include}. Check MGC_HOME."
                     )
 
-                cmd = f"cd {self.project}; g++ -std=c++11 -I{ac_include} kernel.cpp host.cpp -o sim"
+                if self.platform == "systemc":
+                    systemc_home = os.environ.get("SYSTEMC_HOME", "")
+                    if not systemc_home:
+                        raise RuntimeError("Set SYSTEMC_HOME for systemc csim.")
+                    lib_dir = os.path.join(systemc_home, "lib-linux64")
+                    if not os.path.isdir(lib_dir):
+                        lib_dir = os.path.join(systemc_home, "lib")
+                    # Connections/matchlib ship under $MGC_HOME/shared/include alongside ac_types
+                    # Option A: kernel.cpp is self-contained (its own sc_main); no host.cpp.
+                    cmd = (
+                        f"cd {self.project}; g++ -std=c++17 "
+                        f"-I{ac_include} -I{systemc_home}/include "
+                        f"kernel.cpp "
+                        f"-L{lib_dir} -Wl,-rpath,{lib_dir} -lsystemc "
+                        f"-o sim"
+                    )
+                else:
+                    cmd = f"cd {self.project}; g++ -std=c++11 -I{ac_include} kernel.cpp host.cpp -o sim"
                 print(
                     f"[{time.strftime('%H:%M:%S', time.gmtime())}] Compiling with g++ ..."
                 )
@@ -896,6 +941,12 @@ class HLSModule:
                     raise RuntimeError("Simulation failed.")
 
                 # Read outputs
+                if self.platform == "systemc":
+                    # Option A: the self-contained testbench prints results to
+                    # stdout and does not write output*.data, so there is nothing
+                    # to read back into `args`. (Option B adds data-file I/O so
+                    # results flow back into the numpy args like the vitis path.)
+                    return
                 for i, ((out_dtype, out_shape), out_arg) in enumerate(
                     zip(outputs, args[len(inputs) :])
                 ):

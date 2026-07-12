@@ -20,6 +20,7 @@
 #include "allo/Dialect/Visitor.h"
 #include "allo/Translation/EmitVivadoHLS.h" // reuse the Vhls emitter base
 #include "allo/Translation/Utils.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
@@ -33,6 +34,7 @@ using namespace allo;
 // (file-local, uncallable) getTypeName so port/channel types MATCH the reused
 // body: i8/16/32/64 -> (u)intN_t, other widths -> ap_(u)int<N> (aliased to
 // ac_int in the emitted header), f16 -> half, f32 -> float, fixed -> ap_(u)fixed.
+// 
 //===----------------------------------------------------------------------===//
 
 static SmallString<32> getSCTypeName(Type valType) {
@@ -93,16 +95,29 @@ private:
   void emitKernelModule(func::FuncOp func); // @df.kernel -> SC_MODULE + SC_THREAD
   void emitTopModule(func::FuncOp func);    // @df.region/top -> wiring SC_MODULE
 
+  // Connections: get/put emit .Pop()/.Push() instead of the base .read()/.write().
+  void emitStreamGet(allo::StreamGetOp op) override;
+  void emitStreamPut(allo::StreamPutOp op) override;
+
+  // Sequential-stream body transform: a boundary memref arg becomes a Connections
+  // stream port, so load a[i] -> port.Pop(), store b[i]=v -> port.Push(v).
+  void emitAffineLoad(affine::AffineLoadOp op) override;
+  void emitAffineStore(affine::AffineStoreOp op) override;
+  // If `v` is a df.kernel memref arg turned into a stream, its dir ('i'/'o'); else 0.
+  char streamArgDir(Value v);
+
   // direction of stream arg `i` from the func's "stypes" attr: 'i','o', or 0.
   char streamDir(func::FuncOp func, unsigned i);
+  // direction of memref arg `i` from the func's "arg_dirs" attr: 'i','o','b', or 0.
+  char argDir(func::FuncOp func, unsigned i);
 
-  // Top-level array I/O: which submodule instance.member holds each array
-  // (recorded in emitTopModule, driven/printed by the sc_main testbench).
+  // Region boundary arrays -> top-level Connections stream ports; the sc_main
+  // testbench drives inputs and reads outputs (direction from arg_dirs).
   struct IOArray {
-    std::string inst;   // submodule instance (e.g. "u0")
-    std::string member; // array member name  (e.g. "v0")
+    std::string member; // top-level stream port name (e.g. "v11")
+    std::string ctype;  // element C type (for the tb Combinational channel)
     int64_t total;      // flattened element count
-    unsigned rank;      // number of dimensions (for the [0]...[0] flatten)
+    char dir;           // 'i' input (Push), 'o' output (Pop)
   };
   SmallVector<IOArray> ioArrays;
 };
@@ -121,6 +136,61 @@ char SystemCModuleEmitter::streamDir(func::FuncOp func, unsigned i) {
   return (c == 'i' || c == 'o') ? c : 0;
 }
 
+// arg_dirs is a string with one char per arg: 'i'=in, 'o'=out, 'b'=both, else '_'.
+char SystemCModuleEmitter::argDir(func::FuncOp func, unsigned i) {
+  auto attr = func->getAttrOfType<StringAttr>("arg_dirs");
+  if (!attr)
+    return 0;
+  StringRef s = attr.getValue();
+  if (i >= s.size())
+    return 0;
+  char c = s[i];
+  return (c == 'i' || c == 'o' || c == 'b') ? c : 0;
+}
+
+// A df.kernel memref arg with a pure in/out direction is stream-ified into a
+// Connections port; return that direction ('i'/'o'), else 0 (emit normally).
+char SystemCModuleEmitter::streamArgDir(Value v) {
+  auto barg = llvm::dyn_cast<BlockArgument>(v);
+  if (!barg || !llvm::isa<MemRefType>(v.getType()))
+    return 0;
+  auto func = llvm::dyn_cast<func::FuncOp>(barg.getOwner()->getParentOp());
+  if (!func || !func->hasAttr("df.kernel"))
+    return 0;
+  char d = argDir(func, barg.getArgNumber());
+  return (d == 'i' || d == 'o') ? d : 0; // 'both' stays a real memref
+}
+
+// Sequential-stream read:  <result> = <port>.Pop();   (index ignored — in order)
+void SystemCModuleEmitter::emitAffineLoad(affine::AffineLoadOp op) {
+  if (streamArgDir(op.getMemRef()) != 'i') {
+    VhlsModuleEmitter::emitAffineLoad(op); // normal array load
+    return;
+  }
+  indent();
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  emitValue(result);
+  os << " = ";
+  emitValue(op.getMemRef(), 0, false);
+  os << ".Pop();";
+  emitInfoAndNewLine(op);
+}
+
+// Sequential-stream write:  <port>.Push(<value>);   (index ignored — in order)
+void SystemCModuleEmitter::emitAffineStore(affine::AffineStoreOp op) {
+  if (streamArgDir(op.getMemRef()) != 'o') {
+    VhlsModuleEmitter::emitAffineStore(op); // normal array store
+    return;
+  }
+  indent();
+  emitValue(op.getMemRef(), 0, false);
+  os << ".Push(";
+  emitValue(op.getValueToStore());
+  os << ");";
+  emitInfoAndNewLine(op);
+}
+
 //===----------------------------------------------------------------------===//
 // emitFunction split: kernel module vs top wiring module
 //===----------------------------------------------------------------------===//
@@ -130,45 +200,173 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   os << "SC_MODULE(" << name << ") {\n";
   addIndent();
 
+  // Clock + reset (required for synthesizable clocked threads).
+  indent(); os << "sc_in_clk clk;\n";
+  indent(); os << "sc_in<bool> rst;\n";
+
   // Ports + members from arguments.
+  SmallVector<std::string, 4> streamPorts;
   for (auto arg : llvm::enumerate(func.getArguments())) {
     unsigned i = arg.index();
     Value v = arg.value();
     indent();
     if (auto st = llvm::dyn_cast<StreamType>(v.getType())) {
-      // stream arg -> sc_fifo_in/out<T> port (direction from stypes)
+      // stream arg -> Connections::In/Out<T> port (direction from stypes)
       char d = streamDir(func, i);
-      os << (d == 'o' ? "sc_fifo_out< " : "sc_fifo_in< ");
-      os << getSCTypeName(st.getBaseType()) << " > " << addName(v, /*isPtr=*/false)
-         << ";\n";
+      std::string pn = std::string(addName(v, /*isPtr=*/false).str());
+      streamPorts.push_back(pn);
+      os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
+      os << getSCTypeName(st.getBaseType()) << " > " << pn << ";\n";
     } else if (auto mt = llvm::dyn_cast<MemRefType>(v.getType())) {
-      // memref arg -> plain array member (TODO: I/O policy — ports vs channels)
-      os << getSCTypeName(mt.getElementType()) << " " << addName(v, /*isPtr=*/false);
-      for (auto s : mt.getShape())
-        os << "[" << s << "]";
-      os << ";\n";
+      char d = argDir(func, i);
+      if (d == 'i' || d == 'o') {
+        // sequential-stream: boundary array arg -> Connections stream port
+        // (body's a[i]/b[i]=v become .Pop()/.Push() via the affine overrides)
+        std::string pn = std::string(addName(v, /*isPtr=*/false).str());
+        streamPorts.push_back(pn);
+        os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
+        os << getSCTypeName(mt.getElementType()) << " > " << pn << ";\n";
+      } else {
+        // non-directional memref -> internal array member (fallback)
+        os << getSCTypeName(mt.getElementType()) << " " << addName(v, /*isPtr=*/false);
+        for (auto s : mt.getShape())
+          os << "[" << s << "]";
+        os << ";\n";
+      }
     }
   }
 
-  // Constructor + thread.
-  indent();
-  os << "SC_CTOR(" << name << ") { SC_THREAD(run); }\n";
-  indent();
-  os << "void run() {\n";
+  // Constructor: name the ports + register a clocked, reset-aware thread.
+  indent(); os << "SC_HAS_PROCESS(" << name << ");\n";
+  indent(); os << name << "(sc_module_name n) : sc_module(n)";
+  for (auto &pn : streamPorts)
+    os << ", " << pn << "(\"" << pn << "\")";
+  os << " {\n";
   addIndent();
-  emitBlock(func.front()); // REUSE: affine.for / loads / arith / put(write) / get(read)
+  indent(); os << "SC_THREAD(run);\n";
+  indent(); os << "sensitive << clk.pos();\n";
+  indent(); os << "async_reset_signal_is(rst, false);\n";
   reduceIndent();
-  indent();
-  os << "}\n";
+  indent(); os << "}\n";
+
+  // run(): reset ports, wait, then free-running loop over the REUSED body.
+  indent(); os << "void run() {\n";
+  addIndent();
+  for (auto &pn : streamPorts) {
+    indent(); os << pn << ".Reset();\n";
+  }
+  indent(); os << "wait();\n";
+  indent(); os << "while (1) {\n";
+  addIndent();
+  emitBlock(func.front()); // put/get now emit .Push()/.Pop()
+  reduceIndent();
+  indent(); os << "}\n";
+  reduceIndent();
+  indent(); os << "}\n";
 
   reduceIndent();
   os << "};\n\n";
+}
+
+// Connections get: <result> = <stream>[indices].Pop();
+// (Base scalar path, with .read() -> .Pop(); block-streams deferred.)
+void SystemCModuleEmitter::emitStreamGet(StreamGetOp op) {
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  auto stream = op->getOperand(0);
+  int rank = 0;
+  if (llvm::isa<StreamType>(stream.getType())) {
+    unsigned dimIdx = 0;
+    auto sst = llvm::dyn_cast<StreamType>(stream.getType());
+    if (auto shapedType = llvm::dyn_cast<ShapedType>(sst.getBaseType())) {
+      indent(); emitArrayDecl(result, false); os << ";\n";
+      for (auto &shape : shapedType.getShape()) {
+        indent();
+        os << "for (int iv" << dimIdx << " = 0; iv" << dimIdx << " < " << shape
+           << "; ++iv" << dimIdx++ << ") {\n";
+        addIndent();
+      }
+      rank = dimIdx;
+    }
+  }
+  indent();
+  emitValue(result, rank);
+  os << " = ";
+  emitValue(stream, 0, false);
+  if (llvm::isa<ShapedType>(stream.getType())) {
+    auto idx = op->getAttrOfType<DenseI64ArrayAttr>("indices");
+    for (int64_t v : idx.asArrayRef())
+      os << "[" << v << "]";
+  }
+  os << ".Pop();";
+  if (rank > 0) {
+    os << "\n";
+    for (int i = 0; i < rank; ++i) { reduceIndent(); indent(); os << "}\n"; }
+  }
+  emitInfoAndNewLine(op);
+}
+
+// Connections put: <stream>[indices].Push(<value>);
+// (Base scalar path, with .write(v) -> .Push(v); block-streams deferred.)
+void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
+  auto stream = op->getOperand(0);
+  int rank = 0;
+  if (llvm::isa<StreamType>(stream.getType())) {
+    unsigned dimIdx = 0;
+    auto sst = llvm::dyn_cast<StreamType>(stream.getType());
+    if (auto shapedType = llvm::dyn_cast<ShapedType>(sst.getBaseType())) {
+      for (auto &shape : shapedType.getShape()) {
+        indent();
+        os << "for (int iv" << dimIdx << " = 0; iv" << dimIdx << " < " << shape
+           << "; ++iv" << dimIdx++ << ") {\n";
+        addIndent();
+      }
+      rank = dimIdx;
+    }
+    indent();
+    emitValue(stream, 0, false);
+  } else {
+    indent();
+    emitValue(stream, 0, false);
+    auto idx = op->getAttrOfType<DenseI64ArrayAttr>("indices");
+    for (int64_t v : idx.asArrayRef())
+      os << "[" << v << "]";
+  }
+  os << ".Push(";
+  emitValue(op->getOperand(1), rank);
+  os << ");";
+  if (rank > 0) {
+    os << "\n";
+    for (int i = 0; i < rank; ++i) { reduceIndent(); indent(); os << "}\n"; }
+  }
+  emitInfoAndNewLine(op);
 }
 
 void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   auto parent = func->getParentOfType<ModuleOp>();
   os << "SC_MODULE(" << func.getName() << ") {\n";
   addIndent();
+
+  // Clock + reset (fanned out to every submodule).
+  indent(); os << "sc_in_clk clk;\n";
+  indent(); os << "sc_in<bool> rst;\n";
+
+  // Region boundary arrays -> top-level Connections stream ports (In=input,
+  // Out=output; direction from arg_dirs). Recorded in ioArrays for the tb.
+  for (auto arg : llvm::enumerate(func.getArguments())) {
+    if (auto mt = llvm::dyn_cast<MemRefType>(arg.value().getType())) {
+      char d = argDir(func, arg.index());
+      std::string nm = std::string(addName(arg.value(), /*isPtr=*/false).str());
+      std::string ct = std::string(getSCTypeName(mt.getElementType()).str());
+      indent();
+      os << (d == 'o' ? "Connections::Out< " : "Connections::In< ") << ct
+         << " > " << nm << ";\n";
+      int64_t total = 1;
+      for (auto s : mt.getShape())
+        total *= s;
+      ioArrays.push_back({nm, ct, total, d});
+    }
+  }
 
   // The top body is stream_construct(s) + call(s). Collect them.
   SmallVector<StreamConstructOp, 4> channels;
@@ -180,12 +378,12 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       calls.push_back(call);
   }
 
-  // Channel members: sc_fifo<T> vN;
+  // Channel members: Connections::Combinational<T> vN;
   for (auto sc : channels) {
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
     indent();
-    os << "sc_fifo< " << getSCTypeName(st.getBaseType()) << " > "
-       << addName(sc.getResult(), /*isPtr=*/false) << ";\n";
+    os << "Connections::Combinational< " << getSCTypeName(st.getBaseType())
+       << " > " << addName(sc.getResult(), /*isPtr=*/false) << ";\n";
   }
   // Submodule instance members: <callee> uN;
   SmallVector<std::string, 4> instNames;
@@ -196,14 +394,17 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     os << it.value().getCallee() << " " << inst << ";\n";
   }
 
-  // Constructor: init list (fifo depths + instance names) + port bindings.
+  // Constructor: init list (channel names + instance names) + bindings.
   indent();
   os << "SC_CTOR(" << func.getName() << ")";
   std::string sep = " : ";
+  for (auto &a : ioArrays) {
+    os << sep << a.member << "(\"" << a.member << "\")";
+    sep = ", ";
+  }
   for (auto sc : channels) {
-    auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
-    os << sep << getName(sc.getResult()) << "(" << (st ? st.getDepth() : 0)
-       << ")";
+    os << sep << getName(sc.getResult()) << "(\"" << getName(sc.getResult())
+       << "\")";
     sep = ", ";
   }
   for (auto it : llvm::enumerate(calls)) {
@@ -213,26 +414,22 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   }
   os << " {\n";
   addIndent();
-  // Bind each call's STREAM operand to the channel; record each MEMREF operand
-  // as a top-level I/O array (instance.member) for the testbench to drive/read.
+  // Fan clk/rst into each instance; bind each STREAM operand to its channel;
+  // record each MEMREF operand as a top-level I/O array for the testbench.
   for (auto it : llvm::enumerate(calls)) {
     auto call = it.value();
     auto callee = parent.lookupSymbol<func::FuncOp>(call.getCallee());
+    indent(); os << instNames[it.index()] << ".clk(clk);\n";
+    indent(); os << instNames[it.index()] << ".rst(rst);\n";
+    // Stream operands AND stream-ified memref operands both bind port-to-port:
+    //   u<k>.<calleeArg>(<channel-or-top-port>)
     for (auto opnd : llvm::enumerate(call.getOperands())) {
-      if (llvm::isa<StreamType>(opnd.value().getType())) {
+      if (llvm::isa<StreamType>(opnd.value().getType()) ||
+          llvm::isa<MemRefType>(opnd.value().getType())) {
         indent();
         os << instNames[it.index()] << "."
            << getName(callee.getArgument(opnd.index())) << "("
            << getName(opnd.value()) << ");\n";
-      } else if (auto mt =
-                     llvm::dyn_cast<MemRefType>(opnd.value().getType())) {
-        int64_t total = 1;
-        for (auto d : mt.getShape())
-          total *= d;
-        ioArrays.push_back(
-            {instNames[it.index()],
-             std::string(getName(callee.getArgument(opnd.index())).str()),
-             total, (unsigned)mt.getShape().size()});
       }
     }
   }
@@ -249,22 +446,26 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
 //===----------------------------------------------------------------------===//
 
 void SystemCModuleEmitter::emitModule(ModuleOp module) {
-  const char *header = R"XXX(
+  std::string device_header = R"XXX(
 //===------------------------------------------------------------*- C++ -*-===//
-// Automatically generated SystemC (sc_fifo) from Allo dataflow.
+// Automatically generated file for SystemC (Catapult HLS / MatchLib Connections).
 //===----------------------------------------------------------------------===//
 #include <systemc.h>
+#include <mc_connections.h>   // MatchLib Connections (LI valid/ready channels)
+#include <mc_scverify.h>      // SCVerify testbench macros (CCS_MAIN / CCS_DESIGN)
 #include <ac_int.h>
+#include <ac_fixed.h>
 #include <stdint.h>
 #include <iostream>
 // The reused Vivado-emitter body prints Vitis ap_(u)int types; alias them to
-// Catapult's ac_int so the same body compiles under SystemC. (TODO: emit ac_int
-// natively via a type-name override, like the Catapult emitter.)
+// Catapult's ac_int so the same body compiles. (TODO: emit ac_int/ac_fixed
+// natively via a type-name override, like getCatapultTypeName in the Catapult
+// emitter, and drop this shim.)
 template <int W> using ap_int = ac_int<W, true>;
 template <int W> using ap_uint = ac_int<W, false>;
 
 )XXX";
-  os << header;
+  os << device_header;
 
   StringRef topName;
   for (auto func : module.getOps<func::FuncOp>()) {
@@ -277,43 +478,77 @@ template <int W> using ap_uint = ac_int<W, false>;
     // else: helper funcs — TODO
   }
 
-  // sc_main testbench: drive top-level input arrays with a known pattern
-  // ([f] = f, flattened), run, then print every top-level array so the data
-  // is observable/checkable. Arrays live inside submodule instances, accessed
-  // as top_inst.<inst>.<member>; flattened via a pointer to element 0.
+  // Testbench: a Combinational channel per top stream port + clocked src/sink
+  // threads. src Pushes a known pattern into every INPUT port; sink Pops + prints
+  // every OUTPUT port then sc_stop()s. (Ignored by synthesis; only for csim.)
   if (!topName.empty()) {
+    os << "SC_MODULE(tb) {\n";
+    addIndent();
+    indent(); os << "sc_clock clk;\n";
+    indent(); os << "sc_signal<bool> rst;\n";
+    indent(); os << topName << " dut;\n";
+    for (auto &a : ioArrays) {
+      indent();
+      os << "Connections::Combinational< " << a.ctype << " > ch_" << a.member
+         << ";\n";
+    }
+    indent(); os << "SC_HAS_PROCESS(tb);\n";
+    indent();
+    os << "tb(sc_module_name n) : sc_module(n), clk(\"clk\", 1, SC_NS), dut(\"dut\")";
+    for (auto &a : ioArrays)
+      os << ", ch_" << a.member << "(\"ch_" << a.member << "\")";
+    os << " {\n";
+    addIndent();
+    indent(); os << "dut.clk(clk); dut.rst(rst);\n";
+    for (auto &a : ioArrays) {
+      indent();
+      os << "dut." << a.member << "(ch_" << a.member << ");\n";
+    }
+    indent(); os << "SC_THREAD(src); sensitive << clk.posedge_event(); "
+                    "async_reset_signal_is(rst, false);\n";
+    indent(); os << "SC_THREAD(snk); sensitive << clk.posedge_event(); "
+                    "async_reset_signal_is(rst, false);\n";
+    reduceIndent();
+    indent(); os << "}\n";
+    // src: drive inputs
+    indent(); os << "void src() {\n";
+    addIndent();
+    for (auto &a : ioArrays)
+      if (a.dir == 'i') { indent(); os << "ch_" << a.member << ".ResetWrite();\n"; }
+    indent(); os << "wait();\n";
+    for (auto &a : ioArrays)
+      if (a.dir == 'i') {
+        indent();
+        os << "for (int f = 0; f < " << a.total << "; ++f) ch_" << a.member
+           << ".Push(f);\n";
+      }
+    reduceIndent();
+    indent(); os << "}\n";
+    // snk: read outputs, then stop
+    indent(); os << "void snk() {\n";
+    addIndent();
+    for (auto &a : ioArrays)
+      if (a.dir == 'o') { indent(); os << "ch_" << a.member << ".ResetRead();\n"; }
+    indent(); os << "wait();\n";
+    for (auto &a : ioArrays)
+      if (a.dir == 'o') {
+        indent();
+        os << "std::cout << \"" << a.member << ":\"; for (int f = 0; f < "
+           << a.total << "; ++f) std::cout << ' ' << ch_" << a.member
+           << ".Pop(); std::cout << std::endl;\n";
+      }
+    indent(); os << "sc_stop();\n";
+    reduceIndent();
+    indent(); os << "}\n";
+    reduceIndent();
+    os << "};\n\n";
+
     os << "int sc_main(int, char *[]) {\n";
     addIndent();
-    indent();
-    os << topName << " top_inst(\"top_inst\");\n";
-
-    auto flatPtr = [&](const IOArray &a) {
-      std::string s = "top_inst." + a.inst + "." + a.member;
-      for (unsigned r = 0; r < a.rank; ++r)
-        s += "[0]";
-      return "&" + s;
-    };
-
-    // drive inputs
-    for (auto &a : ioArrays) {
-      indent();
-      os << "{ auto *p = " << flatPtr(a) << "; for (int f = 0; f < " << a.total
-         << "; ++f) p[f] = f; }\n";
-    }
-
-    indent();
-    os << "sc_start();\n";
-
-    // print all top-level arrays after the run
-    for (auto &a : ioArrays) {
-      indent();
-      os << "{ auto *p = " << flatPtr(a) << "; std::cout << \"" << a.inst << "."
-         << a.member << ":\"; for (int f = 0; f < " << a.total
-         << "; ++f) std::cout << ' ' << p[f]; std::cout << std::endl; }\n";
-    }
-
-    indent();
-    os << "return 0;\n";
+    indent(); os << "tb t(\"t\");\n";
+    indent(); os << "t.rst = 0; sc_start(1, SC_NS);\n";
+    indent(); os << "t.rst = 1; sc_start();\n";
+    indent(); os << "return 0;\n";
     reduceIndent();
     os << "}\n";
   }
@@ -321,17 +556,18 @@ template <int W> using ap_uint = ac_int<W, false>;
 
 //===----------------------------------------------------------------------===//
 // Registration
+// - entry point that actually runs emitter
 //===----------------------------------------------------------------------===//
 
 LogicalResult allo::emitSystemC(ModuleOp module, llvm::raw_ostream &os) {
-  AlloEmitterState state(os);
-  SystemCModuleEmitter(state).emitModule(module);
-  return failure(state.encounteredError);
+  AlloEmitterState state(os); // creates shared emitter state around output stream os
+  SystemCModuleEmitter(state).emitModule(module); // constructs emitter and walks whole module, printing SystemC
+  return failure(state.encounteredError); // reports success/failure
 }
 
-void allo::registerEmitSystemCTranslation() {
+void allo::registerEmitSystemCTranslation() { // registers emitter as an MLIR translation named emit-systemc
   static TranslateFromMLIRRegistration toSystemC(
-      "emit-systemc", "Emit SystemC (sc_fifo)", emitSystemC,
+      "emit-systemc", "Emit SystemC", emitSystemC,
       [&](DialectRegistry &registry) {
         // clang-format off
         registry.insert<

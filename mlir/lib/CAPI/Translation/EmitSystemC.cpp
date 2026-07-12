@@ -13,7 +13,8 @@ using namespace mlir;
 using namespace allo;
 
 MlirLogicalResult mlirEmitSystemC(MlirModule module,
-                                  MlirStringCallback callback, void *userData) {
+                                  MlirStringCallback callback, 
+                                  void *userData) {
   mlir::detail::CallbackOstream stream(callback, userData);
   return wrap(emitSystemC(unwrap(module), stream));
 }
