@@ -98,6 +98,12 @@ private:
   // Connections: get/put emit .Pop()/.Push() instead of the base .read()/.write().
   void emitStreamGet(allo::StreamGetOp op) override;
   void emitStreamPut(allo::StreamPutOp op) override;
+  // Non-blocking: try_get/try_put -> Connections .PopNB()/.PushNB() (fire-on-valid).
+  // empty()/full() have no synthesizable Connections equivalent -> errored.
+  void emitStreamTryGet(allo::StreamTryGetOp op) override;
+  void emitStreamTryPut(allo::StreamTryPutOp op) override;
+  void emitStreamEmpty(allo::StreamEmptyOp op) override;
+  void emitStreamFull(allo::StreamFullOp op) override;
 
   // Sequential-stream body transform: a boundary memref arg becomes a Connections
   // stream port, so load a[i] -> port.Pop(), store b[i]=v -> port.Push(v).
@@ -381,6 +387,65 @@ void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
     for (int i = 0; i < rank; ++i) { reduceIndent(); indent(); os << "}\n"; }
   }
   emitInfoAndNewLine(op);
+}
+
+// Non-blocking get: <result>; <success> = <stream>[idx].PopNB(<result>);
+// (Base try_get path, with .read_nb -> .PopNB.)
+void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
+  Value result = op.getResult(0);
+  Value success = op.getResult(1);
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  auto stream = op->getOperand(0);
+  indent();
+  emitValue(result);
+  os << ";\n";
+  indent();
+  emitValue(success);
+  os << " = ";
+  emitValue(stream, 0, false);
+  if (llvm::isa<ShapedType>(stream.getType())) {
+    auto idx = op->getAttrOfType<DenseI64ArrayAttr>("indices");
+    if (idx)
+      for (int64_t v : idx.asArrayRef())
+        os << "[" << v << "]";
+  }
+  os << ".PopNB(";
+  emitValue(result);
+  os << ");";
+  emitInfoAndNewLine(op);
+}
+
+// Non-blocking put: <success> = <stream>[idx].PushNB(<value>);
+void SystemCModuleEmitter::emitStreamTryPut(StreamTryPutOp op) {
+  Value success = op.getResult();
+  auto stream = op->getOperand(0);
+  auto value = op->getOperand(1);
+  indent();
+  emitValue(success);
+  os << " = ";
+  emitValue(stream, 0, false);
+  if (llvm::isa<ShapedType>(stream.getType())) {
+    auto idx = op->getAttrOfType<DenseI64ArrayAttr>("indices");
+    if (idx)
+      for (int64_t v : idx.asArrayRef())
+        os << "[" << v << "]";
+  }
+  os << ".PushNB(";
+  emitValue(value);
+  os << ");";
+  emitInfoAndNewLine(op);
+}
+
+// Connections In/Out are latency-insensitive handshakes with no synthesizable
+// empty()/full() introspection — use try_get()/try_put() (PopNB/PushNB) for
+// fire-on-valid instead.
+void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
+  emitError(op, "SystemC backend: stream empty() has no synthesizable Connections "
+                "equivalent — use try_get() (PopNB) for fire-on-valid.");
+}
+void SystemCModuleEmitter::emitStreamFull(StreamFullOp op) {
+  emitError(op, "SystemC backend: stream full() has no synthesizable Connections "
+                "equivalent — use try_put() (PushNB) for fire-on-valid.");
 }
 
 void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {

@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 import allo
-from allo.ir.types import int32, Stream
+from allo.ir.types import int32, int1, Stream
 import allo.dataflow as df
 
 
@@ -118,6 +118,64 @@ def test_systemc_rejects_reread():
     with pytest.raises(Exception, match="Failed to emit"):
         df.build(top, target="systemc")
     print("re-read correctly rejected")
+
+
+def test_systemc_nonblocking():
+    """try_get / try_put emit as Connections .PopNB() / .PushNB() (fire-on-valid).
+    NOTE: a *working* fire-on-valid design must do one try per cycle (not spin) —
+    spin-until-success deadlocks a free-running SC_THREAD. This checks emission."""
+
+    N = 8
+
+    @df.region()
+    def top(A: int32[N], B: int32[N]):
+        S: Stream[int32, 4][1]
+
+        @df.kernel(mapping=[1], args=[A])
+        def producer(a: int32[N]):
+            for i in range(N):
+                ok: int1 = 0
+                while ok == 0:
+                    ok = S[0].try_put(a[i])
+
+        @df.kernel(mapping=[1], args=[B])
+        def consumer(b: int32[N]):
+            for i in range(N):
+                v: int32 = 0
+                ok: int1 = 0
+                while ok == 0:
+                    v, ok = S[0].try_get()
+                b[i] = v
+
+    code = df.build(top, target="systemc").hls_code
+    assert ".PopNB(" in code and ".PushNB(" in code
+    print("try_get/try_put -> PopNB/PushNB")
+
+
+def test_systemc_rejects_empty_full():
+    """empty()/full() have no synthesizable Connections equivalent -> rejected
+    (Connections is a handshake, not an introspectable FIFO; use try_get/try_put)."""
+
+    N = 8
+
+    @df.region()
+    def top(A: int32[N], B: int32[N]):
+        S: Stream[int32, 1][1]
+
+        @df.kernel(mapping=[1], args=[A])
+        def producer(a: int32[N]):
+            for i in range(N):
+                S[0].put(a[i])
+
+        @df.kernel(mapping=[1], args=[B])
+        def consumer(b: int32[N]):
+            for i in range(N):
+                e: int1 = S[0].empty()  # no synthesizable Connections equivalent
+                b[i] = S[0].get()
+
+    with pytest.raises(Exception, match="Failed to emit"):
+        df.build(top, target="systemc")
+    print("empty() correctly rejected")
 
 
 def test_systemc_emit():
