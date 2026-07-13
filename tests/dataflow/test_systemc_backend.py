@@ -378,6 +378,80 @@ def test_systemc_csim_grid():
     print(f"SystemC csim grid B == A + {P}")
 
 
+def _tiled_systolic_gemm():
+    """Standard Allo tiled systolic GEMM (C = A @ B) at Mt=Nt=1: a mapping=[P0,P1]
+    grid of feeder/body/drain PEs; 2-D boundaries A,B (reads) + C (write) each
+    touched by exactly one PE -> single-client memory ports; int accumulation
+    widens past 64 bits (ap_int<65>)."""
+    M = N = K = 4
+    Mt = Nt = 1
+    P0, P1 = Mt + 2, Nt + 2
+
+    @df.region()
+    def top(A: int32[M, K], B: int32[K, N], C: int32[M, N]):
+        fifo_A: Stream[int32, 4][P0, P1]
+        fifo_B: Stream[int32, 4][P0, P1]
+
+        @df.kernel(mapping=[P0, P1], args=[A, B, C])
+        def gemm(local_A: int32[M, K], local_B: int32[K, N], local_C: int32[M, N]):
+            i, j = df.get_pid()
+            for m in range(M // Mt):
+                for n in range(N // Nt):
+                    with allo.meta_if(i in {0, Mt + 1} and j in {0, Nt + 1}):
+                        pass
+                    with allo.meta_elif(j == 0):
+                        for k in range(K):
+                            fifo_A[i, j + 1].put(local_A[m * Mt + i - 1, k])
+                    with allo.meta_elif(i == 0):
+                        for k in range(K):
+                            fifo_B[i + 1, j].put(local_B[k, n * Nt + j - 1])
+                    with allo.meta_elif(i == Mt + 1):
+                        for k in range(K):
+                            b: int32 = fifo_B[i, j].get()
+                    with allo.meta_elif(j == Nt + 1):
+                        for k in range(K):
+                            a: int32 = fifo_A[i, j].get()
+                    with allo.meta_else():
+                        c: int32 = 0
+                        for k in range(K):
+                            a: int32 = fifo_A[i, j].get()
+                            b: int32 = fifo_B[i, j].get()
+                            c += a * b
+                            fifo_A[i, j + 1].put(a)
+                            fifo_B[i + 1, j].put(b)
+                        local_C[m * Mt + i - 1, n * Nt + j - 1] = c
+
+    return top, M, N, K
+
+
+def test_systemc_tiled_systolic_emit():
+    """The standard Allo tiled-systolic GEMM maps to a grid of PEs + memory ports:
+    A,B -> AlloMem (reads), C -> AlloMemW (write). (Non-corner PEs only.)"""
+    top, *_ = _tiled_systolic_gemm()
+    code = df.build(top, target="systemc").hls_code
+    assert code.count("AlloMem<") == 2  # A, B read ports
+    assert code.count("AlloMemW<") == 1  # C write port
+    assert "SC_MODULE(gemm_1_1)" in code  # the main-body PE survives DCE
+    print("tiled systolic GEMM -> grid + 2 read / 1 write memory ports")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_tiled_systolic_csim():
+    """End-to-end csim of the tiled systolic GEMM: C == A @ B."""
+    top, M, N, K = _tiled_systolic_gemm()
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(top, target="systemc", mode="csim", project=tmp)
+        A = np.random.randint(0, 10, (M, K)).astype(np.int32)
+        B = np.random.randint(0, 10, (K, N)).astype(np.int32)
+        C = np.zeros((M, N), dtype=np.int32)
+        mod(A, B, C)
+        np.testing.assert_array_equal(C, A @ B)
+    print("SystemC tiled-systolic csim C == A @ B")
+
+
 if __name__ == "__main__":
     test_systemc_emit()
     if os.environ.get("MGC_HOME"):

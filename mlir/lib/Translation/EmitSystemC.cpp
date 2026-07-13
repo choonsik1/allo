@@ -811,32 +811,38 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     auto callee = parent.lookupSymbol<func::FuncOp>(call.getCallee());
     indent(); os << instNames[it.index()] << ".clk(clk);\n";
     indent(); os << instNames[it.index()] << ".rst(rst);\n";
-    // Stream operands AND stream-ified memref operands both bind port-to-port:
-    //   u<k>.<calleeArg>(<channel-or-top-port>)
-    // A random-access memref operand binds its req/rsp port pair to the two
-    // AlloMem channels instead.
+    // Bind each operand to the port THIS callee actually emitted for it. A grid
+    // shares one boundary array across all replicas, but only the replica that
+    // uses it (feeder/body/drain) has a port; unused args are internal members
+    // and must NOT be bound. Decide per-(call,arg) from the callee's OWN arg.
     for (auto opnd : llvm::enumerate(call.getOperands())) {
       Value ov = opnd.value();
-      char mp = llvm::isa<MemRefType>(ov.getType()) ? regArgMemPort(func, ov)
-                                                    : 0;
-      if (mp) {
-        // memory-port operand: bind req (+ rsp for reads) to the mem channels.
-        std::string ca = std::string(getName(callee.getArgument(opnd.index())).str());
+      Value carg = callee.getArgument(opnd.index());
+      if (llvm::isa<StreamType>(ov.getType())) {
+        // stream operand -> stream channel
+        indent();
+        os << instNames[it.index()] << "." << getName(carg) << "("
+           << getName(ov) << ");\n";
+      } else if (llvm::isa<MemRefType>(ov.getType())) {
+        char mp = memPortArgDir(carg);
+        std::string ca = std::string(getName(carg).str());
         std::string rb = std::string(getName(ov).str());
-        indent();
-        os << instNames[it.index()] << "." << ca << "_req(" << rb
-           << "_req_ch);\n";
-        if (mp == 'i') {
+        if (mp) {
+          // random-access memory port: bind req (+ rsp for reads).
           indent();
-          os << instNames[it.index()] << "." << ca << "_rsp(" << rb
-             << "_rsp_ch);\n";
+          os << instNames[it.index()] << "." << ca << "_req(" << rb
+             << "_req_ch);\n";
+          if (mp == 'i') {
+            indent();
+            os << instNames[it.index()] << "." << ca << "_rsp(" << rb
+               << "_rsp_ch);\n";
+          }
+        } else if (streamArgDir(carg)) {
+          // sequential-scan boundary -> single stream port
+          indent();
+          os << instNames[it.index()] << "." << ca << "(" << rb << ");\n";
         }
-      } else if (llvm::isa<StreamType>(ov.getType()) ||
-                 llvm::isa<MemRefType>(ov.getType())) {
-        indent();
-        os << instNames[it.index()] << "."
-           << getName(callee.getArgument(opnd.index())) << "(" << getName(ov)
-           << ");\n";
+        // else: unused arg -> internal array member, nothing to bind.
       }
     }
   }
@@ -878,8 +884,27 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
 // Catapult's ac_int so the same body compiles. (TODO: emit ac_int/ac_fixed
 // natively via a type-name override, like getCatapultTypeName in the Catapult
 // emitter, and drop this shim.)
-template <int W> using ap_int = ac_int<W, true>;
-template <int W> using ap_uint = ac_int<W, false>;
+// For W<=64, ap_(u)int is a plain ac_int alias. For W>64, ac_int has NO implicit
+// conversion to a native int, so the reused body's narrowing `int32_t x = wide;`
+// (e.g. a GEMM accumulator widened past 64 bits) fails to compile. Add one via a
+// thin subclass ONLY in that range — ac_int's own operators remain exact/derived-
+// to-base matches, so arithmetic still resolves to them (no builtin ambiguity).
+template <int W, bool Big = (W > 64)> struct ap_sel {
+  using s = ac_int<W, true>;
+  using u = ac_int<W, false>;
+};
+template <int W> struct ap_sel<W, true> {
+  struct s : ac_int<W, true> {
+    using ac_int<W, true>::ac_int;
+    operator long long() const { return this->to_int64(); }
+  };
+  struct u : ac_int<W, false> {
+    using ac_int<W, false>::ac_int;
+    operator unsigned long long() const { return this->to_uint64(); }
+  };
+};
+template <int W> using ap_int = typename ap_sel<W>::s;
+template <int W> using ap_uint = typename ap_sel<W>::u;
 
 // Random-access memory port for a non-sequential boundary array (SystemC/
 // Connections flow — internal memory, the only kind SystemC supports; useref
