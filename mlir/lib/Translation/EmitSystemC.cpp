@@ -880,6 +880,11 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
 #include <stdint.h>
 #include <iostream>
 #include <fstream>
+#include <algorithm>
+// The reused body emits bare max()/min() for the Allo max/min intrinsics (Vitis
+// resolves them via hls::); bind them to std:: so the same body compiles here.
+using std::max;
+using std::min;
 // The reused Vivado-emitter body prints Vitis ap_(u)int types; alias them to
 // Catapult's ac_int so the same body compiles. (TODO: emit ac_int/ac_fixed
 // natively via a type-name override, like getCatapultTypeName in the Catapult
