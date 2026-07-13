@@ -179,6 +179,22 @@ private:
     int fileIdx;        // input<fileIdx>.data / output<fileIdx>.data
   };
   SmallVector<MemArray> memArrays;
+
+  // One PHYSICAL memory per (kernel instance, memory-port arg). A boundary array
+  // shared by several grid replicas is REPLICATED: each client gets its own
+  // memory + channels. Reads preload every replica from the same input file;
+  // writes (disjoint pid-indexed elements) are summed across replicas at readout.
+  struct MemInst {
+    std::string chan;   // unique base name (mp<call>_<arg>) for channels + memory
+    std::string inst;   // kernel instance name (u<call>)
+    std::string port;   // kernel port name (callee arg)
+    std::string ctype;
+    int64_t total;
+    unsigned addrw, dataw;
+    char dir;           // 'i' read / 'o' write
+    int fileIdx;        // the region array's file index (preload / readout)
+  };
+  SmallVector<MemInst> memInsts;
 };
 
 } // namespace
@@ -757,23 +773,52 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     indent();
     os << it.value().getCallee() << " " << inst << ";\n";
   }
+  // Discover one physical memory per (call, memory-port arg). A grid replica
+  // that uses a shared boundary array gets its OWN memory (replication), keyed
+  // uniquely by mp<call>_<arg>; its file index comes from the region array.
+  for (auto it : llvm::enumerate(calls)) {
+    auto callee = parent.lookupSymbol<func::FuncOp>(it.value().getCallee());
+    for (auto opnd : llvm::enumerate(it.value().getOperands())) {
+      Value ov = opnd.value();
+      if (!llvm::isa<MemRefType>(ov.getType()))
+        continue;
+      Value carg = callee.getArgument(opnd.index());
+      char mp = memPortArgDir(carg);
+      if (!mp)
+        continue;
+      auto mt = llvm::cast<MemRefType>(carg.getType());
+      int64_t total = 1;
+      for (auto s : mt.getShape())
+        total *= s;
+      int fidx = -1;
+      for (auto &m : memArrays)
+        if (m.base == std::string(getName(ov).str()))
+          fidx = m.fileIdx;
+      memInsts.push_back(
+          {"mp" + std::to_string(it.index()) + "_" +
+               std::to_string(opnd.index()),
+           instNames[it.index()], std::string(getName(carg).str()),
+           std::string(getSCTypeName(mt.getElementType()).str()), total,
+           scAddrW(total), scDataW(mt.getElementType()), mp, fidx});
+    }
+  }
   // Memory-port members: a req channel + memory (+ rsp channel for reads).
   //   'i' -> AlloMem  (req + rsp channels)
   //   'o' -> AlloMemW (req channel only)
-  for (auto &m : memArrays) {
-    std::string reqT = "ac_int<" +
-                       std::to_string(1 + m.addrw + m.dataw) + ", false>";
+  for (auto &mi : memInsts) {
+    std::string reqT =
+        "ac_int<" + std::to_string(1 + mi.addrw + mi.dataw) + ", false>";
     indent();
-    os << "Connections::Combinational< " << reqT << " > " << m.base
+    os << "Connections::Combinational< " << reqT << " > " << mi.chan
        << "_req_ch;\n";
-    if (m.dir == 'i') {
+    if (mi.dir == 'i') {
       indent();
-      os << "Connections::Combinational< " << m.ctype << " > " << m.base
+      os << "Connections::Combinational< " << mi.ctype << " > " << mi.chan
          << "_rsp_ch;\n";
     }
     indent();
-    os << (m.dir == 'o' ? "AlloMemW< " : "AlloMem< ") << m.ctype << ", "
-       << m.total << ", " << m.addrw << ", " << m.dataw << " > " << m.base
+    os << (mi.dir == 'o' ? "AlloMemW< " : "AlloMem< ") << mi.ctype << ", "
+       << mi.total << ", " << mi.addrw << ", " << mi.dataw << " > " << mi.chan
        << "_mem;\n";
   }
 
@@ -795,11 +840,11 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
        << "\")";
     sep = ", ";
   }
-  for (auto &m : memArrays) {
-    os << sep << m.base << "_req_ch(\"" << m.base << "_req_ch\")";
-    if (m.dir == 'i')
-      os << ", " << m.base << "_rsp_ch(\"" << m.base << "_rsp_ch\")";
-    os << ", " << m.base << "_mem(\"" << m.base << "_mem\")";
+  for (auto &mi : memInsts) {
+    os << sep << mi.chan << "_req_ch(\"" << mi.chan << "_req_ch\")";
+    if (mi.dir == 'i')
+      os << ", " << mi.chan << "_rsp_ch(\"" << mi.chan << "_rsp_ch\")";
+    os << ", " << mi.chan << "_mem(\"" << mi.chan << "_mem\")";
     sep = ", ";
   }
   os << " {\n";
@@ -828,13 +873,16 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
         std::string ca = std::string(getName(carg).str());
         std::string rb = std::string(getName(ov).str());
         if (mp) {
-          // random-access memory port: bind req (+ rsp for reads).
+          // random-access memory port: bind req (+ rsp) to THIS client's own
+          // (replicated) memory channels (mp<call>_<arg>).
+          std::string chan = "mp" + std::to_string(it.index()) + "_" +
+                             std::to_string(opnd.index());
           indent();
-          os << instNames[it.index()] << "." << ca << "_req(" << rb
+          os << instNames[it.index()] << "." << ca << "_req(" << chan
              << "_req_ch);\n";
           if (mp == 'i') {
             indent();
-            os << instNames[it.index()] << "." << ca << "_rsp(" << rb
+            os << instNames[it.index()] << "." << ca << "_rsp(" << chan
                << "_rsp_ch);\n";
           }
         } else if (streamArgDir(carg)) {
@@ -847,12 +895,12 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     }
   }
   // Wire each internal memory: clk/rst + req channel (+ rsp channel for reads).
-  for (auto &m : memArrays) {
-    indent(); os << m.base << "_mem.clk(clk);\n";
-    indent(); os << m.base << "_mem.rst(rst);\n";
-    indent(); os << m.base << "_mem.req(" << m.base << "_req_ch);\n";
-    if (m.dir == 'i') {
-      indent(); os << m.base << "_mem.rsp(" << m.base << "_rsp_ch);\n";
+  for (auto &mi : memInsts) {
+    indent(); os << mi.chan << "_mem.clk(clk);\n";
+    indent(); os << mi.chan << "_mem.rst(rst);\n";
+    indent(); os << mi.chan << "_mem.req(" << mi.chan << "_req_ch);\n";
+    if (mi.dir == 'i') {
+      indent(); os << mi.chan << "_mem.rsp(" << mi.chan << "_rsp_ch);\n";
     }
   }
   reduceIndent();
@@ -963,6 +1011,8 @@ SC_MODULE(AlloMemW) {
   }
   void run() {
     req.Reset();
+    for (int z = 0; z < SIZE; z++) // 0-init so unwritten elements sum-merge as 0
+      mem[z] = 0;
     wait();
     while (1) {
       ac_int<1 + ADDRW + DATAW, false> r = req.Pop();
@@ -1069,14 +1119,15 @@ SC_MODULE(AlloMemW) {
     os << "int sc_main(int, char *[]) {\n";
     addIndent();
     indent(); os << "tb t(\"t\");\n";
-    // Preload each internal INPUT memory from its input file (csim only: direct
-    // hierarchical poke of AlloMem.mem[], done before reset is released).
-    for (auto &m : memArrays)
-      if (m.dir == 'i') {
+    // Preload every INPUT memory (each shared-read replica gets its own copy)
+    // from the array's input file (csim only: direct hierarchical poke of
+    // AlloMem.mem[], done before reset is released).
+    for (auto &mi : memInsts)
+      if (mi.dir == 'i') {
         indent();
-        os << "{ std::ifstream _f(\"input" << m.fileIdx << ".data\"); " << m.ctype
-           << " _v; for (int f = 0; f < " << m.total << "; ++f) { _f >> _v; t.dut."
-           << m.base << "_mem.mem[f] = _v; } }\n";
+        os << "{ std::ifstream _f(\"input" << mi.fileIdx << ".data\"); "
+           << mi.ctype << " _v; for (int f = 0; f < " << mi.total
+           << "; ++f) { _f >> _v; t.dut." << mi.chan << "_mem.mem[f] = _v; } }\n";
       }
     indent(); os << "t.rst = 0; sc_start(1, SC_NS);\n";
     // A stream output stops the sim via sc_stop; otherwise run a fixed, generous
@@ -1088,13 +1139,26 @@ SC_MODULE(AlloMemW) {
     } else {
       indent(); os << "sc_start(" << simCycles << ", SC_NS);\n";
     }
-    // Read each internal OUTPUT memory out to output<k>.data (into B by hls.py).
+    // Read each OUTPUT array out to output<k>.data (into B by hls.py). Shared-
+    // write arrays are SPLIT across replicas that each wrote disjoint elements
+    // (zero-initialized elsewhere), so sum the replicas element-wise.
     for (auto &m : memArrays)
       if (m.dir == 'o') {
         indent();
-        os << "{ std::ofstream _f(\"output" << m.fileIdx
-           << ".data\"); for (int f = 0; f < " << m.total << "; ++f) _f << t.dut."
-           << m.base << "_mem.mem[f] << \"\\n\"; }\n";
+        os << "{ std::ofstream _f(\"output" << m.fileIdx << ".data\");\n";
+        indent();
+        os << "  for (int f = 0; f < " << m.total << "; ++f) {\n";
+        indent();
+        os << "    long long _s = 0;\n";
+        for (auto &mi : memInsts)
+          if (mi.dir == 'o' && mi.fileIdx == m.fileIdx) {
+            indent();
+            os << "    _s += (long long) t.dut." << mi.chan << "_mem.mem[f];\n";
+          }
+        indent();
+        os << "    _f << _s << \"\\n\";\n";
+        indent();
+        os << "  } }\n";
       }
     indent(); os << "return 0;\n";
     reduceIndent();

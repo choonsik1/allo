@@ -253,7 +253,7 @@ def test_systemc_mem_port_store_emit():
     assert "AlloMemW<" in code  # write-only internal memory
     assert "_req.Push(" in code  # STORE handshake (no _rsp.Pop for this port)
     assert "sc_start(" in code and "SC_NS);" in code  # time-based completion
-    assert "_mem.mem[f] <<" in code  # tb reads the memory out to output file
+    assert "_mem.mem[f];" in code  # tb reads the memory out (sum-merge) to file
     print("random OUTPUT access -> write memory port emitted")
 
 
@@ -376,6 +376,51 @@ def test_systemc_csim_grid():
         mod(A, B)
         np.testing.assert_array_equal(B, A + P)
     print(f"SystemC csim grid B == A + {P}")
+
+
+def _multi_client_grid():
+    """Grid of N independent PEs, each reading shared A (reversed) and writing a
+    DISTINCT element of shared C. A -> N replicated read memories (multi-client
+    read); C -> N replicated write memories + element-wise sum-merge at readout
+    (multi-client write, disjoint elements). No streams/feedback. C = A[::-1]+1."""
+    N = 4
+
+    @df.region()
+    def top(A: int32[N], C: int32[N]):
+        @df.kernel(mapping=[N], args=[A, C])
+        def pe(a: int32[N], c: int32[N]):
+            p = df.get_pid()
+            c[p] = a[N - 1 - p] + 1
+
+    return top, N
+
+
+def test_systemc_multi_client_emit():
+    """A boundary array shared by several grid replicas is REPLICATED per client
+    (each gets its own memory + channels), so there is no multi-driver on a single
+    channel. N read replicas for A, N write replicas for C."""
+    top, N = _multi_client_grid()
+    code = df.build(top, target="systemc").hls_code
+    assert code.count("AlloMem<") == N  # A replicated per reader
+    assert code.count("AlloMemW<") == N  # C replicated per writer
+    print(f"shared arrays replicated into {N} read + {N} write memories")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_multi_client_csim():
+    """End-to-end csim of the multi-client grid: replicated read memories all
+    preloaded from A, disjoint writes summed back into C. C == A[::-1] + 1."""
+    top, N = _multi_client_grid()
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(top, target="systemc", mode="csim", project=tmp)
+        A = np.arange(N, dtype=np.int32)
+        C = np.zeros(N, dtype=np.int32)
+        mod(A, C)
+        np.testing.assert_array_equal(C, A[::-1] + 1)
+    print("SystemC multi-client csim C == A[::-1] + 1")
 
 
 def _tiled_systolic_gemm():
