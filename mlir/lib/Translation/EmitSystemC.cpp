@@ -774,7 +774,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       indent();
       os << "Connections::Combinational< " << T << " > " << nm << "_out;\n";
       indent();
-      os << "AlloFifo< " << T << ", " << st.getDepth() << " > " << nm
+      os << "Connections::Fifo< " << T << ", " << st.getDepth() << " > " << nm
          << "_fifo;\n";
     }
   }
@@ -927,8 +927,8 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     std::string nm = std::string(getName(sc.getResult()).str());
     indent(); os << nm << "_fifo.clk(clk);\n";
     indent(); os << nm << "_fifo.rst(rst);\n";
-    indent(); os << nm << "_fifo.in(" << nm << "_in);\n";
-    indent(); os << nm << "_fifo.out(" << nm << "_out);\n";
+    indent(); os << nm << "_fifo.enq(" << nm << "_in);\n";
+    indent(); os << nm << "_fifo.deq(" << nm << "_out);\n";
   }
   // Wire each internal memory: clk/rst + req channel (+ rsp channel for reads).
   for (auto &mi : memInsts) {
@@ -1059,45 +1059,9 @@ SC_MODULE(AlloMemW) {
   }
 };
 
-// Depth-N buffered channel (Stream[T, N>=1]) between two kernels — a ring-buffer
-// FIFO over Connections. A Stream of depth 0 stays a bare Combinational wire; for
-// depth>=1 the emitter inserts one of these. Non-blocking each cycle: emit first
-// (freeing a slot) then accept, so a full FIFO still sustains throughput 1.
-template <typename T, int N>
-SC_MODULE(AlloFifo) {
-  sc_in_clk clk;
-  sc_in<bool> rst;
-  Connections::In<T> in;
-  Connections::Out<T> out;
-  SC_HAS_PROCESS(AlloFifo);
-  AlloFifo(sc_module_name nm) : sc_module(nm), in("in"), out("out") {
-    SC_THREAD(run);
-    sensitive << clk.pos();
-    async_reset_signal_is(rst, false);
-  }
-  void run() {
-    T buf[N];
-    int head = 0, tail = 0, count = 0;
-    in.Reset();
-    out.Reset();
-    wait();
-    while (1) {
-      if (count > 0 && out.PushNB(buf[head])) { // emit downstream
-        head = (head + 1) % N;
-        count--;
-      }
-      if (count < N) {                          // accept upstream
-        T v;
-        if (in.PopNB(v)) {
-          buf[tail] = v;
-          tail = (tail + 1) % N;
-          count++;
-        }
-      }
-      wait();
-    }
-  }
-};
+// Depth-N buffered stream channels use the official MatchLib Connections::Fifo<T,N>
+// (from mc_connections.h -> connections_fifo.h): ports enq (In) / deq (Out) + clk/rst.
+// A Stream of depth 0 stays a bare Combinational wire.
 
 )XXX";
   os << device_header;
