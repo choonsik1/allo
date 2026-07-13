@@ -774,7 +774,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       indent();
       os << "Connections::Combinational< " << T << " > " << nm << "_out;\n";
       indent();
-      os << "Connections::Fifo< " << T << ", " << st.getDepth() << " > " << nm
+      os << "AlloFifo< " << T << ", " << st.getDepth() << " > " << nm
          << "_fifo;\n";
     }
   }
@@ -927,8 +927,8 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     std::string nm = std::string(getName(sc.getResult()).str());
     indent(); os << nm << "_fifo.clk(clk);\n";
     indent(); os << nm << "_fifo.rst(rst);\n";
-    indent(); os << nm << "_fifo.enq(" << nm << "_in);\n";
-    indent(); os << nm << "_fifo.deq(" << nm << "_out);\n";
+    indent(); os << nm << "_fifo.in(" << nm << "_in);\n";
+    indent(); os << nm << "_fifo.out(" << nm << "_out);\n";
   }
   // Wire each internal memory: clk/rst + req channel (+ rsp channel for reads).
   for (auto &mi : memInsts) {
@@ -1059,9 +1059,54 @@ SC_MODULE(AlloMemW) {
   }
 };
 
-// Depth-N buffered stream channels use the official MatchLib Connections::Fifo<T,N>
-// (from mc_connections.h -> connections_fifo.h): ports enq (In) / deq (Out) + clk/rst.
-// A Stream of depth 0 stays a bare Combinational wire.
+// Depth-N buffered stream channel (Stream[T, N>=1]) — a SHIFT-REGISTER FIFO that
+// Catapult can schedule. The read is the STATIC index buf[0] and the only
+// runtime-indexed access is the append write buf[count], so there is NO
+// same-cycle runtime read+write to buf (a ring buffer's buf[head]-read +
+// buf[tail]-write couldn't be scheduled: the tool can't prove head != tail).
+// Non-blocking, throughput 1: a dequeue frees a slot an enqueue can fill the
+// same cycle. (Connections::Fifo is the official channel but trips a Catapult
+// 2024.2 front-end assertion, sif_ci_expr:2080, on its named constructor.)
+template <typename T, int N>
+SC_MODULE(AlloFifo) {
+  sc_in_clk clk;
+  sc_in<bool> rst;
+  Connections::In<T> in;
+  Connections::Out<T> out;
+  SC_HAS_PROCESS(AlloFifo);
+  AlloFifo(sc_module_name nm) : sc_module(nm), in("in"), out("out") {
+    SC_THREAD(run);
+    sensitive << clk.pos();
+    async_reset_signal_is(rst, false);
+  }
+  void run() {
+    T buf[N];
+    int count = 0;
+    in.Reset();
+    out.Reset();
+    wait();
+    while (1) {
+      // enqueue and dequeue decisions are INDEPENDENT (both from the
+      // start-of-cycle count) so the in.rdy / out.vld handshakes don't chain,
+      // which is what let Catapult schedule the fixed-timing Connections I/O.
+      bool deq = (count > 0) && out.PushNB(buf[0]);
+      bool enq = false;
+      T v;
+      if (count < N)
+        enq = in.PopNB(v);
+      if (deq) { // shift the queue down by one (static indices)
+        for (int k = 0; k < N - 1; k++)
+          buf[k] = buf[k + 1];
+        count--;
+      }
+      if (enq) { // append the new element (only runtime-indexed access)
+        buf[count] = v;
+        count++;
+      }
+      wait();
+    }
+  }
+};
 
 )XXX";
   os << device_header;

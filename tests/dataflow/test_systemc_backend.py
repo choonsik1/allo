@@ -407,15 +407,15 @@ def _depth_pc(depth):
 
 def test_systemc_stream_depth_flavor():
     """Stream depth is honored: depth 0 -> bare Connections::Combinational (wire),
-    depth >= 1 -> an official Connections::Fifo<T,depth> between _in/_out wires."""
+    depth >= 1 -> a schedulable AlloFifo<T,depth> between _in/_out wires."""
     code0 = df.build(_depth_pc(0)[0], target="systemc").hls_code
     assert "_fifo;" not in code0  # depth 0 -> no FIFO instance, a plain wire
     assert "Connections::Combinational< int32_t > v" in code0
 
     code4 = df.build(_depth_pc(4)[0], target="systemc").hls_code
-    assert code4.count("Connections::Fifo< int32_t, 4 >") == 2  # both buffered
-    assert "_fifo.enq(" in code4 and "_fifo.deq(" in code4  # wired through
-    print("stream depth honored: 0 -> Combinational, >=1 -> Connections::Fifo")
+    assert code4.count("AlloFifo< int32_t, 4 >") == 2  # both streams buffered
+    assert "_fifo.in(" in code4 and "_fifo.out(" in code4  # wired through
+    print("stream depth honored: 0 -> Combinational, >=1 -> AlloFifo")
 
 
 @pytest.mark.skipif(
