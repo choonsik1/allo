@@ -758,12 +758,25 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       calls.push_back(call);
   }
 
-  // Channel members: Connections::Combinational<T> vN;
+  // Channel members. A Stream's depth (from its type) picks the flavor:
+  //   depth 0  -> a bare Connections::Combinational (combinational wire)
+  //   depth>=1 -> an AlloFifo<T,depth> between two _in/_out wires (buffered)
   for (auto sc : channels) {
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
-    indent();
-    os << "Connections::Combinational< " << getSCTypeName(st.getBaseType())
-       << " > " << addName(sc.getResult(), /*isPtr=*/false) << ";\n";
+    std::string T = std::string(getSCTypeName(st.getBaseType()).str());
+    std::string nm = std::string(addName(sc.getResult(), /*isPtr=*/false).str());
+    if (st.getDepth() == 0) {
+      indent();
+      os << "Connections::Combinational< " << T << " > " << nm << ";\n";
+    } else {
+      indent();
+      os << "Connections::Combinational< " << T << " > " << nm << "_in;\n";
+      indent();
+      os << "Connections::Combinational< " << T << " > " << nm << "_out;\n";
+      indent();
+      os << "AlloFifo< " << T << ", " << st.getDepth() << " > " << nm
+         << "_fifo;\n";
+    }
   }
   // Submodule instance members: <callee> uN;
   SmallVector<std::string, 4> instNames;
@@ -831,8 +844,15 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     sep = ", ";
   }
   for (auto sc : channels) {
-    os << sep << getName(sc.getResult()) << "(\"" << getName(sc.getResult())
-       << "\")";
+    auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
+    std::string nm = std::string(getName(sc.getResult()).str());
+    if (st.getDepth() == 0) {
+      os << sep << nm << "(\"" << nm << "\")";
+    } else {
+      os << sep << nm << "_in(\"" << nm << "_in\")";
+      os << ", " << nm << "_out(\"" << nm << "_out\")";
+      os << ", " << nm << "_fifo(\"" << nm << "_fifo\")";
+    }
     sep = ", ";
   }
   for (auto it : llvm::enumerate(calls)) {
@@ -863,11 +883,16 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     for (auto opnd : llvm::enumerate(call.getOperands())) {
       Value ov = opnd.value();
       Value carg = callee.getArgument(opnd.index());
-      if (llvm::isa<StreamType>(ov.getType())) {
-        // stream operand -> stream channel
+      if (auto sty = llvm::dyn_cast<StreamType>(ov.getType())) {
+        // stream operand -> stream channel. For a buffered stream (depth>=1) the
+        // producer (Out) binds the FIFO's input wire, the consumer (In) its
+        // output wire; a depth-0 stream is the bare Combinational.
+        std::string chan = std::string(getName(ov).str());
+        if (sty.getDepth() != 0)
+          chan += (streamDir(callee, opnd.index()) == 'o') ? "_in" : "_out";
         indent();
-        os << instNames[it.index()] << "." << getName(carg) << "("
-           << getName(ov) << ");\n";
+        os << instNames[it.index()] << "." << getName(carg) << "(" << chan
+           << ");\n";
       } else if (llvm::isa<MemRefType>(ov.getType())) {
         char mp = memPortArgDir(carg);
         std::string ca = std::string(getName(carg).str());
@@ -893,6 +918,17 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
         // else: unused arg -> internal array member, nothing to bind.
       }
     }
+  }
+  // Wire each buffered-stream FIFO: clk/rst + its _in/_out wires.
+  for (auto sc : channels) {
+    auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
+    if (st.getDepth() == 0)
+      continue;
+    std::string nm = std::string(getName(sc.getResult()).str());
+    indent(); os << nm << "_fifo.clk(clk);\n";
+    indent(); os << nm << "_fifo.rst(rst);\n";
+    indent(); os << nm << "_fifo.in(" << nm << "_in);\n";
+    indent(); os << nm << "_fifo.out(" << nm << "_out);\n";
   }
   // Wire each internal memory: clk/rst + req channel (+ rsp channel for reads).
   for (auto &mi : memInsts) {
@@ -1018,6 +1054,46 @@ SC_MODULE(AlloMemW) {
       ac_int<1 + ADDRW + DATAW, false> r = req.Pop();
       ac_int<ADDRW, false> a = r.template slc<ADDRW>(1);
       mem[a] = (T)(int64_t)r.template slc<DATAW>(1 + ADDRW).to_int64();
+      wait();
+    }
+  }
+};
+
+// Depth-N buffered channel (Stream[T, N>=1]) between two kernels — a ring-buffer
+// FIFO over Connections. A Stream of depth 0 stays a bare Combinational wire; for
+// depth>=1 the emitter inserts one of these. Non-blocking each cycle: emit first
+// (freeing a slot) then accept, so a full FIFO still sustains throughput 1.
+template <typename T, int N>
+SC_MODULE(AlloFifo) {
+  sc_in_clk clk;
+  sc_in<bool> rst;
+  Connections::In<T> in;
+  Connections::Out<T> out;
+  SC_HAS_PROCESS(AlloFifo);
+  AlloFifo(sc_module_name nm) : sc_module(nm), in("in"), out("out") {
+    SC_THREAD(run);
+    sensitive << clk.pos();
+    async_reset_signal_is(rst, false);
+  }
+  void run() {
+    T buf[N];
+    int head = 0, tail = 0, count = 0;
+    in.Reset();
+    out.Reset();
+    wait();
+    while (1) {
+      if (count > 0 && out.PushNB(buf[head])) { // emit downstream
+        head = (head + 1) % N;
+        count--;
+      }
+      if (count < N) {                          // accept upstream
+        T v;
+        if (in.PopNB(v)) {
+          buf[tail] = v;
+          tail = (tail + 1) % N;
+          count++;
+        }
+      }
       wait();
     }
   }

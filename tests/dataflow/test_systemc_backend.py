@@ -378,6 +378,62 @@ def test_systemc_csim_grid():
     print(f"SystemC csim grid B == A + {P}")
 
 
+def _depth_pc(depth):
+    """producer -> [Stream depth] -> +1 -> consumer, with the given stream depth."""
+    N = 8
+
+    @df.region()
+    def top(A: int32[N], B: int32[N]):
+        s_in: Stream[int32, depth][1]
+        s_out: Stream[int32, depth][1]
+
+        @df.kernel(mapping=[1], args=[A])
+        def source(a: int32[N]):
+            for i in range(N):
+                s_in[0].put(a[i])
+
+        @df.kernel(mapping=[1])
+        def compute():
+            for i in range(N):
+                s_out[0].put(s_in[0].get() + 1)
+
+        @df.kernel(mapping=[1], args=[B])
+        def sink(b: int32[N]):
+            for i in range(N):
+                b[i] = s_out[0].get()
+
+    return top, N
+
+
+def test_systemc_stream_depth_flavor():
+    """Stream depth is honored: depth 0 -> bare Connections::Combinational (wire),
+    depth >= 1 -> an AlloFifo<T,depth> buffered channel between _in/_out wires."""
+    code0 = df.build(_depth_pc(0)[0], target="systemc").hls_code
+    assert "AlloFifo<" not in code0  # depth 0 is a plain combinational wire
+    assert "Connections::Combinational< int32_t > v" in code0
+
+    code4 = df.build(_depth_pc(4)[0], target="systemc").hls_code
+    assert code4.count("AlloFifo< int32_t, 4 >") == 2  # both streams buffered
+    assert "_fifo.in(" in code4 and "_fifo.out(" in code4  # wired through
+    print("stream depth honored: 0 -> Combinational, >=1 -> AlloFifo")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_stream_depth0_csim():
+    """A depth-0 (combinational-wire) stream still simulates correctly: B == A+1."""
+    top, N = _depth_pc(0)
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(top, target="systemc", mode="csim", project=tmp)
+        A = np.arange(N, dtype=np.int32)
+        B = np.zeros(N, dtype=np.int32)
+        mod(A, B)
+        np.testing.assert_array_equal(B, A + 1)
+    print("SystemC depth-0 wire csim B == A + 1")
+
+
 def _multi_client_grid():
     """Grid of N independent PEs, each reading shared A (reversed) and writing a
     DISTINCT element of shared C. A -> N replicated read memories (multi-client
