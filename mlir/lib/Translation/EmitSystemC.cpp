@@ -765,16 +765,41 @@ void SystemCModuleEmitter::emitStreamTryPut(StreamTryPutOp op) {
   emitInfoAndNewLine(op);
 }
 
-// Connections In/Out are latency-insensitive handshakes with no synthesizable
-// empty()/full() introspection — use try_get()/try_put() (PopNB/PushNB) for
-// fire-on-valid instead.
+// empty()/full() map to the port introspection MatchLib Connections ports do
+// provide: In<T>.Empty() (consumer port) and Out<T>.Full() (producer port).
+//   <result> = <stream>[idx].Empty();   /   .Full();
+// These are cycle-accurate in SIM; HLS synthesis rejects them only under the
+// strict CONNECTIONS_ASSERT_ON_QUERY flag (off by default), so they are
+// csim-faithful (like try_get/try_put, prefer a one-shot check, not a spin).
 void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
-  emitError(op, "SystemC backend: stream empty() has no synthesizable Connections "
-                "equivalent — use try_get() (PopNB) for fire-on-valid.");
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  auto stream = op->getOperand(0);
+  indent();
+  emitValue(result);
+  os << " = ";
+  emitValue(stream, 0, false);
+  if (llvm::isa<ShapedType>(stream.getType()))
+    if (auto idx = op->getAttrOfType<DenseI64ArrayAttr>("indices"))
+      for (int64_t v : idx.asArrayRef())
+        os << "[" << v << "]";
+  os << ".Empty();";
+  emitInfoAndNewLine(op);
 }
 void SystemCModuleEmitter::emitStreamFull(StreamFullOp op) {
-  emitError(op, "SystemC backend: stream full() has no synthesizable Connections "
-                "equivalent — use try_put() (PushNB) for fire-on-valid.");
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  auto stream = op->getOperand(0);
+  indent();
+  emitValue(result);
+  os << " = ";
+  emitValue(stream, 0, false);
+  if (llvm::isa<ShapedType>(stream.getType()))
+    if (auto idx = op->getAttrOfType<DenseI64ArrayAttr>("indices"))
+      for (int64_t v : idx.asArrayRef())
+        os << "[" << v << "]";
+  os << ".Full();";
+  emitInfoAndNewLine(op);
 }
 
 void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {

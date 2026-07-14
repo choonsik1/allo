@@ -154,29 +154,54 @@ def test_systemc_nonblocking():
     print("try_get/try_put -> PopNB/PushNB")
 
 
-def test_systemc_rejects_empty_full():
-    """empty()/full() have no synthesizable Connections equivalent -> rejected
-    (Connections is a handshake, not an introspectable FIFO; use try_get/try_put)."""
-
+def _empty_full():
+    """Producer checks full() (its Out port), consumer checks empty() (its In
+    port). MatchLib ports DO provide these: Out<T>.Full() / In<T>.Empty(). The
+    checks are read-only here so the design still streams B == A."""
     N = 8
 
     @df.region()
     def top(A: int32[N], B: int32[N]):
-        S: Stream[int32, 1][1]
+        S: Stream[int32, 4][1]
 
         @df.kernel(mapping=[1], args=[A])
         def producer(a: int32[N]):
             for i in range(N):
+                f: int1 = S[0].full()  # -> Out.Full()
                 S[0].put(a[i])
 
         @df.kernel(mapping=[1], args=[B])
         def consumer(b: int32[N]):
             for i in range(N):
-                e: int1 = S[0].empty()  # no synthesizable Connections equivalent
+                e: int1 = S[0].empty()  # -> In.Empty()
                 b[i] = S[0].get()
 
-    with pytest.raises(Exception, match="Failed to emit"):
-        df.build(top, target="systemc")
+    return top, N
+
+
+def test_systemc_empty_full_emit():
+    """empty()/full() map to In<T>.Empty() (consumer) / Out<T>.Full() (producer)."""
+    top, _ = _empty_full()
+    code = df.build(top, target="systemc").hls_code
+    assert ".Full();" in code  # producer's Out port
+    assert ".Empty();" in code  # consumer's In port
+    print("empty()/full() -> In.Empty() / Out.Full()")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_empty_full_csim():
+    """A design using empty()/full() compiles + streams correctly: B == A."""
+    top, N = _empty_full()
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(top, target="systemc", mode="csim", project=tmp)
+        A = np.arange(N, dtype=np.int32)
+        B = np.zeros(N, dtype=np.int32)
+        mod(A, B)
+        np.testing.assert_array_equal(B, A)
+    print("SystemC empty()/full() csim B == A")
     print("empty() correctly rejected")
 
 
