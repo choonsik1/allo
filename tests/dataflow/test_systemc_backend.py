@@ -681,6 +681,61 @@ def test_systemc_smith_waterman_csim():
     print("SystemC smith-waterman csim == golden (feedback systolic)")
 
 
+# --- @df.region HIERARCHY (regions must be defined at module level: Allo
+# compiles their source via inspect, which fails on indented nested defs) ---
+_HN, _HCAP = 4, 2
+
+
+@df.region()
+def _hier_inner(result: int32[1]):
+    s: Stream[int32, _HCAP]
+
+    @df.kernel(mapping=[1])
+    def producer():
+        for i in range(_HN):
+            v: int32 = i
+            s.put(v)
+
+    @df.kernel(mapping=[1], args=[result])
+    def consumer(out: int32[1]):
+        acc: int32 = 0
+        for i in range(_HN):
+            acc += s.get()
+        out[0] = acc
+
+
+@df.region()
+def _hier_top(result: int32[1]):
+    @df.kernel(mapping=[1], args=[result])
+    def driver(out: int32[1]):
+        _hier_inner(out)
+
+
+def test_systemc_hierarchy_flatten_emit():
+    """A sub-region invoked from a kernel is FLATTENED: the leaf kernels become
+    top-level modules; the delegating kernel + sub-region are inlined away.
+    (SystemC can't nest a region inside an SC_THREAD; C++/HLS keeps the nesting.)"""
+    code = df.build(_hier_top, target="systemc").hls_code
+    assert "SC_MODULE(producer" in code and "SC_MODULE(consumer" in code
+    assert "SC_MODULE(driver" not in code  # delegating kernel inlined away
+    assert "SC_MODULE(_hier_inner" not in code  # sub-region inlined away
+    print("sub-region flattened: leaf kernels hoisted, delegators removed")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_hierarchy_flatten_csim():
+    """The flattened hierarchy compiles + runs: result == sum(0.._HN-1)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(_hier_top, target="systemc", mode="csim", project=tmp)
+        R = np.zeros(1, dtype=np.int32)
+        mod(R)
+        assert R[0] == sum(range(_HN)), f"got {R[0]}, expected {sum(range(_HN))}"
+    print("SystemC flattened-hierarchy csim result == sum(0..N-1)")
+
+
 if __name__ == "__main__":
     test_systemc_emit()
     if os.environ.get("MGC_HOME"):

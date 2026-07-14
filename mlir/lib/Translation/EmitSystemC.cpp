@@ -23,6 +23,8 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AffineExpr.h"
+#include "mlir/IR/IRMapping.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/Support/raw_ostream.h"
@@ -96,6 +98,77 @@ static unsigned scDataW(Type elt) {
   if (llvm::isa<Float64Type>(elt))
     return 64;
   return 32; // f32 / index / default
+}
+
+//===----------------------------------------------------------------------===//
+// Hierarchy flattening (pre-pass).
+// A @df.kernel body may invoke a `dataflow` SUB-REGION (or a delegating kernel
+// that does). C++/HLS keeps such nesting as nested dataflow functions, but a
+// SystemC kernel is an SC_THREAD and cannot structurally instantiate a
+// sub-region. So before emitting we INLINE every call to a non-leaf callee into
+// the top, transitively, until the top is a FLAT set of stream constructs +
+// leaf-kernel calls (which emitTopModule already handles). A flat design has no
+// non-leaf calls -> this is a no-op.
+//===----------------------------------------------------------------------===//
+
+// A leaf compute kernel: a df.kernel whose body calls no other kernel/sub-region
+// (only compute + stream get/put, and possibly pure helper functions).
+static bool callsKernelOrRegion(func::FuncOp f, ModuleOp m) {
+  bool found = false;
+  f.walk([&](func::CallOp c) {
+    if (auto callee = m.lookupSymbol<func::FuncOp>(c.getCallee()))
+      if (callee->hasAttr("df.kernel") || callee->hasAttr("dataflow"))
+        found = true;
+  });
+  return found;
+}
+static bool isLeafKernel(func::FuncOp f, ModuleOp m) {
+  return f->hasAttr("df.kernel") && !callsKernelOrRegion(f, m);
+}
+
+static void flattenHierarchy(ModuleOp module) {
+  func::FuncOp top;
+  for (auto f : module.getOps<func::FuncOp>())
+    if (f->hasAttr("top"))
+      top = f;
+  if (!top)
+    return;
+  // Repeatedly inline every top-body call to a non-leaf callee, substituting the
+  // callee's block args with the actual operands (clone carries the mapping to
+  // cloned results, so inner stream/kernel operands are remapped correctly).
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    SmallVector<func::CallOp> toInline;
+    top.walk([&](func::CallOp call) {
+      auto callee = module.lookupSymbol<func::FuncOp>(call.getCallee());
+      if (callee && callee.getBlocks().size() == 1 &&
+          !isLeafKernel(callee, module))
+        toInline.push_back(call);
+    });
+    for (auto call : toInline) {
+      auto callee = module.lookupSymbol<func::FuncOp>(call.getCallee());
+      IRMapping map;
+      for (auto pair : llvm::zip(callee.getArguments(), call.getOperands()))
+        map.map(std::get<0>(pair), std::get<1>(pair));
+      OpBuilder builder(call);
+      for (auto &op : callee.front().without_terminator())
+        builder.clone(op, map);
+      call.erase();
+      changed = true;
+    }
+  }
+  // Erase the now-dead inlined funcs (delegating kernels + sub-regions); leaf
+  // kernels + helpers stay (still referenced by the flattened top).
+  bool erased = true;
+  while (erased) {
+    erased = false;
+    for (auto f : llvm::make_early_inc_range(module.getOps<func::FuncOp>()))
+      if (!f->hasAttr("top") && SymbolTable::symbolKnownUseEmpty(f, module)) {
+        f.erase();
+        erased = true;
+      }
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -952,6 +1025,10 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
 //===----------------------------------------------------------------------===//
 
 void SystemCModuleEmitter::emitModule(ModuleOp module) {
+  // Flatten any @df.region hierarchy (sub-regions called from kernels) into a
+  // flat top before emission — SystemC can't nest regions inside a thread.
+  flattenHierarchy(module);
+
   std::string device_header = R"XXX(
 //===------------------------------------------------------------*- C++ -*-===//
 // Automatically generated file for SystemC (Catapult HLS / MatchLib Connections).
