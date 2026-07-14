@@ -1111,6 +1111,16 @@ SC_MODULE(AlloFifo) {
 )XXX";
   os << device_header;
 
+  // Helper functions (pure compute — no `top`/`df.kernel`/`dataflow` attr) are
+  // emitted first as plain C++ free functions (reusing the base emitter's
+  // return-by-pointer convention, matching the `helper(a,b,&r)` call sites the
+  // kernel bodies already emit). They must precede the modules that call them.
+  for (auto func : module.getOps<func::FuncOp>()) {
+    if (!func->hasAttr("top") && !func->hasAttr("df.kernel") &&
+        !func->hasAttr("dataflow"))
+      VhlsModuleEmitter::emitFunction(func);
+  }
+
   StringRef topName;
   for (auto func : module.getOps<func::FuncOp>()) {
     if (func->hasAttr("top")) {
@@ -1119,7 +1129,7 @@ SC_MODULE(AlloFifo) {
     } else if (func->hasAttr("df.kernel")) {
       emitKernelModule(func);
     }
-    // else: helper funcs — TODO
+    // else: sub-region (`dataflow` attr) — hierarchy, TODO (structural).
   }
 
   // Testbench: a Combinational channel per top stream port + clocked src/sink

@@ -553,6 +553,52 @@ def test_systemc_tiled_systolic_csim():
     print("SystemC tiled-systolic csim C == A @ B")
 
 
+def _saxpy_helper(x: int32, y: int32) -> int32:
+    """A pure compute helper (no streams/kernels) called from a kernel body."""
+    return x * 2 + y
+
+
+def _kernel_with_helper():
+    """A @df.kernel whose body calls a typed compute helper -> the helper must be
+    emitted as a plain C++ free function (return-by-pointer) before the modules."""
+    N = 8
+
+    @df.region()
+    def top(A: int32[N], B: int32[N]):
+        @df.kernel(mapping=[1], args=[A, B])
+        def k(a: int32[N], b: int32[N]):
+            for i in range(N):
+                b[i] = _saxpy_helper(a[i], 1)
+
+    return top, N
+
+
+def test_systemc_helper_function_emit():
+    """A kernel calling a compute helper emits the helper as a C++ free function
+    (definition precedes the SC_MODULEs that call it)."""
+    top, _ = _kernel_with_helper()
+    code = df.build(top, target="systemc").hls_code
+    assert "void _saxpy_helper(" in code  # helper defined
+    assert code.index("void _saxpy_helper(") < code.index("SC_MODULE(k_0)")  # before use
+    print("compute helper emitted as a C++ free function")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_helper_function_csim():
+    """The kernel+helper compiles and runs: B == A*2 + 1."""
+    top, N = _kernel_with_helper()
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(top, target="systemc", mode="csim", project=tmp)
+        A = np.arange(N, dtype=np.int32)
+        B = np.zeros(N, dtype=np.int32)
+        mod(A, B)
+        np.testing.assert_array_equal(B, A * 2 + 1)
+    print("SystemC kernel+helper csim B == A*2 + 1")
+
+
 def _smith_waterman():
     """Smith-Waterman local-alignment scoring on a P0xP1 systolic grid. Unlike a
     feed-forward GEMM, it has a DIAGONAL FEEDBACK stream (fifo_C: PE(i,j) ->
