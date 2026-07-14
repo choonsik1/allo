@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 import allo
-from allo.ir.types import int32, int1, Stream
+from allo.ir.types import int8, int32, int1, Stream
 import allo.dataflow as df
 
 
@@ -551,6 +551,88 @@ def test_systemc_tiled_systolic_csim():
         mod(A, B, C)
         np.testing.assert_array_equal(C, A @ B)
     print("SystemC tiled-systolic csim C == A @ B")
+
+
+def _smith_waterman():
+    """Smith-Waterman local-alignment scoring on a P0xP1 systolic grid. Unlike a
+    feed-forward GEMM, it has a DIAGONAL FEEDBACK stream (fifo_C: PE(i,j) ->
+    PE(i+1,j+1)) plus horizontal/vertical streams, and 1-D inputs A,B read at
+    pid-indexed positions (-> replicated read memory ports) and a 2-D output S
+    written at pid positions (-> replicated write memory ports). Exercises the
+    whole stack together: feedback systolic + memory ports + multi-client."""
+    Wp, Sim, Mis = 2, 3, -3
+    M = N = 4
+    P0, P1 = M + 2, N + 2
+
+    @df.region()
+    def top(A: int8[M], B: int8[N], S: int32[P0 - 1, P1 - 1]):
+        fifo_A: Stream[int32, 4][P0, P1]
+        fifo_B: Stream[int32, 4][P0, P1]
+        fifo_C: Stream[int32, 4][P0, P1]
+
+        @df.kernel(mapping=[P0, P1], args=[A, B, S])
+        def sw(local_A: int8[M], local_B: int8[N], local_S: int32[P0 - 1, P1 - 1]):
+            i, j = df.get_pid()
+            with allo.meta_if((i == 0 and j == P1 - 1) or (i == P0 - 1 and j == 0)):
+                pass
+            with allo.meta_elif(i == 0 and j == 0):
+                fifo_C[i + 1, j + 1].put(0)
+            with allo.meta_elif(i == 0):
+                fifo_B[i + 1, j].put(0); fifo_C[i + 1, j + 1].put(0)
+            with allo.meta_elif(j == 0):
+                fifo_A[i, j + 1].put(0); fifo_C[i + 1, j + 1].put(0)
+            with allo.meta_elif(i == P0 - 1 and j == P1 - 1):
+                fifo_C[i, j].get()
+            with allo.meta_elif(i == P0 - 1):
+                fifo_B[i, j].get(); fifo_C[i, j].get()
+            with allo.meta_elif(j == P1 - 1):
+                fifo_A[i, j].get(); fifo_C[i, j].get()
+            with allo.meta_else():
+                a = fifo_A[i, j].get(); b = fifo_B[i, j].get(); c = fifo_C[i, j].get()
+                aligning: int32 = c + (Sim if local_A[i - 1] == local_B[j - 1] else Mis)
+                gap_A: int32 = a - Wp
+                gap_B: int32 = b - Wp
+                score: int32 = max(max(0, aligning), max(gap_A, gap_B))
+                local_S[i, j] = score
+                fifo_A[i, j + 1].put(max(gap_A, score))
+                fifo_B[i + 1, j].put(max(gap_B, score))
+                fifo_C[i + 1, j + 1].put(score)
+
+    def golden(seqA, seqB):
+        sm = np.zeros((len(seqA) + 1, len(seqB) + 1), dtype=int)
+        for i in range(sm.shape[0]):
+            for j in range(sm.shape[1]):
+                if i == 0 or j == 0:
+                    continue
+                sim = Sim if seqA[i - 1] == seqB[j - 1] else Mis
+                sm[i][j] = max(0, sm[i - 1][j - 1] + sim,
+                               max([sm[a, j] - 2 * (i - a) for a in range(i)]),
+                               max([sm[i, b] - 2 * (j - b) for b in range(j)]))
+        return sm
+
+    return top, M, N, P0, P1, golden
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_smith_waterman_csim():
+    """Feedback systolic array (diagonal fifo_C) + memory ports end-to-end: the
+    emitted SystemC score matrix matches the Smith-Waterman golden. Guards
+    against regressing feedback-systolic correctness (a prior 'wrong' reading was
+    a stale-build test artifact; the design is correct)."""
+    top, M, N, P0, P1, golden = _smith_waterman()
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(top, target="systemc", mode="csim", project=tmp)
+        for seed in range(3):
+            np.random.seed(seed)
+            A = np.random.randint(0, 4, M).astype(np.int8)
+            B = np.random.randint(0, 4, N).astype(np.int8)
+            S = np.zeros((P0 - 1, P1 - 1), dtype=np.int32)
+            mod(A.copy(), B.copy(), S)
+            np.testing.assert_array_equal(S[1:, 1:], golden(A, B)[1:, 1:])
+    print("SystemC smith-waterman csim == golden (feedback systolic)")
 
 
 if __name__ == "__main__":
