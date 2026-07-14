@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 import allo
-from allo.ir.types import int8, int32, int1, Stream
+from allo.ir.types import int8, int16, int32, int1, UInt, Stream
 import allo.dataflow as df
 
 
@@ -787,6 +787,49 @@ def test_systemc_hierarchy_flatten_csim():
         mod(R)
         assert R[0] == sum(range(_HN)), f"got {R[0]}, expected {sum(range(_HN))}"
     print("SystemC flattened-hierarchy csim result == sum(0..N-1)")
+
+
+@df.region()
+def _pack_top(A: int16[2], B: int16[2]):
+    s: Stream[UInt(32), 2][1]
+
+    @df.kernel(mapping=[1], args=[A])
+    def packer(a: int16[2]):
+        p: UInt(32) = 0
+        for m in range(2):
+            p[m * 16 : (m + 1) * 16] = a[m]  # bit-slice WRITE (pack)
+        s[0].put(p)
+
+    @df.kernel(mapping=[1], args=[B])
+    def unpacker(b: int16[2]):
+        p: UInt(32) = s[0].get()
+        for m in range(2):
+            b[m] = p[m * 16 : (m + 1) * 16]  # bit-slice READ (unpack)
+
+
+def test_systemc_bitslice_emit():
+    """Packed streams pack/unpack with Vitis bit-slice syntax x(hi,lo). The ac_int
+    shim lacks it, so ap_(u)int gets an operator()(hi,lo) bit-range proxy."""
+    code = df.build(_pack_top, target="systemc").hls_code
+    assert "struct ap_rng" in code  # the bit-range proxy is emitted
+    assert "operator()(int hi, int lo)" in code
+    print("bit-slice x(hi,lo) supported via ap_rng proxy")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_bitslice_csim():
+    """Pack 2x int16 into a UInt(32) stream and unpack -> B == A (exercises the
+    bit-slice write AND read on a packed stream, like daisy_chain_gemm)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(_pack_top, target="systemc", mode="csim", project=tmp)
+        A = np.array([7, 9], dtype=np.int16)
+        B = np.zeros(2, dtype=np.int16)
+        mod(A, B)
+        np.testing.assert_array_equal(B, A)
+    print("SystemC packed-stream bit-slice csim B == A")
 
 
 if __name__ == "__main__":

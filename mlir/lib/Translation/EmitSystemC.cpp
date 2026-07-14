@@ -1074,22 +1074,48 @@ using std::min;
 // Catapult's ac_int so the same body compiles. (TODO: emit ac_int/ac_fixed
 // natively via a type-name override, like getCatapultTypeName in the Catapult
 // emitter, and drop this shim.)
-// For W<=64, ap_(u)int is a plain ac_int alias. For W>64, ac_int has NO implicit
-// conversion to a native int, so the reused body's narrowing `int32_t x = wide;`
-// (e.g. a GEMM accumulator widened past 64 bits) fails to compile. Add one via a
-// thin subclass ONLY in that range — ac_int's own operators remain exact/derived-
-// to-base matches, so arithmetic still resolves to them (no builtin ambiguity).
+// ap_(u)int is a thin ac_int subclass adding the two Vitis affordances the reused
+// body relies on and ac_int lacks:
+//  (1) the x(hi,lo) BIT-RANGE operator (packed streams unpack via v(31,16) etc) —
+//      a proxy that extracts on read and inserts on write, for const/runtime hi,lo;
+//  (2) for W>64 only, an implicit narrowing conversion (`int32_t x = wide;`, e.g. a
+//      GEMM accumulator past 64 bits) which ac_int omits above 64 bits.
+// Adding operator() doesn't disturb arithmetic (it's the call operator, not a
+// conversion); the W>64 narrowing stays gated so ac_int's own operators keep
+// winning overload resolution (no builtin-conversion ambiguity).
+template <class AC> struct ap_rng {
+  AC &r;
+  int hi, lo;
+  ap_rng(AC &x, int h, int l) : r(x), hi(h), lo(l) {}
+  operator long long() const { // read bits [hi:lo]
+    AC m = (AC(1) << (hi - lo + 1)) - 1;
+    return ((r >> lo) & m).to_int64();
+  }
+  template <class V> ap_rng &operator=(V v) { // write bits [hi:lo] = v
+    AC m = (AC(1) << (hi - lo + 1)) - 1;
+    r = (r & ~(m << lo)) | ((AC(v) & m) << lo);
+    return *this;
+  }
+};
 template <int W, bool Big = (W > 64)> struct ap_sel {
-  using s = ac_int<W, true>;
-  using u = ac_int<W, false>;
+  struct s : ac_int<W, true> {
+    using ac_int<W, true>::ac_int;
+    ap_rng<ac_int<W, true>> operator()(int hi, int lo) { return {*this, hi, lo}; }
+  };
+  struct u : ac_int<W, false> {
+    using ac_int<W, false>::ac_int;
+    ap_rng<ac_int<W, false>> operator()(int hi, int lo) { return {*this, hi, lo}; }
+  };
 };
 template <int W> struct ap_sel<W, true> {
   struct s : ac_int<W, true> {
     using ac_int<W, true>::ac_int;
+    ap_rng<ac_int<W, true>> operator()(int hi, int lo) { return {*this, hi, lo}; }
     operator long long() const { return this->to_int64(); }
   };
   struct u : ac_int<W, false> {
     using ac_int<W, false>::ac_int;
+    ap_rng<ac_int<W, false>> operator()(int hi, int lo) { return {*this, hi, lo}; }
     operator unsigned long long() const { return this->to_uint64(); }
   };
 };
