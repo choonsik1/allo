@@ -282,22 +282,50 @@ def test_systemc_mem_port_store_emit():
     print("random OUTPUT access -> write memory port emitted")
 
 
-def test_systemc_rejects_both_mem_port():
-    """An array both read AND written at random indices ('both') is not wired yet
-    and must still be rejected cleanly."""
-
+def _both_mem_port():
+    """A read+write random-access array ('both') -> AlloMem (LOAD+STORE, req+rsp),
+    preloaded AND read back (in-place). Reads a[4..7], writes a[0..3] (disjoint,
+    so re-execution under the free-running kernel is idempotent). Final:
+    A[0:4] = A[4:8] + 1, A[4:8] unchanged."""
     N = 8
 
     @df.region()
     def top(A: int32[N]):
         @df.kernel(mapping=[1], args=[A])
-        def rw(a: int32[N]):
-            for i in range(N):
-                a[N - 1 - i] = a[i] + 1  # random read AND write of a -> 'both'
+        def rmw(a: int32[N]):
+            for i in range(4):
+                a[i] = a[i + 4] + 1
 
-    with pytest.raises(Exception, match="Failed to emit"):
-        df.build(top, target="systemc")
-    print("both-direction memory port correctly rejected")
+    return top, N
+
+
+def test_systemc_both_mem_port_emit():
+    """A read+write random-access array uses AlloMem (not AlloMemW) and emits BOTH
+    a LOAD (opcode 0) and a STORE (opcode 1) req on the same port."""
+    top, _ = _both_mem_port()
+    code = df.build(top, target="systemc").hls_code
+    assert "AlloMem<" in code and "AlloMemW<" not in code  # read+write -> AlloMem
+    assert code.count("_req.Push(") >= 2  # both a LOAD and a STORE req
+    assert "_rsp.Pop()" in code  # the LOAD response
+    print("both (read+write) memory port -> AlloMem, LOAD + STORE")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("MGC_HOME"),
+    reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
+)
+def test_systemc_both_mem_port_csim():
+    """In-place read-modify-write: A preloaded, modified, read back.
+    A[0:4] == A[4:8]+1, A[4:8] unchanged."""
+    top, N = _both_mem_port()
+    with tempfile.TemporaryDirectory() as tmp:
+        mod = df.build(top, target="systemc", mode="csim", project=tmp)
+        A = np.arange(N, dtype=np.int32)
+        exp = A.copy()
+        exp[0:4] = A[4:8] + 1
+        mod(A)
+        np.testing.assert_array_equal(A, exp)
+    print("SystemC 'both' mem-port csim: in-place read-modify-write")
 
 
 @pytest.mark.skipif(

@@ -241,15 +241,17 @@ private:
   SmallVector<IOArray> ioArrays;
 
   // Region boundary array routed to an internal memory (random-access port):
-  //   dir 'i' -> AlloMem  (LOAD, req+rsp), preloaded from input<fileIdx>.data
-  //   dir 'o' -> AlloMemW (STORE, req only), read out to output<fileIdx>.data
+  //   dir 'i' -> AlloMem  (LOAD, req+rsp), preloaded from input<inIdx>.data
+  //   dir 'o' -> AlloMemW (STORE, req only), read out to output<outIdx>.data
+  //   dir 'b' -> AlloMem  (LOAD+STORE, req+rsp): preloaded AND read out (in-place)
   struct MemArray {
     std::string base;   // region arg name (kernel binds base_req[/base_rsp])
     std::string ctype;  // element C type
     int64_t total;      // element count (memory depth)
     unsigned addrw, dataw;
-    char dir;           // 'i' read-only, 'o' write-only
-    int fileIdx;        // input<fileIdx>.data / output<fileIdx>.data
+    char dir;           // 'i' read-only, 'o' write-only, 'b' read+write
+    int inIdx;          // input<inIdx>.data  (preload; -1 if none)
+    int outIdx;         // output<outIdx>.data (read-out; -1 if none)
   };
   SmallVector<MemArray> memArrays;
 
@@ -264,8 +266,8 @@ private:
     std::string ctype;
     int64_t total;
     unsigned addrw, dataw;
-    char dir;           // 'i' read / 'o' write
-    int fileIdx;        // the region array's file index (preload / readout)
+    char dir;           // 'i' read / 'o' write / 'b' read+write
+    int inIdx, outIdx;  // the region array's input/output file indices (-1 = none)
   };
   SmallVector<MemInst> memInsts;
 };
@@ -457,8 +459,8 @@ char SystemCModuleEmitter::regArgMemPort(func::FuncOp top, Value regArg) {
 
 // Sequential-stream read:  <result> = <port>.Pop();   (index ignored — in order)
 void SystemCModuleEmitter::emitAffineLoad(affine::AffineLoadOp op) {
-  // Random-access INPUT memory port: LOAD via req/resp handshake.
-  if (memPortArgDir(op.getMemRef()) == 'i') {
+  // Random-access INPUT ('i') or read+write ('b') memory port: LOAD via req/resp.
+  if (char d = memPortArgDir(op.getMemRef()); d == 'i' || d == 'b') {
     Value result = op.getResult();
     fixUnsignedType(result, op->hasAttr("unsigned"));
     auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
@@ -499,8 +501,9 @@ void SystemCModuleEmitter::emitAffineLoad(affine::AffineLoadOp op) {
 
 // Sequential-stream write:  <port>.Push(<value>);   (index ignored — in order)
 void SystemCModuleEmitter::emitAffineStore(affine::AffineStoreOp op) {
-  // Random-access OUTPUT memory port: STORE via a packed req (no response).
-  if (memPortArgDir(op.getMemRef()) == 'o') {
+  // Random-access OUTPUT ('o') or read+write ('b') memory port: STORE via a
+  // packed req (no response; the AlloMem/AlloMemW applies it).
+  if (char d = memPortArgDir(op.getMemRef()); d == 'o' || d == 'b') {
     auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
     int64_t total = 1;
     for (auto d : mt.getShape())
@@ -567,9 +570,10 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         streamPorts.push_back(pn);
         os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
         os << getSCTypeName(mt.getElementType()) << " > " << pn << ";\n";
-      } else if (d == 'i') {
-        // random-access INPUT array -> memory port: Out<req> + In<T>.
-        // Body loads become req.Push(LOAD,addr)/result=rsp.Pop() (affine over.).
+      } else if (d == 'i' || d == 'b') {
+        // random-access INPUT ('i') or read+write ('b') array -> memory port:
+        // Out<req> + In<T>. Body loads become req.Push(LOAD,addr)/rsp.Pop() and
+        // (for 'b') stores become req.Push(STORE,addr,val) (affine overrides).
         std::string pn = std::string(addName(v, /*isPtr=*/false).str());
         int64_t total = 1;
         for (auto s : mt.getShape())
@@ -599,9 +603,6 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         std::string reqn = pn + "_req";
         streamPorts.push_back(reqn);
         os << "Connections::Out< " << reqT << " > " << reqn << ";\n";
-      } else if (d == 'b') {
-        emitError(func, "SystemC backend: random-access BOTH (read+write) array "
-                        "memory port not yet supported.");
       } else {
         // non-directional memref -> internal array member (fallback)
         os << getSCTypeName(mt.getElementType()) << " " << addName(v, /*isPtr=*/false);
@@ -825,17 +826,14 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     int64_t total = 1;
     for (auto s : mt.getShape())
       total *= s;
-    // Random-access array -> internal memory (no top-level port): INPUT reads
-    // from input<k>.data, OUTPUT is read out to output<k>.data.
+    // Random-access array -> internal memory (no top-level port): INPUT preloads
+    // from input<k>.data, OUTPUT reads out to output<k>.data, BOTH does both.
     char mp = regArgMemPort(func, arg.value());
-    if (mp == 'i') {
-      memArrays.push_back({nm, ct, total, scAddrW(total),
-                           scDataW(mt.getElementType()), 'i', inCount++});
-      continue;
-    }
-    if (mp == 'o') {
-      memArrays.push_back({nm, ct, total, scAddrW(total),
-                           scDataW(mt.getElementType()), 'o', outCount++});
+    if (mp == 'i' || mp == 'o' || mp == 'b') {
+      unsigned aw = scAddrW(total), dw = scDataW(mt.getElementType());
+      int ii = (mp == 'i' || mp == 'b') ? inCount++ : -1;
+      int oo = (mp == 'o' || mp == 'b') ? outCount++ : -1;
+      memArrays.push_back({nm, ct, total, aw, dw, mp, ii, oo});
       continue;
     }
     char d = argDir(func, arg.index());
@@ -901,28 +899,29 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       int64_t total = 1;
       for (auto s : mt.getShape())
         total *= s;
-      int fidx = -1;
+      int ii = -1, oo = -1;
       for (auto &m : memArrays)
-        if (m.base == std::string(getName(ov).str()))
-          fidx = m.fileIdx;
+        if (m.base == std::string(getName(ov).str())) {
+          ii = m.inIdx;
+          oo = m.outIdx;
+        }
       memInsts.push_back(
           {"mp" + std::to_string(it.index()) + "_" +
                std::to_string(opnd.index()),
            instNames[it.index()], std::string(getName(carg).str()),
            std::string(getSCTypeName(mt.getElementType()).str()), total,
-           scAddrW(total), scDataW(mt.getElementType()), mp, fidx});
+           scAddrW(total), scDataW(mt.getElementType()), mp, ii, oo});
     }
   }
-  // Memory-port members: a req channel + memory (+ rsp channel for reads).
-  //   'i' -> AlloMem  (req + rsp channels)
-  //   'o' -> AlloMemW (req channel only)
+  // Memory-port members: a req channel + memory (+ rsp channel for read-capable
+  // ports). 'i'/'b' -> AlloMem (req + rsp); 'o' -> AlloMemW (req only).
   for (auto &mi : memInsts) {
     std::string reqT =
         "ac_int<" + std::to_string(1 + mi.addrw + mi.dataw) + ", false>";
     indent();
     os << "Connections::Combinational< " << reqT << " > " << mi.chan
        << "_req_ch;\n";
-    if (mi.dir == 'i') {
+    if (mi.dir != 'o') { // 'i' and 'b' read -> need a response channel
       indent();
       os << "Connections::Combinational< " << mi.ctype << " > " << mi.chan
          << "_rsp_ch;\n";
@@ -960,7 +959,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   }
   for (auto &mi : memInsts) {
     os << sep << mi.chan << "_req_ch(\"" << mi.chan << "_req_ch\")";
-    if (mi.dir == 'i')
+    if (mi.dir != 'o')
       os << ", " << mi.chan << "_rsp_ch(\"" << mi.chan << "_rsp_ch\")";
     os << ", " << mi.chan << "_mem(\"" << mi.chan << "_mem\")";
     sep = ", ";
@@ -1003,7 +1002,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
           indent();
           os << instNames[it.index()] << "." << ca << "_req(" << chan
              << "_req_ch);\n";
-          if (mp == 'i') {
+          if (mp != 'o') { // 'i' and 'b' bind the response channel too
             indent();
             os << instNames[it.index()] << "." << ca << "_rsp(" << chan
                << "_rsp_ch);\n";
@@ -1033,7 +1032,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     indent(); os << mi.chan << "_mem.clk(clk);\n";
     indent(); os << mi.chan << "_mem.rst(rst);\n";
     indent(); os << mi.chan << "_mem.req(" << mi.chan << "_req_ch);\n";
-    if (mi.dir == 'i') {
+    if (mi.dir != 'o') {
       indent(); os << mi.chan << "_mem.rsp(" << mi.chan << "_rsp_ch);\n";
     }
   }
@@ -1320,9 +1319,9 @@ SC_MODULE(AlloFifo) {
     // from the array's input file (csim only: direct hierarchical poke of
     // AlloMem.mem[], done before reset is released).
     for (auto &mi : memInsts)
-      if (mi.dir == 'i') {
+      if (mi.dir != 'o') { // 'i' and 'b' preload from their input file
         indent();
-        os << "{ std::ifstream _f(\"input" << mi.fileIdx << ".data\"); "
+        os << "{ std::ifstream _f(\"input" << mi.inIdx << ".data\"); "
            << mi.ctype << " _v; for (int f = 0; f < " << mi.total
            << "; ++f) { _f >> _v; t.dut." << mi.chan << "_mem.mem[f] = _v; } }\n";
       }
@@ -1340,15 +1339,15 @@ SC_MODULE(AlloFifo) {
     // write arrays are SPLIT across replicas that each wrote disjoint elements
     // (zero-initialized elsewhere), so sum the replicas element-wise.
     for (auto &m : memArrays)
-      if (m.dir == 'o') {
+      if (m.dir != 'i') { // 'o' and 'b' read out to their output file
         indent();
-        os << "{ std::ofstream _f(\"output" << m.fileIdx << ".data\");\n";
+        os << "{ std::ofstream _f(\"output" << m.outIdx << ".data\");\n";
         indent();
         os << "  for (int f = 0; f < " << m.total << "; ++f) {\n";
         indent();
         os << "    long long _s = 0;\n";
         for (auto &mi : memInsts)
-          if (mi.dir == 'o' && mi.fileIdx == m.fileIdx) {
+          if (mi.dir != 'i' && mi.outIdx == m.outIdx) {
             indent();
             os << "    _s += (long long) t.dut." << mi.chan << "_mem.mem[f];\n";
           }

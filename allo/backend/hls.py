@@ -877,7 +877,7 @@ class HLSModule:
                     dirs = analyze_arg_load_store(self.module)[self.top_func_name]
                     _ii = 0
                     for (in_dtype, in_shape), arg, d in zip(inputs, args, dirs):
-                        if d == "in":
+                        if d in ("in", "both"):  # 'both' arrays are preloaded too
                             write_tensor_to_file(
                                 arg, in_shape, f"{self.project}/input{_ii}.data"
                             )
@@ -960,7 +960,7 @@ class HLSModule:
                     # arg_dirs split as the inputs above; `dirs` is in scope).
                     _oo = 0
                     for (out_dtype, out_shape), out_arg, d in zip(inputs, args, dirs):
-                        if d == "out":
+                        if d in ("out", "both"):  # 'both' arrays are read back too
                             fpath = f"{self.project}/output{_oo}.data"
                             if not os.path.exists(fpath):
                                 raise RuntimeError(
