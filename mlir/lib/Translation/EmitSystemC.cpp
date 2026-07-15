@@ -1102,6 +1102,20 @@ using std::min;
 // Adding operator() doesn't disturb arithmetic (it's the call operator, not a
 // conversion); the W>64 narrowing stays gated so ac_int's own operators keep
 // winning overload resolution (no builtin-conversion ambiguity).
+//
+// CSYNTH NOTE: the subclass-of-ac_int form below is CSIM-ONLY. Catapult's front-
+// end treats ac_int as a builtin, so a struct deriving from it trips
+// "struct assignment from non-struct type" (CIN-15) on every `v = <ac_int expr>;`
+// — breaking synthesis branch-wide. Under __SYNTHESIS__ we therefore fall back to
+// a PLAIN ac_int alias, which loses the two csim affordances (the x(hi,lo) bit-
+// range and the >64-bit implicit narrowing). Consequence: every non-bit-slicing
+// design synthesizes; a design that actually bit-slices (packed streams) fails at
+// its `(hi,lo)` site instead — a clear, local error, and those need native ac_int
+// .slc emission anyway. csim keeps the full-featured shim so behavior is unchanged.
+#ifdef __SYNTHESIS__
+template <int W> using ap_int = ac_int<W, true>;
+template <int W> using ap_uint = ac_int<W, false>;
+#else
 template <class AC> struct ap_rng {
   AC &r;
   int hi, lo;
@@ -1140,6 +1154,7 @@ template <int W> struct ap_sel<W, true> {
 };
 template <int W> using ap_int = typename ap_sel<W>::s;
 template <int W> using ap_uint = typename ap_sel<W>::u;
+#endif
 
 // Random-access memory port for a non-sequential boundary array (SystemC/
 // Connections flow — internal memory, the only kind SystemC supports; useref

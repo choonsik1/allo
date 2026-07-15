@@ -49,14 +49,25 @@ emitter (`__stateful_*` control/addr/size state). Needs stateful-decl emission.
 (The mem-mapped-output readout race that previously failed tiled_gemm /
 pingpong_gemm / hierachical / wrap_movement is FIXED — see single-shot above.)
 
-## KNOWN ISSUE — csynth compile broken branch-wide (pre-existing, from 2b1e66f)
-Catapult `go compile` aborts on `ac_int.h(2259): struct assignment from non-struct
-type (CIN-15)` for EVERY design (confirmed on a pure-stream design with the
-emitter both with and without the single-shot change → not single-shot's fault).
-Root cause: the `ap_int`/`ap_uint` bit-slice shim added in commit 2b1e66f is a
-`struct s : ac_int<W,...>` SUBCLASS; Catapult's front-end rejects assignment to an
-ac_int-derived struct. csim is unaffected. Fix = native ac_int type-name emission
-(the standing TODO) or a synthesis-safe shim. Tracked separately from single-shot.
+## csynth — RESTORED (was broken branch-wide by the ac_int subclass shim)
+The `ap_int`/`ap_uint` bit-slice shim (commit 2b1e66f) was a `struct s : ac_int<W>`
+SUBCLASS; Catapult's front-end treats ac_int as a builtin and rejected assignment
+to an ac_int-derived struct (`ac_int.h(2259): struct assignment from non-struct
+type`, CIN-15) — aborting `go compile` on EVERY design. FIXED: the shim is now a
+plain `ac_int` alias under `#ifdef __SYNTHESIS__` (Catapult defines it), keeping
+the full-featured subclass only for csim (`#else`). Verified: `mem_port_reverse`
+(AlloMem memory port) now synthesizes end-to-end to `concat_sim_rtl.v`; the
+pure-stream kernels schedule cleanly; csim suite still 28/28.
+
+The synthesis alias drops the two csim-only affordances (the `x(hi,lo)` bit-range
+and >64-bit implicit narrowing), so a design that actually bit-slices (packed
+streams) fails at its `(hi,lo)` site instead of compiling — acceptable: those need
+native ac_int `.slc` emission anyway, and every non-bit-slicing design now csynths.
+
+Remaining csynth gap (SEPARATE, pre-existing): `AlloFifo<T,N>` (buffered stream,
+depth ≥ 1) "could not schedule even with unlimited resources" — the concurrent
+non-blocking Connections I/O can't be scheduled. Depth-0 (combinational) streams
+and memory ports synthesize fine; buffered streams remain csim-only.
 
 ## FAIL — non-blocking `empty()/full()` spin (3)
 | example | note |
@@ -106,8 +117,8 @@ transitively by the suite), `systemc_backend` (the suite itself).
 - **3** NB empty/full spin (blocking-semantics gap).
 - **3** float-blocked, **1** int8-pack mismatch, **2** timeout, **1** stream-arg N/A.
 - **4** are unit/infra, not workloads.
-- KNOWN ISSUE: csynth compile broken branch-wide (ac_int subclass shim, 2b1e66f) —
-  csim unaffected, separate from single-shot.
+- csynth RESTORED: ac_int subclass shim (2b1e66f) made synthesis-safe; memory-port
+  design synthesizes to RTL. AlloFifo (buffered stream) still unschedulable (separate).
 
 Reproduce: `bash scratchpad/driver.sh` (env recipe in
 `memory/catapult-systemc-memory-port-refs.md`).
