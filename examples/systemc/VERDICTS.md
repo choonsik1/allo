@@ -6,7 +6,7 @@ inputs). Float examples were also run as blind `float32→int32` copies to isola
 backend behavior from float support (float lowering is a separate, deprioritized
 track). Harness: `scratchpad/harness.py`; driver: `scratchpad/driver.sh`.
 
-## PASS — sim == systemc, bit-exact (10)
+## PASS — sim == systemc, bit-exact (14)
 | example | datatype | note |
 |---|---|---|
 | systolic | int32 (from float) | classic output-stationary systolic |
@@ -19,29 +19,44 @@ track). Harness: `scratchpad/harness.py`; driver: `scratchpad/driver.sh`.
 | df_unit | UInt(16) | stream load/store, C = A |
 | region_toparg_aliasing | int32 | #592 aliasing regression |
 | stream_of_blocks | int32 | stream-of-blocks pattern |
+| **tiled_gemm** | int32 (from float) | **FIXED by single-shot** — `both` C accumulator, mapping=[2,2] |
+| **pingpong_gemm** | int32 (from float) | **FIXED by single-shot** — ping-pong `both` accumulator |
+| **hierachical** | int32 (from float) | **FIXED by single-shot** — `both` C |
+| **wrap_movement** | int32 (from float) | **FIXED by single-shot** — `both` C |
+
+**Single-shot execution (implemented).** Each kernel now runs its body EXACTLY
+ONCE (was free-running `while(1){body}`), then idles; the memory-output testbench
+advances the clock until all kernels signal completion (csim `__allo_done` counter
+== #kernel-instances) before reading the memories, replacing the old fixed
+`maxTotal*8` guess. This fixed the four `both`-accumulator designs (were partial /
+over-accumulated). Requires the harness to zero-init `both` accumulators (real
+accumulators start at 0; the actual tests do `C=np.zeros`) — otherwise the
+multi-replica sum-merge over-counts a nonzero preload by (numReplicas-1)×
+(a separate, narrow limitation for nonzero-init tiled accumulators).
 
 Plus the dedicated suite `tests/dataflow/test_systemc_backend.py` — **28/28 PASS**
 (memory ports i/o/both, multi-client, hierarchy, empty/full, bit-slice packing,
 stream depth).
 
-## FAIL — real backend gap (6)
+## FAIL — real backend gap (2)
 | example | class | root cause |
 |---|---|---|
-| tiled_gemm | mem-output readout race | top tiles correct, late tiles un-accumulated |
-| pingpong_gemm | mem-output readout race | ping-pong `both` accumulator, same race |
-| hierachical | mem-output readout race | MISMATCH on `both` C |
-| wrap_movement | mem-output readout race | MISMATCH on `both` C |
 | region_stateful | `@ Stateful` unsupported | region-scope persistent buffer; sim MLIRError / emit gap |
 | hierachical_mesh | `@ Stateful` unsupported | emit: `__stateful_*_ctrl/daddr/size` undeclared in scope |
 
-Two distinct real gaps:
-1. **Memory-mapped OUTPUT readout race.** `o`/`both` outputs are sampled at a
-   fixed testbench time; with variable per-tile completion the late tiles are
-   still mid-compute → partial values. Stream outputs are immune (tb collects
-   exactly N tokens = self-synchronizing). Fix = completion signal / single-shot
-   settle for mem-mapped outputs (ties to the deferred single-shot work).
-2. **`@ Stateful` persistent buffers** are not declared by the emitter
-   (`__stateful_*` control/addr/size state). Needs stateful-decl emission.
+Remaining real gap: **`@ Stateful` persistent buffers** are not declared by the
+emitter (`__stateful_*` control/addr/size state). Needs stateful-decl emission.
+(The mem-mapped-output readout race that previously failed tiled_gemm /
+pingpong_gemm / hierachical / wrap_movement is FIXED — see single-shot above.)
+
+## KNOWN ISSUE — csynth compile broken branch-wide (pre-existing, from 2b1e66f)
+Catapult `go compile` aborts on `ac_int.h(2259): struct assignment from non-struct
+type (CIN-15)` for EVERY design (confirmed on a pure-stream design with the
+emitter both with and without the single-shot change → not single-shot's fault).
+Root cause: the `ap_int`/`ap_uint` bit-slice shim added in commit 2b1e66f is a
+`struct s : ac_int<W,...>` SUBCLASS; Catapult's front-end rejects assignment to an
+ac_int-derived struct. csim is unaffected. Fix = native ac_int type-name emission
+(the standing TODO) or a synthesis-safe shim. Tracked separately from single-shot.
 
 ## FAIL — non-blocking `empty()/full()` spin (3)
 | example | note |
@@ -86,11 +101,13 @@ transitively by the suite), `systemc_backend` (the suite itself).
 
 ---
 ### Scoreboard
-- **10** examples + **28** suite tests PASS bit-exact.
-- **6** real backend gaps: 4 mem-output readout race (single-shot), 2 `@ Stateful`.
+- **14** examples + **28** suite tests PASS bit-exact (was 10; +4 from single-shot).
+- **2** real backend gaps: `@ Stateful` persistent buffers (both cases).
 - **3** NB empty/full spin (blocking-semantics gap).
 - **3** float-blocked, **1** int8-pack mismatch, **2** timeout, **1** stream-arg N/A.
 - **4** are unit/infra, not workloads.
+- KNOWN ISSUE: csynth compile broken branch-wide (ac_int subclass shim, 2b1e66f) —
+  csim unaffected, separate from single-shot.
 
 Reproduce: `bash scratchpad/driver.sh` (env recipe in
 `memory/catapult-systemc-memory-port-refs.md`).

@@ -270,6 +270,11 @@ private:
     int inIdx, outIdx;  // the region array's input/output file indices (-1 = none)
   };
   SmallVector<MemInst> memInsts;
+
+  // Number of df.kernel MODULE INSTANCES in the top (calls.size()). The single-
+  // shot testbench advances the clock until this many kernels have finished one
+  // pass (each bumps the csim-only __allo_done counter) before reading memory.
+  int numKernelInsts = 0;
 };
 
 } // namespace
@@ -633,11 +638,17 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
     indent(); os << pn << ".Reset();\n";
   }
   indent(); os << "wait();\n";
-  indent(); os << "while (1) {\n";
-  addIndent();
+  // Single-shot: run the body EXACTLY ONCE, then idle. Free-running (while(1)
+  // around the body) is safe for stream kernels (they re-block on an empty input
+  // after one pass) but WRONG for a read-modify-write `both` memory accumulator
+  // (C[i]+=... re-accumulates every pass). Running once is correct for both, and
+  // lets the tb read memory outputs after a real completion instead of guessing a
+  // settle time. The idle `while(1) wait()` keeps the clocked thread alive.
   emitBlock(func.front()); // put/get now emit .Push()/.Pop()
-  reduceIndent();
-  indent(); os << "}\n";
+  os << "#ifndef __SYNTHESIS__\n";
+  indent(); os << "__allo_done++; // csim: this kernel finished its single pass\n";
+  os << "#endif\n";
+  indent(); os << "while (1) { wait(); }\n";
   reduceIndent();
   indent(); os << "}\n";
 
@@ -853,6 +864,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     else if (auto call = llvm::dyn_cast<func::CallOp>(&op))
       calls.push_back(call);
   }
+  numKernelInsts = calls.size(); // single-shot tb waits for this many completions
 
   // Channel members. A Stream's depth (from its type) picks the flavor:
   //   depth 0  -> a bare Connections::Combinational (combinational wire)
@@ -1066,6 +1078,13 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
 #include <iostream>
 #include <fstream>
 #include <algorithm>
+// Single-shot completion counter (csim/testbench ONLY). Each kernel bumps this
+// once, right after its body finishes its single pass; the sc_main testbench for
+// memory-mapped-output designs advances the clock until all kernels are done
+// before reading the memories out. Declared unconditionally so the tb compiles
+// under __SYNTHESIS__ too, but the kernel's increment is guarded out of synthesis
+// (see emitKernelModule) so the synthesized logic stays side-effect free.
+static long __allo_done = 0;
 // The reused body emits bare max()/min() for the Allo max/min intrinsics (Vitis
 // resolves them via hls::); bind them to std:: so the same body compiles here.
 using std::max;
@@ -1317,7 +1336,6 @@ SC_MODULE(AlloFifo) {
       maxTotal = std::max(maxTotal, a.total);
     for (auto &m : memArrays)
       maxTotal = std::max(maxTotal, m.total);
-    int64_t simCycles = maxTotal * 8 + 200;
 
     // snk: write each OUTPUT port to output<k>.data (read back into B by hls.py)
     indent(); os << "void snk() {\n";
@@ -1352,14 +1370,26 @@ SC_MODULE(AlloFifo) {
            << "; ++f) { _f >> _v; t.dut." << mi.chan << "_mem.mem[f] = _v; } }\n";
       }
     indent(); os << "t.rst = 0; sc_start(1, SC_NS);\n";
-    // A stream output stops the sim via sc_stop; otherwise run a fixed, generous
-    // number of cycles (the kernel re-writes idempotently, so any time past one
-    // full pass is safe) then read the memory-port outputs.
+    // A stream output stops the sim via sc_stop (self-synchronizing: the sink
+    // drains exactly N tokens). Memory-mapped outputs have no such token, so we
+    // SINGLE-SHOT: advance the clock until every kernel has finished its one pass
+    // (__allo_done == numKernelInsts), then settle any in-flight STORE handshakes,
+    // then read the memories. This replaces the old fixed maxTotal*8 guess, which
+    // under-ran deep/tiled designs (late tiles caught mid-compute) and, with the
+    // former free-running body, over-accumulated `both` outputs.
     indent(); os << "t.rst = 1;\n";
     if (hasStreamOut) {
       indent(); os << "sc_start();\n";
     } else {
-      indent(); os << "sc_start(" << simCycles << ", SC_NS);\n";
+      // Generous safety cap: the loop EXITS as soon as all kernels finish (real
+      // completion), so this only bounds wall-clock if the design deadlocks.
+      int64_t capCycles = maxTotal * 2000 + 200000;
+      indent();
+      os << "for (long long _c = 0; _c < " << capCycles << "LL && __allo_done < "
+         << numKernelInsts << "; ++_c) sc_start(1, SC_NS); // wait for completion\n";
+      indent();
+      os << "sc_start(" << (memInsts.empty() ? 64 : 256)
+         << ", SC_NS); // settle in-flight memory writes\n";
     }
     // Read each OUTPUT array out to output<k>.data (into B by hls.py). Shared-
     // write arrays are SPLIT across replicas that each wrote disjoint elements
