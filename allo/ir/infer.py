@@ -27,6 +27,8 @@ from .types import (
     float64,
     Struct,
     Stream,
+    Wire,
+    Channel,
     Stateful,
     ConstExpr,
 )
@@ -103,6 +105,26 @@ class TypeInferer(ASTVisitor):
                 stream_dtype = Stream(dtype=base_type, shape=base_shape, depth=depth)
                 shape = tuple()
                 return stream_dtype, shape, None
+            if dtype is Wire:
+                # e.g., pipe: Wire[Ty]
+                base_type, base_shape, _ = TypeInferer.visit_type_hint(
+                    ctx, node.slice
+                )
+                wire_dtype = Wire(dtype=base_type, shape=base_shape)
+                return wire_dtype, tuple(), None
+            if dtype is Channel:
+                # e.g., pipe: Channel[Ty, valid_ready]
+                assert (
+                    isinstance(node.slice, ast.Tuple) and len(node.slice.elts) == 2
+                ), "Channel expects `ele_type` and `protocol`"
+                base_type, base_shape, _ = TypeInferer.visit_type_hint(
+                    ctx, node.slice.elts[0]
+                )
+                protocol = ASTResolver.resolve(node.slice.elts[1], ctx.global_vars)
+                channel_dtype = Channel(
+                    dtype=base_type, shape=base_shape, protocol=int(protocol)
+                )
+                return channel_dtype, tuple(), None
             if dtype is ConstExpr:
                 # e.g., a: ConstExpr[int32]
                 base_type, base_shape, _ = TypeInferer.visit_type_hint(ctx, node.slice)
