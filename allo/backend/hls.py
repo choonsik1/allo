@@ -255,6 +255,19 @@ class HLSModule:
             self.module = Module.parse(str(mod), ctx)
             func = find_func_in_module(self.module, top_func_name)
             func.attributes["top"] = UnitAttr.get()
+            # Wire/Channel links are SystemC-flow only. Other HLS backends have no
+            # emission for them (the base emitter no-ops), which would silently
+            # produce wrong output -- so fail loud here instead.
+            if platform != "systemc" and (
+                "!allo.wire" in str(self.module)
+                or "!allo.channel" in str(self.module)
+            ):
+                raise NotImplementedError(
+                    "Wire and Channel links are only supported by the SystemC "
+                    f'backend (target="systemc"), not "{platform}". Use '
+                    'target="systemc" for wire/channel, or Stream for other '
+                    "HLS backends."
+                )
             # Stamp per-arg I/O direction (in/out/both/scalar) so the SystemC
             # backend can emit the right port direction — analyze_arg_load_store
             # derives it from actual loads/stores (propagated through calls),
@@ -341,11 +354,32 @@ class HLSModule:
             if platform in {"vivado_hls", "vitis_hls", "tapa", "pynq", "catapult", "systemc"}:
                 harness_dir = "catapult" if platform == "systemc" else platform.split("_")[0]
                 os.system("cp " + path + f"{harness_dir}/* " + project)
+                configs["platform"] = platform  # tcl codegen distinguishes systemc
                 with open(f"{project}/run.tcl", "w", encoding="utf-8") as outfile:
                     if platform in {"catapult", "systemc"}:
                         outfile.write(codegen_tcl_catapult(top_func_name, configs))
                     else:
                         outfile.write(codegen_tcl(top_func_name, configs))
+                # The systemc flow's kernel.cpp is a self-contained sc_main tb.
+                # Catapult 2024.2 dropped `solution app` csim, so provide a
+                # standalone runner: compile+run with the bundled g++/libsystemc.
+                if platform == "systemc" and mode == "csim":
+                    csim_sh = (
+                        "#!/bin/bash\n"
+                        "# Standalone SystemC behavioral csim for the self-contained\n"
+                        "# kernel.cpp (compile+run its sc_main tb with Catapult's g++).\n"
+                        "set -e\n"
+                        ': "${MGC_HOME:?set MGC_HOME to your Catapult Mgc_home}"\n'
+                        'GXX="$MGC_HOME/bin/g++"\n'
+                        'INC="$MGC_HOME/shared/include"\n'
+                        'LIB=$(ls -d "$MGC_HOME"/shared/lib/Linux/gcc-*-64 2>/dev/null | head -1)\n'
+                        '"$GXX" -std=c++11 -DSC_INCLUDE_DYNAMIC_PROCESSES -I"$INC" \\\n'
+                        '  kernel.cpp -o csim_sim -L"$LIB" -Wl,-rpath,"$LIB" -lsystemc\n'
+                        'LD_LIBRARY_PATH="$MGC_HOME/lib:$LIB" ./csim_sim\n'
+                    )
+                    with open(f"{project}/csim.sh", "w", encoding="utf-8") as f:
+                        f.write(csim_sh)
+                    os.chmod(f"{project}/csim.sh", 0o755)
             copy_ext_libs(ext_libs, project)
             if self.platform == "vitis_hls":
                 assert self.mode in {

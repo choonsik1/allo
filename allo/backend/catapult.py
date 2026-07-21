@@ -170,6 +170,7 @@ def codegen_tcl(top, configs):
     frequency = configs.get("frequency", 100)
     clock_period = 1000 / frequency
     mode = configs.get("mode", "csyn")
+    platform = configs.get("platform", "catapult")
     device = configs.get("device", "nangate-45nm_beh")
     # preserve_hier=True keeps sub-function boundaries in RTL output,
     # enabling per-module area/power breakdown in area.rpt.
@@ -192,8 +193,9 @@ solution options set /Input/CompilerFlags {{-D_GLIBCXX_USE_CXX11_ABI=0}}
 solution file add "$sfd/kernel.cpp" -type C++
 """
 
-    # Only include host.cpp for csim mode
-    if mode == "csim":
+    # Only include host.cpp for csim mode. The systemc flow emits a self-contained
+    # kernel.cpp with its own sc_main testbench, so it has NO separate host.cpp.
+    if mode == "csim" and platform != "systemc":
         out_str += 'solution file add "$sfd/host.cpp" -type C++ -exclude true\n'
 
     out_str += f"""
@@ -232,7 +234,15 @@ go analyze
 
 
     if mode == "csim":
-        out_str += """
+        # NOTE: `solution app linkage/execution` was removed in Catapult 2024.2
+        # (`solution` has no `app` operator). Catapult's own csim now goes through
+        # SCVerify (`flow run /SCVerify/launch_make .../Verify_orig_cxx_osci.mk
+        # SIMTOOL=osci sim`), which requires CCS_DESIGN-wrapped DUTs. The systemc
+        # flow instead emits a self-contained plain-sc_main kernel.cpp, run
+        # directly via the generated `csim.sh` (g++ + $MGC_HOME libsystemc). The
+        # `go compile` above still validates HLS synthesis.
+        if platform != "systemc":
+            out_str += """
 solution app linkage
 solution app execution
 """
