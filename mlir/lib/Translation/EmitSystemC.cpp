@@ -191,6 +191,8 @@ private:
   // Connections: get/put emit .Pop()/.Push() instead of the base .read()/.write().
   void emitStreamGet(allo::StreamGetOp op) override;
   void emitStreamPut(allo::StreamPutOp op) override;
+  void emitChannelGet(allo::ChannelGetOp op) override;
+  void emitChannelPut(allo::ChannelPutOp op) override;
   // Non-blocking: try_get/try_put -> Connections .PopNB()/.PushNB() (fire-on-valid).
   // empty()/full() have no synthesizable Connections equivalent -> errored.
   void emitStreamTryGet(allo::StreamTryGetOp op) override;
@@ -566,6 +568,13 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
       streamPorts.push_back(pn);
       os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
       os << getSCTypeName(st.getBaseType()) << " > " << pn << ";\n";
+    } else if (auto ct = llvm::dyn_cast<ChannelType>(v.getType())) {
+      // channel arg -> Connections::In/Out<T> port (combinational, no buffer)
+      char d = streamDir(func, i);
+      std::string pn = std::string(addName(v, /*isPtr=*/false).str());
+      streamPorts.push_back(pn);
+      os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
+      os << getSCTypeName(ct.getBaseType()) << " > " << pn << ";\n";
     } else if (auto mt = llvm::dyn_cast<MemRefType>(v.getType())) {
       char d = argDir(func, i);
       if ((d == 'i' || d == 'o') && isSeqStreamable(v)) {
@@ -654,6 +663,28 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
 
   reduceIndent();
   os << "};\n\n";
+}
+
+// Connections channel get: <result> = <channel>.Pop();  (scalar handshake link)
+void SystemCModuleEmitter::emitChannelGet(ChannelGetOp op) {
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  indent();
+  emitValue(result);
+  os << " = ";
+  emitValue(op->getOperand(0), 0, false);
+  os << ".Pop();";
+  emitInfoAndNewLine(op);
+}
+
+// Connections channel put: <channel>.Push(<value>);  (scalar handshake link)
+void SystemCModuleEmitter::emitChannelPut(ChannelPutOp op) {
+  indent();
+  emitValue(op->getOperand(0), 0, false);
+  os << ".Push(";
+  emitValue(op->getOperand(1));
+  os << ");";
+  emitInfoAndNewLine(op);
 }
 
 // Connections get: <result> = <stream>[indices].Pop();
@@ -857,10 +888,13 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
 
   // The top body is stream_construct(s) + call(s). Collect them.
   SmallVector<StreamConstructOp, 4> channels;
+  SmallVector<ChannelConstructOp, 4> chanOps; // handshake channels (combinational)
   SmallVector<func::CallOp, 4> calls;
   for (auto &op : func.front()) {
     if (auto sc = llvm::dyn_cast<StreamConstructOp>(&op))
       channels.push_back(sc);
+    else if (auto cc = llvm::dyn_cast<ChannelConstructOp>(&op))
+      chanOps.push_back(cc);
     else if (auto call = llvm::dyn_cast<func::CallOp>(&op))
       calls.push_back(call);
   }
@@ -885,6 +919,14 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       os << "AlloFifo< " << T << ", " << st.getDepth() << " > " << nm
          << "_fifo;\n";
     }
+  }
+  // Channel members: a handshake Channel is always a combinational link.
+  for (auto cc : chanOps) {
+    auto ct = llvm::dyn_cast<ChannelType>(cc.getResult().getType());
+    std::string T = std::string(getSCTypeName(ct.getBaseType()).str());
+    std::string nm = std::string(addName(cc.getResult(), /*isPtr=*/false).str());
+    indent();
+    os << "Connections::Combinational< " << T << " > " << nm << ";\n";
   }
   // Submodule instance members: <callee> uN;
   SmallVector<std::string, 4> instNames;
@@ -964,6 +1006,11 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     }
     sep = ", ";
   }
+  for (auto cc : chanOps) {
+    std::string nm = std::string(getName(cc.getResult()).str());
+    os << sep << nm << "(\"" << nm << "\")";
+    sep = ", ";
+  }
   for (auto it : llvm::enumerate(calls)) {
     os << sep << instNames[it.index()] << "(\"" << instNames[it.index()]
        << "\")";
@@ -999,6 +1046,12 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
         std::string chan = std::string(getName(ov).str());
         if (sty.getDepth() != 0)
           chan += (streamDir(callee, opnd.index()) == 'o') ? "_in" : "_out";
+        indent();
+        os << instNames[it.index()] << "." << getName(carg) << "(" << chan
+           << ");\n";
+      } else if (llvm::isa<ChannelType>(ov.getType())) {
+        // channel operand -> bare Combinational (combinational, no _in/_out)
+        std::string chan = std::string(getName(ov).str());
         indent();
         os << instNames[it.index()] << "." << getName(carg) << "(" << chan
            << ");\n";
