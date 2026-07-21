@@ -193,6 +193,8 @@ private:
   void emitStreamPut(allo::StreamPutOp op) override;
   void emitChannelGet(allo::ChannelGetOp op) override;
   void emitChannelPut(allo::ChannelPutOp op) override;
+  void emitWireGet(allo::WireGetOp op) override;
+  void emitWirePut(allo::WirePutOp op) override;
   // Non-blocking: try_get/try_put -> Connections .PopNB()/.PushNB() (fire-on-valid).
   // empty()/full() have no synthesizable Connections equivalent -> errored.
   void emitStreamTryGet(allo::StreamTryGetOp op) override;
@@ -575,6 +577,13 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
       streamPorts.push_back(pn);
       os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
       os << getSCTypeName(ct.getBaseType()) << " > " << pn << ";\n";
+    } else if (auto wt = llvm::dyn_cast<WireType>(v.getType())) {
+      // wire arg -> raw sc_in/sc_out<T> port (combinational, no handshake).
+      // NOT added to streamPorts: sc ports have no Connections .Reset().
+      char d = streamDir(func, i);
+      std::string pn = std::string(addName(v, /*isPtr=*/false).str());
+      os << (d == 'o' ? "sc_out< " : "sc_in< ");
+      os << getSCTypeName(wt.getBaseType()) << " > " << pn << ";\n";
     } else if (auto mt = llvm::dyn_cast<MemRefType>(v.getType())) {
       char d = argDir(func, i);
       if ((d == 'i' || d == 'o') && isSeqStreamable(v)) {
@@ -663,6 +672,28 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
 
   reduceIndent();
   os << "};\n\n";
+}
+
+// Wire get: <result> = <wire>.read();  (raw combinational, no handshake)
+void SystemCModuleEmitter::emitWireGet(WireGetOp op) {
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  indent();
+  emitValue(result);
+  os << " = ";
+  emitValue(op->getOperand(0), 0, false);
+  os << ".read();";
+  emitInfoAndNewLine(op);
+}
+
+// Wire put: <wire>.write(<value>);  (raw combinational, no handshake)
+void SystemCModuleEmitter::emitWirePut(WirePutOp op) {
+  indent();
+  emitValue(op->getOperand(0), 0, false);
+  os << ".write(";
+  emitValue(op->getOperand(1));
+  os << ");";
+  emitInfoAndNewLine(op);
 }
 
 // Connections channel get: <result> = <channel>.Pop();  (scalar handshake link)
@@ -889,12 +920,15 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   // The top body is stream_construct(s) + call(s). Collect them.
   SmallVector<StreamConstructOp, 4> channels;
   SmallVector<ChannelConstructOp, 4> chanOps; // handshake channels (combinational)
+  SmallVector<WireConstructOp, 4> wireOps;    // raw combinational wires (sc_signal)
   SmallVector<func::CallOp, 4> calls;
   for (auto &op : func.front()) {
     if (auto sc = llvm::dyn_cast<StreamConstructOp>(&op))
       channels.push_back(sc);
     else if (auto cc = llvm::dyn_cast<ChannelConstructOp>(&op))
       chanOps.push_back(cc);
+    else if (auto wc = llvm::dyn_cast<WireConstructOp>(&op))
+      wireOps.push_back(wc);
     else if (auto call = llvm::dyn_cast<func::CallOp>(&op))
       calls.push_back(call);
   }
@@ -927,6 +961,14 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     std::string nm = std::string(addName(cc.getResult(), /*isPtr=*/false).str());
     indent();
     os << "Connections::Combinational< " << T << " > " << nm << ";\n";
+  }
+  // Wire members: a raw combinational wire is an sc_signal<T>.
+  for (auto wc : wireOps) {
+    auto wt = llvm::dyn_cast<WireType>(wc.getResult().getType());
+    std::string T = std::string(getSCTypeName(wt.getBaseType()).str());
+    std::string nm = std::string(addName(wc.getResult(), /*isPtr=*/false).str());
+    indent();
+    os << "sc_signal< " << T << " > " << nm << ";\n";
   }
   // Submodule instance members: <callee> uN;
   SmallVector<std::string, 4> instNames;
@@ -1011,6 +1053,11 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     os << sep << nm << "(\"" << nm << "\")";
     sep = ", ";
   }
+  for (auto wc : wireOps) {
+    std::string nm = std::string(getName(wc.getResult()).str());
+    os << sep << nm << "(\"" << nm << "\")";
+    sep = ", ";
+  }
   for (auto it : llvm::enumerate(calls)) {
     os << sep << instNames[it.index()] << "(\"" << instNames[it.index()]
        << "\")";
@@ -1054,6 +1101,12 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
         std::string chan = std::string(getName(ov).str());
         indent();
         os << instNames[it.index()] << "." << getName(carg) << "(" << chan
+           << ");\n";
+      } else if (llvm::isa<WireType>(ov.getType())) {
+        // wire operand -> sc_signal (raw combinational)
+        std::string sig = std::string(getName(ov).str());
+        indent();
+        os << instNames[it.index()] << "." << getName(carg) << "(" << sig
            << ");\n";
       } else if (llvm::isa<MemRefType>(ov.getType())) {
         char mp = memPortArgDir(carg);
