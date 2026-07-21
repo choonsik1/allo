@@ -87,6 +87,18 @@ public:
   virtual void emitStreamEmpty(allo::StreamEmptyOp op) {}
   virtual void emitStreamFull(allo::StreamFullOp op) {}
 
+  // Wire operations (combinational link).
+  virtual void emitWireConstruct(allo::WireConstructOp op) {}
+  virtual void emitWireGet(allo::WireGetOp op) {}
+  virtual void emitWirePut(allo::WirePutOp op) {}
+
+  // Channel operations (handshake link).
+  virtual void emitChannelConstruct(allo::ChannelConstructOp op) {}
+  virtual void emitChannelGet(allo::ChannelGetOp op) {}
+  virtual void emitChannelPut(allo::ChannelPutOp op) {}
+  virtual void emitChannelTryGet(allo::ChannelTryGetOp op) {}
+  virtual void emitChannelTryPut(allo::ChannelTryPutOp op) {}
+
   /// Top-level MLIR module emitter.
   virtual void emitModule(ModuleOp module) {}
 

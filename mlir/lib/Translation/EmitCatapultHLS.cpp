@@ -98,6 +98,18 @@ static SmallString<16> getCatapultTypeName(Type valType) {
         std::string(getCatapultTypeName(streamType.getBaseType()).c_str()) +
         " >");
 
+  else if (auto wireType = llvm::dyn_cast<WireType>(valType))
+    return SmallString<16>(
+        "ac_signal< " +
+        std::string(getCatapultTypeName(wireType.getBaseType()).c_str()) +
+        " >");
+
+  else if (auto channelType = llvm::dyn_cast<ChannelType>(valType))
+    return SmallString<16>(
+        "Connections::Combinational< " +
+        std::string(getCatapultTypeName(channelType.getBaseType()).c_str()) +
+        " >");
+
   else
     assert(1 == 0 && "Got unsupported type.");
 
@@ -122,6 +134,14 @@ public:
   void emitStreamConstruct(allo::StreamConstructOp op) override;
   void emitStreamTryGet(allo::StreamTryGetOp op) override;
   void emitStreamTryPut(allo::StreamTryPutOp op) override;
+  // Wire operations (ac_signal).
+  void emitWireConstruct(allo::WireConstructOp op) override;
+  void emitWireGet(allo::WireGetOp op) override;
+  void emitWirePut(allo::WirePutOp op) override;
+  // Channel operations (ac_channel).
+  void emitChannelConstruct(allo::ChannelConstructOp op) override;
+  void emitChannelGet(allo::ChannelGetOp op) override;
+  void emitChannelPut(allo::ChannelPutOp op) override;
   void emitStreamEmpty(allo::StreamEmptyOp op) override;
   void emitStreamFull(allo::StreamFullOp op) override;
   void emitArrayDirectives(Value memref) override;
@@ -318,6 +338,70 @@ void CatapultModuleEmitter::emitStreamConstruct(allo::StreamConstructOp op) {
   emitInfoAndNewLine(op);
 }
 
+// ---- Wire (combinational) -> ac_signal --------------------------------------
+// FIXME: modeled on ac_channel's .read()/.write(); confirm the ac_signal API
+// (read/write vs implicit-conversion/assignment) against the Catapult library.
+void CatapultModuleEmitter::emitWireConstruct(allo::WireConstructOp op) {
+  indent();
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  emitValue(result); // "ac_signal< T > vN"
+  os << ";\n";
+  emitInfoAndNewLine(op);
+}
+
+void CatapultModuleEmitter::emitWireGet(allo::WireGetOp op) {
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  indent();
+  emitValue(result);
+  os << " = ";
+  emitValue(op->getOperand(0), 0, false);
+  os << ".read();";
+  emitInfoAndNewLine(op);
+}
+
+void CatapultModuleEmitter::emitWirePut(allo::WirePutOp op) {
+  indent();
+  emitValue(op->getOperand(0), 0, false);
+  os << ".write(";
+  emitValue(op->getOperand(1));
+  os << ");";
+  emitInfoAndNewLine(op);
+}
+
+// ---- Channel (handshake) -> MatchLib Connections::Combinational -------------
+// The channel object is a Connections::Combinational<T>; kernel-arg ports are
+// Connections::In/Out<T> (see emitFunction); get/put use .Pop()/.Push().
+void CatapultModuleEmitter::emitChannelConstruct(allo::ChannelConstructOp op) {
+  indent();
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  emitValue(result); // "Connections::Combinational< T > vN"
+  os << ";\n";
+  emitInfoAndNewLine(op);
+}
+
+void CatapultModuleEmitter::emitChannelGet(allo::ChannelGetOp op) {
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  indent();
+  emitValue(result);
+  os << " = ";
+  emitValue(op->getOperand(0), 0, false);
+  os << ".Pop();";
+  emitInfoAndNewLine(op);
+}
+
+void CatapultModuleEmitter::emitChannelPut(allo::ChannelPutOp op) {
+  indent();
+  emitValue(op->getOperand(0), 0, false);
+  os << ".Push(";
+  emitValue(op->getOperand(1));
+  os << ");";
+  emitInfoAndNewLine(op);
+}
+
 void CatapultModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
   // Catapult synthesis: emit blocking read() instead of nb_read().
   // nb_read inside spin-while loops triggers Catapult go compile segfault (LOOP-19).
@@ -493,6 +577,11 @@ void CatapultModuleEmitter::emitFunction(func::FuncOp func) {
     for (unsigned i = 0; i < func.getNumArguments(); ++i)
       itypes += "x";
   }
+  // Per-arg link direction ('_' memref, 'i' in, 'o' out) -- used to pick
+  // Connections::In/Out for Channel ports.
+  std::string stypes = "";
+  if (func->hasAttr("stypes"))
+    stypes = llvm::cast<StringAttr>(func->getAttr("stypes")).getValue().str();
   for (auto &arg : func.getArguments()) {
     indent();
     fixUnsignedType(arg, itypes[argIdx] == 'u');
@@ -511,7 +600,15 @@ void CatapultModuleEmitter::emitFunction(func::FuncOp func) {
         emitArrayDecl(arg, true, input_args[argIdx]);
       }
     } else {
-      if (llvm::isa<StreamType>(arg.getType())) {
+      if (llvm::isa<ChannelType>(arg.getType())) {
+        // Channel -> MatchLib Connections directional port (In/Out by stypes).
+        char dir = (argIdx < stypes.size()) ? stypes[argIdx] : 'i';
+        auto chanTy = llvm::cast<ChannelType>(arg.getType());
+        os << (dir == 'o' ? "Connections::Out< " : "Connections::In< ")
+           << std::string(getCatapultTypeName(chanTy.getBaseType()).c_str())
+           << " > ";
+        os << addName(arg, false);
+      } else if (llvm::isa<StreamType>(arg.getType())) {
         // need to pass by reference - use Catapult-specific stream type
         os << getCatapultTypeName(arg.getType()) << "& ";
         os << addName(arg, false);
@@ -603,6 +700,8 @@ void CatapultModuleEmitter::emitModule(ModuleOp module) {
 #include <ac_int.h>
 #include <ac_fixed.h>
 #include <ac_channel.h>
+#include <ac_signal.h>
+#include <mc_connections.h>
 #include <ac_std_float.h>
 #include <math.h>
 #include <stdint.h>
@@ -627,6 +726,8 @@ using namespace std;
 #include <ac_int.h>
 #include <ac_fixed.h>
 #include <ac_channel.h>
+#include <ac_signal.h>
+#include <mc_connections.h>
 #include <math.h>
 #include <stdint.h>
 

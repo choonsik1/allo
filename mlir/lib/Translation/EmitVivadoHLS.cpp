@@ -658,6 +658,30 @@ public:
     return emitter.emitStreamFull(op), true;
   }
 
+  /// Wire operations.
+  bool visitOp(allo::WireConstructOp op) {
+    return emitter.emitWireConstruct(op), true;
+  }
+  bool visitOp(allo::WireGetOp op) { return emitter.emitWireGet(op), true; }
+  bool visitOp(allo::WirePutOp op) { return emitter.emitWirePut(op), true; }
+
+  /// Channel operations.
+  bool visitOp(allo::ChannelConstructOp op) {
+    return emitter.emitChannelConstruct(op), true;
+  }
+  bool visitOp(allo::ChannelGetOp op) {
+    return emitter.emitChannelGet(op), true;
+  }
+  bool visitOp(allo::ChannelPutOp op) {
+    return emitter.emitChannelPut(op), true;
+  }
+  bool visitOp(allo::ChannelTryGetOp op) {
+    return emitter.emitChannelTryGet(op), true;
+  }
+  bool visitOp(allo::ChannelTryPutOp op) {
+    return emitter.emitChannelTryPut(op), true;
+  }
+
 private:
   allo::hls::VhlsModuleEmitter &emitter;
 };
