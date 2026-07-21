@@ -559,6 +559,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
 
   // Ports + members from arguments.
   SmallVector<std::string, 4> streamPorts;
+  SmallVector<std::string, 4> wireOutPorts; // sc_out wire ports: need reset action
   for (auto arg : llvm::enumerate(func.getArguments())) {
     unsigned i = arg.index();
     Value v = arg.value();
@@ -579,9 +580,13 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
       os << getSCTypeName(ct.getBaseType()) << " > " << pn << ";\n";
     } else if (auto wt = llvm::dyn_cast<WireType>(v.getType())) {
       // wire arg -> raw sc_in/sc_out<T> port (combinational, no handshake).
-      // NOT added to streamPorts: sc ports have no Connections .Reset().
+      // NOT added to streamPorts: sc ports have no Connections .Reset(). A driven
+      // sc_out must still be set in the reset action (Catapult CIN-233), so an
+      // OUT wire is tracked separately in wireOutPorts.
       char d = streamDir(func, i);
       std::string pn = std::string(addName(v, /*isPtr=*/false).str());
+      if (d == 'o')
+        wireOutPorts.push_back(pn);
       os << (d == 'o' ? "sc_out< " : "sc_in< ");
       os << getSCTypeName(wt.getBaseType()) << " > " << pn << ";\n";
     } else if (auto mt = llvm::dyn_cast<MemRefType>(v.getType())) {
@@ -654,6 +659,10 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   addIndent();
   for (auto &pn : streamPorts) {
     indent(); os << pn << ".Reset();\n";
+  }
+  // Raw sc_out wire ports must be driven in the reset action (Catapult CIN-233).
+  for (auto &pn : wireOutPorts) {
+    indent(); os << pn << ".write(0);\n";
   }
   indent(); os << "wait();\n";
   // Single-shot: run the body EXACTLY ONCE, then idle. Free-running (while(1)
