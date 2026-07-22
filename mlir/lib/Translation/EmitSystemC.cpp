@@ -203,12 +203,26 @@ private:
   void emitSetBit(allo::SetIntBitOp op) override;
   void emitGetSlice(allo::GetIntSliceOp op) override;
   void emitSetSlice(allo::SetIntSliceOp op) override;
+
+  // Random-access accesses to a memory-port arg via the memref dialect (dynamic
+  // / 2-D indices) -- mirror the affine load/store rewrites (req.Push/rsp.Pop);
+  // non-mem-port memrefs (local %alloc arrays) fall back to the base emitter.
+  void emitLoad(memref::LoadOp op) override;
+  void emitStore(memref::StoreOp op) override;
   // If `v` is a df.kernel memref arg turned into a stream, its dir ('i'/'o'); else 0.
   char streamArgDir(Value v);
   // If `v` is a df.kernel memref arg that is directional but NOT sequentially
   // streamable (random/strided/2-D), it becomes a random-access MEMORY PORT.
   // Returns its dir ('i' read-only supported now; 'o'/'b' not yet), else 0.
   char memPortArgDir(Value v);
+  // Row-major flatten of direct (memref-dialect) index Values -> one C++ expr.
+  void emitFlatIndexMemref(ValueRange indices, ArrayRef<int64_t> shape);
+  // Shared memory-port transaction emitters (flat index supplied by callback,
+  // so the affine and memref call sites reuse the same req/rsp lowering).
+  void emitMemPortLoad(Value memref, Value result, bool isUnsigned,
+                       llvm::function_ref<void()> emitIdx);
+  void emitMemPortStore(Value memref, Value value,
+                        llvm::function_ref<void()> emitIdx);
   // True iff memref `v` is safe to stream: 1-D + only identity a[iv] load/stores.
   bool isSeqStreamable(Value v);
 
@@ -447,6 +461,100 @@ void SystemCModuleEmitter::emitFlatIndex(affine::AffineStoreOp op) {
   emitFlatIndexCore(op.getAffineMap(), mt.getShape(), operands);
 }
 
+// Row-major flatten of direct index Values (memref dialect): Σ idx[k]*stride[k].
+void SystemCModuleEmitter::emitFlatIndexMemref(ValueRange indices,
+                                               ArrayRef<int64_t> shape) {
+  unsigned n = indices.size();
+  SmallVector<int64_t> stride(n);
+  int64_t s = 1;
+  for (int k = (int)n - 1; k >= 0; --k) {
+    stride[k] = s;
+    s *= shape[k];
+  }
+  os << "(";
+  for (unsigned k = 0; k < n; ++k) {
+    if (k)
+      os << " + ";
+    os << "(" << std::string(getName(indices[k]).str()) << ")";
+    if (stride[k] != 1)
+      os << " * " << stride[k];
+  }
+  os << ")";
+}
+
+// LOAD from a random-access memory port: result = mem[idx] -> req.Push(LOAD,
+// addr); result = rsp.Pop();  (flat index emitted by `emitIdx`).
+void SystemCModuleEmitter::emitMemPortLoad(Value memref, Value result,
+                                           bool isUnsigned,
+                                           llvm::function_ref<void()> emitIdx) {
+  fixUnsignedType(result, isUnsigned);
+  auto mt = llvm::cast<MemRefType>(memref.getType());
+  int64_t total = 1;
+  for (auto d : mt.getShape())
+    total *= d;
+  std::string reqT = "ac_int<" +
+                     std::to_string(1 + scAddrW(total) +
+                                    scDataW(mt.getElementType())) +
+                     ", false>";
+  auto nm = getName(memref);
+  indent();
+  emitValue(result);
+  os << ";\n";
+  indent();
+  os << nm << "_req.Push( (" << reqT << ")(";
+  emitIdx();
+  os << ") << 1 );\n"; // opcode bit0 = 0 (LOAD), addr in bits [1..]
+  indent();
+  emitValue(result);
+  os << " = " << nm << "_rsp.Pop();";
+}
+
+// STORE to a random-access memory port: mem[idx] = value -> a packed req (no
+// response; AlloMem/AlloMemW applies it).  (flat index emitted by `emitIdx`.)
+void SystemCModuleEmitter::emitMemPortStore(Value memref, Value value,
+                                            llvm::function_ref<void()> emitIdx) {
+  auto mt = llvm::cast<MemRefType>(memref.getType());
+  int64_t total = 1;
+  for (auto d : mt.getShape())
+    total *= d;
+  unsigned addrw = scAddrW(total);
+  std::string reqT =
+      "ac_int<" + std::to_string(1 + addrw + scDataW(mt.getElementType())) +
+      ", false>";
+  auto nm = getName(memref);
+  indent();
+  // req = (wdata << (1+ADDRW)) | (addr << 1) | 1   (opcode bit0 = 1 = STORE)
+  os << nm << "_req.Push( ((" << reqT << ")(";
+  emitValue(value);
+  os << ") << " << (1 + addrw) << ") | ((" << reqT << ")(";
+  emitIdx();
+  os << ") << 1) | (" << reqT << ")1 );";
+}
+
+// memref.load: mem-port arg -> req/rsp; local %alloc array -> base emitter.
+void SystemCModuleEmitter::emitLoad(memref::LoadOp op) {
+  if (char d = memPortArgDir(op.getMemRef()); d == 'i' || d == 'b') {
+    auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
+    emitMemPortLoad(op.getMemRef(), op.getResult(), op->hasAttr("unsigned"),
+                    [&]() { emitFlatIndexMemref(op.getIndices(), mt.getShape()); });
+    emitInfoAndNewLine(op);
+    return;
+  }
+  VhlsModuleEmitter::emitLoad(op); // normal local-array load
+}
+
+// memref.store: mem-port arg -> req; local %alloc array -> base emitter.
+void SystemCModuleEmitter::emitStore(memref::StoreOp op) {
+  if (char d = memPortArgDir(op.getMemRef()); d == 'o' || d == 'b') {
+    auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
+    emitMemPortStore(op.getMemRef(), op.getValueToStore(),
+                     [&]() { emitFlatIndexMemref(op.getIndices(), mt.getShape()); });
+    emitInfoAndNewLine(op);
+    return;
+  }
+  VhlsModuleEmitter::emitStore(op); // normal local-array store
+}
+
 // For a region boundary arg, look up the kernel arg it feeds and return that
 // kernel arg's memory-port direction (0 if it is a normal stream boundary).
 char SystemCModuleEmitter::regArgMemPort(func::FuncOp top, Value regArg) {
@@ -578,27 +686,8 @@ void SystemCModuleEmitter::emitSetSlice(allo::SetIntSliceOp op) {
 void SystemCModuleEmitter::emitAffineLoad(affine::AffineLoadOp op) {
   // Random-access INPUT ('i') or read+write ('b') memory port: LOAD via req/resp.
   if (char d = memPortArgDir(op.getMemRef()); d == 'i' || d == 'b') {
-    Value result = op.getResult();
-    fixUnsignedType(result, op->hasAttr("unsigned"));
-    auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
-    int64_t total = 1;
-    for (auto d : mt.getShape())
-      total *= d;
-    std::string reqT = "ac_int<" +
-                       std::to_string(1 + scAddrW(total) +
-                                      scDataW(mt.getElementType())) +
-                       ", false>";
-    auto nm = getName(op.getMemRef());
-    indent();
-    emitValue(result);
-    os << ";\n";
-    indent();
-    os << nm << "_req.Push( (" << reqT << ")(";
-    emitFlatIndex(op);
-    os << ") << 1 );\n"; // opcode bit0 = 0 (LOAD), addr in bits [1..]
-    indent();
-    emitValue(result);
-    os << " = " << nm << "_rsp.Pop();";
+    emitMemPortLoad(op.getMemRef(), op.getResult(), op->hasAttr("unsigned"),
+                    [&]() { emitFlatIndex(op); });
     emitInfoAndNewLine(op);
     return;
   }
@@ -621,22 +710,8 @@ void SystemCModuleEmitter::emitAffineStore(affine::AffineStoreOp op) {
   // Random-access OUTPUT ('o') or read+write ('b') memory port: STORE via a
   // packed req (no response; the AlloMem/AlloMemW applies it).
   if (char d = memPortArgDir(op.getMemRef()); d == 'o' || d == 'b') {
-    auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
-    int64_t total = 1;
-    for (auto d : mt.getShape())
-      total *= d;
-    unsigned addrw = scAddrW(total);
-    std::string reqT =
-        "ac_int<" + std::to_string(1 + addrw + scDataW(mt.getElementType())) +
-        ", false>";
-    auto nm = getName(op.getMemRef());
-    indent();
-    // req = (wdata << (1+ADDRW)) | (addr << 1) | 1   (opcode bit0 = 1 = STORE)
-    os << nm << "_req.Push( ((" << reqT << ")(";
-    emitValue(op.getValueToStore());
-    os << ") << " << (1 + addrw) << ") | ((" << reqT << ")(";
-    emitFlatIndex(op);
-    os << ") << 1) | (" << reqT << ")1 );";
+    emitMemPortStore(op.getMemRef(), op.getValueToStore(),
+                     [&]() { emitFlatIndex(op); });
     emitInfoAndNewLine(op);
     return;
   }
