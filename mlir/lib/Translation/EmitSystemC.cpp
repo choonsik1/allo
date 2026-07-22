@@ -19,6 +19,7 @@
 #include "allo/Dialect/AlloOps.h"
 #include "allo/Dialect/Visitor.h"
 #include "allo/Translation/EmitVivadoHLS.h" // reuse the Vhls emitter base
+#include "allo/Translation/EmitCatapultHLS.h" // reuse Catapult's ac_int type map
 #include "allo/Translation/Utils.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -41,44 +42,10 @@ using namespace allo;
 //===----------------------------------------------------------------------===//
 
 static SmallString<32> getSCTypeName(Type valType) {
-  if (auto arrayType = llvm::dyn_cast<ShapedType>(valType))
-    valType = arrayType.getElementType();
-
-  if (llvm::isa<Float16Type>(valType))
-    return SmallString<32>("half");
-  else if (llvm::isa<Float32Type>(valType))
-    return SmallString<32>("float");
-  else if (llvm::isa<Float64Type>(valType))
-    return SmallString<32>("double");
-  else if (llvm::isa<IndexType>(valType))
-    return SmallString<32>("int");
-  else if (auto intType = llvm::dyn_cast<IntegerType>(valType)) {
-    if (intType.getWidth() == 1)
-      return SmallString<32>("bool");
-    std::string sign =
-        (intType.getSignedness() == IntegerType::SignednessSemantics::Unsigned)
-            ? "u"
-            : "";
-    switch (intType.getWidth()) {
-    case 8:
-    case 16:
-    case 32:
-    case 64:
-      return SmallString<32>(sign + "int" + std::to_string(intType.getWidth()) +
-                             "_t");
-    default:
-      return SmallString<32>("ap_" + sign + "int<" +
-                             std::to_string(intType.getWidth()) + ">");
-    }
-  } else if (auto fx = llvm::dyn_cast<allo::FixedType>(valType))
-    return SmallString<32>("ap_fixed<" + std::to_string(fx.getWidth()) + ", " +
-                           std::to_string(fx.getWidth() - fx.getFrac()) + ">");
-  else if (auto ufx = llvm::dyn_cast<allo::UFixedType>(valType))
-    return SmallString<32>("ap_ufixed<" + std::to_string(ufx.getWidth()) + ", " +
-                           std::to_string(ufx.getWidth() - ufx.getFrac()) + ">");
-
-  assert(false && "getSCTypeName: unsupported type");
-  return SmallString<32>();
+  // Delegate to the shared Catapult type mapping so the SystemC flow emits
+  // Catapult-native ac_int/ac_fixed/ac_ieee_float<binary32> instead of the
+  // Xilinx ap_int/ap_fixed this function used to hand-roll.
+  return SmallString<32>(allo::getCatapultTypeName(valType).str());
 }
 
 // Address width for a memory of `total` elements: ceil(log2(total)), min 1.
@@ -206,6 +173,12 @@ private:
   // stream port, so load a[i] -> port.Pop(), store b[i]=v -> port.Push(v).
   void emitAffineLoad(affine::AffineLoadOp op) override;
   void emitAffineStore(affine::AffineStoreOp op) override;
+
+  // The base emitValue uses EmitVivadoHLS's file-local getTypeName (ap_int/
+  // ap_fixed). Override so scalar SSA decls in kernel bodies get Catapult-native
+  // types (ac_int/ac_fixed) via getSCTypeName, matching the port/signal decls.
+  void emitValue(Value val, unsigned rank = 0, bool isPtr = false,
+                 std::string name = "") override;
   // If `v` is a df.kernel memref arg turned into a stream, its dir ('i'/'o'); else 0.
   char streamArgDir(Value v);
   // If `v` is a df.kernel memref arg that is directional but NOT sequentially
@@ -464,6 +437,32 @@ char SystemCModuleEmitter::regArgMemPort(func::FuncOp top, Value regArg) {
               return d;
         }
   return 0;
+}
+
+// Same shape as the base emitValue, but routes the type name through
+// getSCTypeName (-> Catapult ac_int/ac_fixed) instead of the base's file-local
+// getTypeName (-> Xilinx ap_int/ap_fixed).
+void SystemCModuleEmitter::emitValue(Value val, unsigned rank, bool isPtr,
+                                     std::string name) {
+  assert(!(rank && isPtr) && "should be either an array or a pointer.");
+
+  // Value has been declared before or is a constant number.
+  if (isDeclared(val)) {
+    os << getName(val);
+    for (unsigned i = 0; i < rank; ++i)
+      os << "[iv" << i << "]";
+    return;
+  }
+
+  os << getSCTypeName(val.getType()) << " ";
+
+  if (name == "") {
+    os << addName(val, isPtr);
+    for (unsigned i = 0; i < rank; ++i)
+      os << "[iv" << i << "]";
+  } else {
+    os << addName(val, isPtr, name);
+  }
 }
 
 // Sequential-stream read:  <result> = <port>.Pop();   (index ignored — in order)

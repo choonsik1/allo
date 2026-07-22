@@ -31,7 +31,7 @@ using namespace allo;
 // used for determine whether to generate C++ default types or ac_(u)int
 static bool BIT_FLAG = false;
 
-static SmallString<16> getCatapultTypeName(Type valType) {
+llvm::SmallString<16> mlir::allo::getCatapultTypeName(Type valType) {
   if (auto arrayType = llvm::dyn_cast<ShapedType>(valType))
     valType = arrayType.getElementType();
 
