@@ -525,7 +525,14 @@ void SystemCModuleEmitter::emitMemPortStore(Value memref, Value value,
   indent();
   // req = (wdata << (1+ADDRW)) | (addr << 1) | 1   (opcode bit0 = 1 = STORE)
   os << nm << "_req.Push( ((" << reqT << ")(";
+  // Transport the raw bit pattern for a half (an ac_int has no ctor from it);
+  // AlloMem/AlloMemW reconstruct via _mem_decode<T>.
+  bool isF16 = value.getType().isF16();
+  if (isF16)
+    os << "_f16_bits(";
   emitValue(value);
+  if (isF16)
+    os << ")";
   os << ") << " << (1 + addrw) << ") | ((" << reqT << ")(";
   emitIdx();
   os << ") << 1) | (" << reqT << ")1 );";
@@ -1381,6 +1388,24 @@ typedef ac_ieee_float<binary16> half;
 #include <iostream>
 #include <fstream>
 #include <algorithm>
+// --- fp16 (half) support helpers ---
+// half has no implicit int/stream conversions and is non-trivial, so memory
+// ports (which transport a raw bit pattern in an ac_int req word) and the
+// testbench (text I/O + waveform trace) need these shims.
+inline uint16_t _f16_bits(half h) { uint16_t b; std::memcpy(&b, &h, sizeof(b)); return b; }
+inline half _f16_from_bits(unsigned long long b) {
+  uint16_t u = (uint16_t)b; half h; std::memcpy(&h, &u, sizeof(u)); return h;
+}
+// Reconstruct a memory element from the DATAW raw bits: value-cast for integers,
+// bit-reinterpret for half (a value-cast would corrupt the float).
+template <typename T> inline T _mem_decode(unsigned long long r) { return (T)(long long)r; }
+template <> inline half _mem_decode<half>(unsigned long long r) { return _f16_from_bits(r); }
+// tb: data files hold float text -> read a float and convert.
+inline std::istream &operator>>(std::istream &is, half &h) { float f; is >> f; h = half(f); return is; }
+// tb/Connections waveform trace of a half (trace its 16-bit pattern).
+inline void sc_trace(sc_core::sc_trace_file *tf, const half &h, const std::string &n) {
+  sc_trace(tf, _f16_bits(const_cast<half &>(h)), n);
+}
 // Single-shot completion counter (csim/testbench ONLY). Each kernel bumps this
 // once, right after its body finishes its single pass; the sc_main testbench for
 // memory-mapped-output designs advances the clock until all kernels are done
@@ -1485,7 +1510,7 @@ SC_MODULE(AlloMem) {
       ac_int<1 + ADDRW + DATAW, false> r = req.Pop();
       ac_int<ADDRW, false> a = r.template slc<ADDRW>(1);
       if (r[0])
-        mem[a] = (T)(int64_t)r.template slc<DATAW>(1 + ADDRW).to_int64();
+        mem[a] = _mem_decode<T>(r.template slc<DATAW>(1 + ADDRW).to_int64());
       else
         rsp.Push(mem[a]);
       wait();
@@ -1512,12 +1537,12 @@ SC_MODULE(AlloMemW) {
   void run() {
     req.Reset();
     for (int z = 0; z < SIZE; z++) // 0-init so unwritten elements sum-merge as 0
-      mem[z] = 0;
+      mem[z] = _mem_decode<T>(0);
     wait();
     while (1) {
       ac_int<1 + ADDRW + DATAW, false> r = req.Pop();
       ac_int<ADDRW, false> a = r.template slc<ADDRW>(1);
-      mem[a] = (T)(int64_t)r.template slc<DATAW>(1 + ADDRW).to_int64();
+      mem[a] = _mem_decode<T>(r.template slc<DATAW>(1 + ADDRW).to_int64());
       wait();
     }
   }
@@ -1718,12 +1743,18 @@ SC_MODULE(AlloFifo) {
         os << "{ std::ofstream _f(\"output" << m.outIdx << ".data\");\n";
         indent();
         os << "  for (int f = 0; f < " << m.total << "; ++f) {\n";
+        // float memories (half) accumulate/write as float; integers as before.
+        bool isFloat = (m.ctype == "half");
         indent();
-        os << "    long long _s = 0;\n";
+        os << (isFloat ? "    float _s = 0;\n" : "    long long _s = 0;\n");
         for (auto &mi : memInsts)
           if (mi.dir != 'i' && mi.outIdx == m.outIdx) {
             indent();
-            os << "    _s += (long long) t.dut." << mi.chan << "_mem.mem[f];\n";
+            if (isFloat)
+              os << "    _s += t.dut." << mi.chan << "_mem.mem[f].to_float();\n";
+            else
+              os << "    _s += (long long) t.dut." << mi.chan
+                 << "_mem.mem[f];\n";
           }
         indent();
         os << "    _f << _s << \"\\n\";\n";
