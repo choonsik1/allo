@@ -144,10 +144,20 @@ static void flattenHierarchy(ModuleOp module) {
 
 namespace {
 
-class SystemCModuleEmitter : public allo::hls::VhlsModuleEmitter {
+// Re-parented onto CatapultModuleEmitter (instead of VhlsModuleEmitter) so the
+// SystemC flow reuses Catapult-native codegen: ac_int/ac_fixed types AND the
+// Catapult loop/design pragmas (#pragma hls_pipeline_init_interval / hls_unroll
+// / hls_design) via the inherited emitLoopDirectives -- the base Vivado emitter
+// would otherwise emit Xilinx "#pragma HLS ..." which Catapult ignores. This
+// emitter's own overrides (SC_MODULE structure, Connections/sc_signal links,
+// Pop/Push get-put, affine load/store) still win.
+class SystemCModuleEmitter : public allo::CatapultModuleEmitter {
 public:
   explicit SystemCModuleEmitter(AlloEmitterState &state)
-      : allo::hls::VhlsModuleEmitter(state) {}
+      : allo::CatapultModuleEmitter(state) {
+    // SystemC/Catapult-native flow: f16 constants -> explicit half(...) ctor.
+    state.acFloatConstCtor = true;
+  }
 
   void emitModule(ModuleOp module) override;
 
@@ -179,6 +189,20 @@ private:
   // types (ac_int/ac_fixed) via getSCTypeName, matching the port/signal decls.
   void emitValue(Value val, unsigned rank = 0, bool isPtr = false,
                  std::string name = "") override;
+  // The base emits a `union{ from; to; }` bit-converter for a bitcast; that has
+  // a deleted ctor when a member is non-trivial (ac_ieee_float<binary16>). Emit
+  // a std::memcpy bit-reinterpret instead (both operands are equal-width POD).
+  void emitBitcast(arith::BitcastOp op) override;
+
+  // Bit ops: the base emits the Vitis `ap_int` proxy forms (`x(hi,lo)`, `x[i]`)
+  // via the ap_int-subclass shim, which does not interoperate with ac_int
+  // (`ap_rng` won't assign to ac_int). Emit the NATIVE ac_int API instead:
+  //   get slice -> num.slc<W>(lo)      set slice -> res=num; res.set_slc(lo,val)
+  //   get bit   -> num[idx]            set bit   -> res=num; res[idx]=val
+  void emitGetBit(allo::GetIntBitOp op) override;
+  void emitSetBit(allo::SetIntBitOp op) override;
+  void emitGetSlice(allo::GetIntSliceOp op) override;
+  void emitSetSlice(allo::SetIntSliceOp op) override;
   // If `v` is a df.kernel memref arg turned into a stream, its dir ('i'/'o'); else 0.
   char streamArgDir(Value v);
   // If `v` is a df.kernel memref arg that is directional but NOT sequentially
@@ -463,6 +487,91 @@ void SystemCModuleEmitter::emitValue(Value val, unsigned rank, bool isPtr,
   } else {
     os << addName(val, isPtr, name);
   }
+}
+
+// bitcast (e.g. fp16 <-> uint16 packing) via std::memcpy. The base's union
+// converter has a deleted default ctor when a member is non-trivial, which
+// ac_ieee_float<binary16> ('half') is.
+void SystemCModuleEmitter::emitBitcast(arith::BitcastOp op) {
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  Value operand = op.getOperand();
+  fixUnsignedType(operand, op->hasAttr("unsigned"));
+
+  // Declare the result, then a same-width source temp, then memcpy the bits.
+  indent();
+  emitValue(result);
+  os << ";\n";
+  std::string rn = std::string(getName(result).str());
+  indent();
+  os << getSCTypeName(operand.getType()) << " _bc_" << rn << " = "
+     << std::string(getName(operand).str()) << ";\n";
+  indent();
+  os << "std::memcpy(&" << rn << ", &_bc_" << rn << ", sizeof(" << rn << "));";
+  emitInfoAndNewLine(op);
+}
+
+// --- native ac_int bit ops (replace the Vitis ap_int proxy forms) ---
+
+void SystemCModuleEmitter::emitGetBit(allo::GetIntBitOp op) {
+  indent();
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  emitValue(result); // declares "<T> <res>"
+  os << " = ";
+  emitValue(op.getNum());
+  os << "[";
+  emitValue(op.getIndex());
+  os << "];";
+  emitInfoAndNewLine(op);
+}
+
+void SystemCModuleEmitter::emitSetBit(allo::SetIntBitOp op) {
+  indent();
+  emitValue(op.getResult()); // "<T> <res>"
+  os << " = ";
+  emitValue(op.getNum());
+  os << ";\n";
+  indent();
+  os << std::string(getName(op.getResult()).str()) << "[";
+  emitValue(op.getIndex());
+  os << "] = ";
+  emitValue(op.getVal());
+  os << ";";
+  emitInfoAndNewLine(op);
+}
+
+void SystemCModuleEmitter::emitGetSlice(allo::GetIntSliceOp op) {
+  indent();
+  Value result = op.getResult();
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  unsigned w = result.getType().getIntOrFloatBitWidth();
+  emitValue(result); // "<T> <res>"
+  os << " = ";
+  emitValue(op.getNum());
+  os << ".slc<" << w << ">(";
+  emitValue(op.getLo());
+  os << ");";
+  emitInfoAndNewLine(op);
+}
+
+void SystemCModuleEmitter::emitSetSlice(allo::SetIntSliceOp op) {
+  indent();
+  emitValue(op.getResult()); // "<T> <res>"
+  os << " = ";
+  emitValue(op.getNum());
+  os << ";\n";
+  // ac_int::set_slc(lo, val) requires an ac_int val (its width = #bits set);
+  // the emitted val may be a plain C int (uint16_t) -> wrap it in an ac_int of
+  // the val's bit width so the right number of bits is written.
+  unsigned vw = op.getVal().getType().getIntOrFloatBitWidth();
+  indent();
+  os << std::string(getName(op.getResult()).str()) << ".set_slc(";
+  emitValue(op.getLo());
+  os << ", ac_int<" << vw << ", false>(";
+  emitValue(op.getVal());
+  os << "));";
+  emitInfoAndNewLine(op);
 }
 
 // Sequential-stream read:  <result> = <port>.Pop();   (index ignored — in order)
@@ -1188,7 +1297,12 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
 #include <mc_scverify.h>      // SCVerify testbench macros (CCS_MAIN / CCS_DESIGN)
 #include <ac_int.h>
 #include <ac_fixed.h>
+#include <ac_std_float.h>   // IEEE floats: ac_ieee_float<binaryNN>
+#include <cstring>          // std::memcpy for bit-reinterpret (bitcast)
 #include <stdint.h>
+// f16: Catapult has no native `half`; alias it to ac_ieee_float<binary16>.
+// (f32 -> ac_ieee_float<binary32> is emitted directly by getCatapultTypeName.)
+typedef ac_ieee_float<binary16> half;
 #include <iostream>
 #include <fstream>
 #include <algorithm>

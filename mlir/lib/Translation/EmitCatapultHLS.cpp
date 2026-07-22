@@ -104,64 +104,23 @@ llvm::SmallString<16> mlir::allo::getCatapultTypeName(Type valType) {
   return SmallString<16>();
 }
 
-namespace {
-// Catapult ModuleEmitter that inherits from Vivado HLS ModuleEmitter
-class CatapultModuleEmitter : public allo::hls::VhlsModuleEmitter {
-public:
-  using operand_range = Operation::operand_range;
-  explicit CatapultModuleEmitter(AlloEmitterState &state)
-      : allo::hls::VhlsModuleEmitter(state) {}
-
-  // Override methods that need Catapult-specific behavior
-  void emitModule(ModuleOp module) override;
-  void emitFunctionDirectives(func::FuncOp func,
-                              ArrayRef<Value> portList) override;
-  void emitArrayDecl(Value array, bool isFunc = false,
-                     std::string name = "") override;
-  void emitLoopDirectives(Operation *op) override;
-  void emitStreamConstruct(allo::StreamConstructOp op) override;
-  void emitStreamTryGet(allo::StreamTryGetOp op) override;
-  void emitStreamTryPut(allo::StreamTryPutOp op) override;
-  void emitStreamEmpty(allo::StreamEmptyOp op) override;
-  void emitStreamFull(allo::StreamFullOp op) override;
-  void emitArrayDirectives(Value memref) override;
-  void emitFunction(func::FuncOp func) override;
-
-protected:
-  void emitValue(Value val, unsigned rank = 0, bool isPtr = false,
-                 std::string name = "") override;
-  // Helper method to get Catapult-specific type names
-  SmallString<16> getTypeName(Type valType) {
-    return getCatapultTypeName(valType);
-  }
-  SmallString<16> getTypeName(Value val) {
-    return getCatapultTypeName(val.getType());
-  }
-
-  // Override stateful global element type to use ac_ieee_float<binary32>
-  // for f32 (nangate-45nm_beh doesn't support native float).
-  void emitStatefulGlobalElementType(Type type) override {
-    os << getCatapultTypeName(type);
-  }
-
-  // Override float array element emission to add 'f' suffix.
-  // ac_ieee_float<binary32> has no constructor from double literals;
-  // float literals (with 'f' suffix) convert via the float constructor.
-  void emitFloatArrayElement(float value) override {
-    if (std::isfinite(value)) {
-      // std::to_string gives 6 decimal places; append 'f' for float literal
-      os << std::to_string(value) << "f";
-    } else if (value > 0)
-      os << "INFINITY";
-    else
-      os << "-INFINITY";
-  }
-};
-} // namespace
-
 //===----------------------------------------------------------------------===//
 // Catapult-specific implementations
+//   (CatapultModuleEmitter is now declared in EmitCatapultHLS.h so downstream
+//    emitters -- e.g. EmitCatapultHLS2 -- can inherit its C++ compute codegen.)
 //===----------------------------------------------------------------------===//
+
+// ac_ieee_float<binary32> has no constructor from double literals; float
+// literals (with 'f' suffix) convert via the float constructor.
+void CatapultModuleEmitter::emitFloatArrayElement(float value) {
+  if (std::isfinite(value)) {
+    // std::to_string gives 6 decimal places; append 'f' for float literal
+    os << std::to_string(value) << "f";
+  } else if (value > 0)
+    os << "INFINITY";
+  else
+    os << "-INFINITY";
+}
 
 void CatapultModuleEmitter::emitValue(Value val, unsigned rank, bool isPtr,
                                       std::string name) {

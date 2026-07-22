@@ -43,6 +43,12 @@ public:
   // Configuration flags
   bool linearize_pointers = false;
 
+  // When set (SystemC/Catapult-native flow), emit f16 scalar constants as an
+  // explicit `half(<v>f)` construction -- ac_ieee_float<binary16> has no
+  // implicit double/float assignment. Left false for Vivado/Vitis (which uses
+  // hls::half, accepts bare literals) so that output stays byte-identical.
+  bool acFloatConstCtor = false;
+
   // Track which values are top-level function arguments (for linearization)
   DenseSet<Value> topLevelFunctionArgs;
 
