@@ -541,13 +541,13 @@ void SystemCModuleEmitter::emitMemPortStore(Value memref, Value value,
   indent();
   // req = (wdata << (1+ADDRW)) | (addr << 1) | 1   (opcode bit0 = 1 = STORE)
   os << nm << "_req.Push( ((" << reqT << ")(";
-  // Transport the raw bit pattern for a half (an ac_int has no ctor from it);
-  // AlloMem/AlloMemW reconstruct via _mem_decode<T>.
-  bool isF16 = value.getType().isF16();
-  if (isF16)
-    os << "_f16_bits(";
+  // Transport the raw bit pattern for a float (an ac_int has no ctor from
+  // half/ac_ieee_float); AlloMem/AlloMemW reconstruct via _mem_decode<T>.
+  bool isFloat = llvm::isa<FloatType>(value.getType());
+  if (isFloat)
+    os << "_fbits(";
   emitValue(value);
-  if (isF16)
+  if (isFloat)
     os << ")";
   os << ") << " << (1 + addrw) << ") | ((" << reqT << ")(";
   emitIdx();
@@ -1437,23 +1437,40 @@ typedef ac_ieee_float<binary16> half;
 #include <iostream>
 #include <fstream>
 #include <algorithm>
-// --- fp16 (half) support helpers ---
-// half has no implicit int/stream conversions and is non-trivial, so memory
-// ports (which transport a raw bit pattern in an ac_int req word) and the
+// --- float support helpers (half / ac_ieee_float<binary32> / double) ---
+// Floats have no implicit int/stream conversions (and half is non-trivial), so
+// memory ports (which transport a raw bit pattern in an ac_int req word) and the
 // testbench (text I/O + waveform trace) need these shims.
-inline uint16_t _f16_bits(half h) { uint16_t b; std::memcpy(&b, &h, sizeof(b)); return b; }
-inline half _f16_from_bits(unsigned long long b) {
-  uint16_t u = (uint16_t)b; half h; std::memcpy(&h, &u, sizeof(u)); return h;
+// float -> raw bits (memcpy handles half=2B, ac_ieee_float<binary32>=4B, double=8B).
+template <class T> inline unsigned long long _fbits(const T &v) {
+  unsigned long long b = 0; std::memcpy(&b, &v, sizeof(T)); return b;
 }
 // Reconstruct a memory element from the DATAW raw bits: value-cast for integers,
-// bit-reinterpret for half (a value-cast would corrupt the float).
+// bit-reinterpret for floats (a value-cast would corrupt the float).
 template <typename T> inline T _mem_decode(unsigned long long r) { return (T)(long long)r; }
-template <> inline half _mem_decode<half>(unsigned long long r) { return _f16_from_bits(r); }
+template <> inline half _mem_decode<half>(unsigned long long r) {
+  uint16_t u = (uint16_t)r; half h; std::memcpy(&h, &u, sizeof(u)); return h;
+}
+template <>
+inline ac_ieee_float<binary32> _mem_decode<ac_ieee_float<binary32> >(unsigned long long r) {
+  uint32_t u = (uint32_t)r; ac_ieee_float<binary32> f; std::memcpy(&f, &u, sizeof(u)); return f;
+}
+template <> inline double _mem_decode<double>(unsigned long long r) {
+  double d; std::memcpy(&d, &r, sizeof(d)); return d;
+}
 // tb: data files hold float text -> read a float and convert.
 inline std::istream &operator>>(std::istream &is, half &h) { float f; is >> f; h = half(f); return is; }
-// tb/Connections waveform trace of a half (trace its 16-bit pattern).
+inline std::istream &operator>>(std::istream &is, ac_ieee_float<binary32> &h) {
+  float f; is >> f; h = ac_ieee_float<binary32>(f); return is;
+}
+// tb/Connections waveform trace of a float (trace its raw bit pattern). Needed
+// because Connections/sc_signal ports templated on these types call sc_trace.
 inline void sc_trace(sc_core::sc_trace_file *tf, const half &h, const std::string &n) {
-  sc_trace(tf, _f16_bits(const_cast<half &>(h)), n);
+  sc_trace(tf, (unsigned short)_fbits(h), n);
+}
+inline void sc_trace(sc_core::sc_trace_file *tf, const ac_ieee_float<binary32> &h,
+                     const std::string &n) {
+  sc_trace(tf, (unsigned)_fbits(h), n);
 }
 // Single-shot completion counter (csim/testbench ONLY). Each kernel bumps this
 // once, right after its body finishes its single pass; the sc_main testbench for
@@ -1792,8 +1809,9 @@ SC_MODULE(AlloFifo) {
         os << "{ std::ofstream _f(\"output" << m.outIdx << ".data\");\n";
         indent();
         os << "  for (int f = 0; f < " << m.total << "; ++f) {\n";
-        // float memories (half) accumulate/write as float; integers as before.
-        bool isFloat = (m.ctype == "half");
+        // float memories accumulate/write as float; integers as before.
+        bool isFloat = (m.ctype == "half" || m.ctype == "double" ||
+                        m.ctype.find("ieee_float") != std::string::npos);
         indent();
         os << (isFloat ? "    float _s = 0;\n" : "    long long _s = 0;\n");
         for (auto &mi : memInsts)
