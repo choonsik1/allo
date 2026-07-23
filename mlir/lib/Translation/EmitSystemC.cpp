@@ -42,9 +42,25 @@ using namespace allo;
 //===----------------------------------------------------------------------===//
 
 static SmallString<32> getSCTypeName(Type valType) {
+  // For integers WIDER than 64 bits, use the ap_int shim (an ac_int subclass,
+  // defined in the preamble) rather than a plain ac_int: ac_int omits the
+  // implicit >64-bit narrowing to a native int (e.g. `int x = <ac_int<66>>`),
+  // which the shim provides via operator long long(). (<=64-bit and non-integer
+  // types get Catapult-native ac_int/ac_fixed/ac_ieee_float from the shared map.
+  // Under __SYNTHESIS__ the shim is a plain ac_int alias, so RTL is unaffected.)
+  Type scalar = valType;
+  if (auto st = llvm::dyn_cast<ShapedType>(scalar))
+    scalar = st.getElementType();
+  if (auto it = llvm::dyn_cast<IntegerType>(scalar)) {
+    if (it.getWidth() > 64) {
+      bool uns =
+          it.getSignedness() == IntegerType::SignednessSemantics::Unsigned;
+      return SmallString<32>((uns ? "ap_uint<" : "ap_int<") +
+                             std::to_string(it.getWidth()) + ">");
+    }
+  }
   // Delegate to the shared Catapult type mapping so the SystemC flow emits
-  // Catapult-native ac_int/ac_fixed/ac_ieee_float<binary32> instead of the
-  // Xilinx ap_int/ap_fixed this function used to hand-roll.
+  // Catapult-native ac_int/ac_fixed/ac_ieee_float<binary32>.
   return SmallString<32>(allo::getCatapultTypeName(valType).str());
 }
 
@@ -629,63 +645,96 @@ void SystemCModuleEmitter::emitBitcast(arith::BitcastOp op) {
 // --- native ac_int bit ops (replace the Vitis ap_int proxy forms) ---
 
 void SystemCModuleEmitter::emitGetBit(allo::GetIntBitOp op) {
-  indent();
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
+  Value num = op.getNum();
+  unsigned nw = num.getType().getIntOrFloatBitWidth();
+  indent();
   emitValue(result); // declares "<T> <res>"
-  os << " = ";
-  emitValue(op.getNum());
-  os << "[";
+  os << ";\n";
+  std::string rn = std::string(getName(result).str());
+  // num may be a native C int (int32_t) with no bit-index op -> copy into an
+  // ac_int temp first, which always supports [i]/.slc/.set_slc.
+  indent();
+  os << "ac_int<" << nw << ", true> _bs_" << rn << " = ";
+  emitValue(num);
+  os << ";\n";
+  indent();
+  os << rn << " = _bs_" << rn << "[";
   emitValue(op.getIndex());
   os << "];";
   emitInfoAndNewLine(op);
 }
 
 void SystemCModuleEmitter::emitSetBit(allo::SetIntBitOp op) {
+  Value result = op.getResult();
+  Value num = op.getNum();
+  unsigned nw = num.getType().getIntOrFloatBitWidth();
   indent();
-  emitValue(op.getResult()); // "<T> <res>"
-  os << " = ";
-  emitValue(op.getNum());
+  emitValue(result); // "<T> <res>"
+  os << ";\n";
+  std::string rn = std::string(getName(result).str());
+  indent();
+  os << "ac_int<" << nw << ", true> _bs_" << rn << " = ";
+  emitValue(num);
   os << ";\n";
   indent();
-  os << std::string(getName(op.getResult()).str()) << "[";
+  os << "_bs_" << rn << "[";
   emitValue(op.getIndex());
   os << "] = ";
   emitValue(op.getVal());
-  os << ";";
+  os << ";\n";
+  indent();
+  os << rn << " = _bs_" << rn << ";";
   emitInfoAndNewLine(op);
 }
 
 void SystemCModuleEmitter::emitGetSlice(allo::GetIntSliceOp op) {
-  indent();
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
+  Value num = op.getNum();
+  unsigned nw = num.getType().getIntOrFloatBitWidth();
   unsigned w = result.getType().getIntOrFloatBitWidth();
+  indent();
   emitValue(result); // "<T> <res>"
-  os << " = ";
-  emitValue(op.getNum());
-  os << ".slc<" << w << ">(";
+  os << ";\n";
+  std::string rn = std::string(getName(result).str());
+  indent();
+  os << "ac_int<" << nw << ", true> _bs_" << rn << " = ";
+  emitValue(num);
+  os << ";\n";
+  indent();
+  os << rn << " = _bs_" << rn << ".slc<" << w << ">(";
   emitValue(op.getLo());
   os << ");";
   emitInfoAndNewLine(op);
 }
 
 void SystemCModuleEmitter::emitSetSlice(allo::SetIntSliceOp op) {
-  indent();
-  emitValue(op.getResult()); // "<T> <res>"
-  os << " = ";
-  emitValue(op.getNum());
-  os << ";\n";
+  Value result = op.getResult();
+  Value num = op.getNum();
+  unsigned nw = num.getType().getIntOrFloatBitWidth();
   // ac_int::set_slc(lo, val) requires an ac_int val (its width = #bits set);
-  // the emitted val may be a plain C int (uint16_t) -> wrap it in an ac_int of
-  // the val's bit width so the right number of bits is written.
+  // the emitted val may be a plain C int -> wrap it in an ac_int of the val's
+  // bit width so the right number of bits is written. The dst likewise needs an
+  // ac_int temp (a native int32_t has no .set_slc).
   unsigned vw = op.getVal().getType().getIntOrFloatBitWidth();
   indent();
-  os << std::string(getName(op.getResult()).str()) << ".set_slc(";
+  emitValue(result); // "<T> <res>"
+  os << ";\n";
+  std::string rn = std::string(getName(result).str());
+  indent();
+  os << "ac_int<" << nw << ", true> _bs_" << rn << " = ";
+  emitValue(num);
+  os << ";\n";
+  indent();
+  os << "_bs_" << rn << ".set_slc(";
   emitValue(op.getLo());
   os << ", ac_int<" << vw << ", false>(";
   emitValue(op.getVal());
-  os << "));";
+  os << "));\n";
+  indent();
+  os << rn << " = _bs_" << rn << ";";
   emitInfoAndNewLine(op);
 }
 
