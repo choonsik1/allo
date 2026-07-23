@@ -1867,9 +1867,14 @@ SC_MODULE(AlloFifo) {
     for (auto &a : ioArrays)
       if (a.dir == 'i') {
         indent();
-        os << "{ std::ifstream _f(\"input" << a.fileIdx << ".data\"); " << a.ctype
+        // Wide read temp so a char-width element (int8_t/uint8_t) parses as an
+        // integer, not a single character (see the memory-port preload note).
+        bool isF = (a.ctype == "half" || a.ctype == "double" ||
+                    a.ctype.find("ieee_float") != std::string::npos);
+        std::string rt = isF ? a.ctype : std::string("long long");
+        os << "{ std::ifstream _f(\"input" << a.fileIdx << ".data\"); " << rt
            << " _v; for (int f = 0; f < " << a.total << "; ++f) { _f >> _v; ch_"
-           << a.member << ".Push(_v); } }\n";
+           << a.member << ".Push((" << a.ctype << ")_v); } }\n";
       }
     reduceIndent();
     indent(); os << "}\n";
@@ -1894,9 +1899,21 @@ SC_MODULE(AlloFifo) {
     for (auto &a : ioArrays)
       if (a.dir == 'o') {
         indent();
-        os << "{ std::ofstream _f(\"output" << a.fileIdx
-           << ".data\"); for (int f = 0; f < " << a.total << "; ++f) _f << ch_"
-           << a.member << ".Pop() << \"\\n\"; }\n";
+        // Symmetric to the input read: cast a char-width element to a wide int so
+        // operator<< prints its NUMERIC value, not a character; floats keep full
+        // round-trippable precision.
+        bool isF = (a.ctype == "half" || a.ctype == "double" ||
+                    a.ctype.find("ieee_float") != std::string::npos);
+        if (isF)
+          os << "{ std::ofstream _f(\"output" << a.fileIdx
+             << ".data\"); for (int f = 0; f < " << a.total
+             << "; ++f) _f << std::setprecision(9) << ch_" << a.member
+             << ".Pop() << \"\\n\"; }\n";
+        else
+          os << "{ std::ofstream _f(\"output" << a.fileIdx
+             << ".data\"); for (int f = 0; f < " << a.total
+             << "; ++f) _f << (long long)(ch_" << a.member
+             << ".Pop()) << \"\\n\"; }\n";
       }
     if (hasStreamOut) { indent(); os << "sc_stop();\n"; }
     reduceIndent();
@@ -1913,9 +1930,16 @@ SC_MODULE(AlloFifo) {
     for (auto &mi : memInsts)
       if (mi.dir != 'o') { // 'i' and 'b' preload from their input file
         indent();
-        os << "{ std::ifstream _f(\"input" << mi.inIdx << ".data\"); "
-           << mi.ctype << " _v; for (int f = 0; f < " << mi.total
-           << "; ++f) { _f >> _v; t.dut." << mi.chan << "_mem.mem[f] = _v; } }\n";
+        // Read integers into a WIDE temp: a char-width element (int8_t/uint8_t is
+        // signed/unsigned char) would otherwise trigger operator>>'s FORMATTED
+        // CHARACTER extraction (reads '6','5' from "65"), not integer parsing.
+        // Floats keep their own operator>> overload.
+        bool isF = (mi.ctype == "half" || mi.ctype == "double" ||
+                    mi.ctype.find("ieee_float") != std::string::npos);
+        std::string rt = isF ? mi.ctype : std::string("long long");
+        os << "{ std::ifstream _f(\"input" << mi.inIdx << ".data\"); " << rt
+           << " _v; for (int f = 0; f < " << mi.total << "; ++f) { _f >> _v; t.dut."
+           << mi.chan << "_mem.mem[f] = (" << mi.ctype << ")_v; } }\n";
       }
     indent(); os << "t.rst = 0; sc_start(1, SC_NS);\n";
     // A stream output stops the sim via sc_stop (self-synchronizing: the sink
