@@ -1498,6 +1498,7 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
 typedef ac_ieee_float<binary16> half;
 #include <iostream>
 #include <fstream>
+#include <iomanip>          // std::setprecision for lossless float tb output
 #include <algorithm>
 // --- float support helpers (half / ac_ieee_float<binary32> / double) ---
 // Floats have no implicit int/stream conversions (and half is non-trivial), so
@@ -1886,7 +1887,12 @@ SC_MODULE(AlloFifo) {
                  << "_mem.mem[f];\n";
           }
         indent();
-        os << "    _f << _s << \"\\n\";\n";
+        // float outputs: write full round-trippable precision (float32 needs 9
+        // significant digits) so the data-file text doesn't lose bits.
+        if (isFloat)
+          os << "    _f << std::setprecision(9) << _s << \"\\n\";\n";
+        else
+          os << "    _f << _s << \"\\n\";\n";
         indent();
         os << "  } }\n";
       }
