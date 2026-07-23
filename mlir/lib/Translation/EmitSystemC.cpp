@@ -302,6 +302,14 @@ private:
   };
   SmallVector<MemInst> memInsts;
 
+  // A stream used by exactly ONE kernel (a self-FIFO: one kernel does
+  // put+get+empty+full) can't map to a directional Connections port pair, so it
+  // is realized as a local ac_channel member and its ops route to the inherited
+  // Catapult (ac_channel) implementations.
+  llvm::DenseSet<Value> localStreamArgs;       // the kernel block-arg Values
+  llvm::DenseSet<Value> localStreamConstructs; // the top-level construct results
+  bool isLocalStream(Value v) { return localStreamArgs.count(v) > 0; }
+
   // Number of df.kernel MODULE INSTANCES in the top (calls.size()). The single-
   // shot testbench advances the clock until this many kernels have finished one
   // pass (each bumps the csim-only __allo_done counter) before reading memory.
@@ -804,12 +812,19 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
     Value v = arg.value();
     indent();
     if (auto st = llvm::dyn_cast<StreamType>(v.getType())) {
-      // stream arg -> Connections::In/Out<T> port (direction from stypes)
-      char d = streamDir(func, i);
       std::string pn = std::string(addName(v, /*isPtr=*/false).str());
-      streamPorts.push_back(pn);
-      os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
-      os << getSCTypeName(st.getBaseType()) << " > " << pn << ";\n";
+      if (isLocalStream(v)) {
+        // self-FIFO (one kernel put+get+status): a local ac_channel member; its
+        // ops route to the inherited Catapult ac_channel impls, NOT a port.
+        os << "ac_channel< " << getSCTypeName(st.getBaseType()) << " > " << pn
+           << ";\n";
+      } else {
+        // stream arg -> Connections::In/Out<T> port (direction from stypes)
+        char d = streamDir(func, i);
+        streamPorts.push_back(pn);
+        os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
+        os << getSCTypeName(st.getBaseType()) << " > " << pn << ";\n";
+      }
     } else if (auto ct = llvm::dyn_cast<ChannelType>(v.getType())) {
       // channel arg -> Connections::In/Out<T> port (combinational, no buffer)
       char d = streamDir(func, i);
@@ -969,6 +984,8 @@ void SystemCModuleEmitter::emitChannelPut(ChannelPutOp op) {
 // Connections get: <result> = <stream>[indices].Pop();
 // (Base scalar path, with .read() -> .Pop(); block-streams deferred.)
 void SystemCModuleEmitter::emitStreamGet(StreamGetOp op) {
+  if (isLocalStream(op->getOperand(0)))
+    return CatapultModuleEmitter::emitStreamGet(op); // local ac_channel .read()
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   auto stream = op->getOperand(0);
@@ -1007,6 +1024,8 @@ void SystemCModuleEmitter::emitStreamGet(StreamGetOp op) {
 // Connections put: <stream>[indices].Push(<value>);
 // (Base scalar path, with .write(v) -> .Push(v); block-streams deferred.)
 void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
+  if (isLocalStream(op->getOperand(0)))
+    return CatapultModuleEmitter::emitStreamPut(op); // local ac_channel .write()
   auto stream = op->getOperand(0);
   int rank = 0;
   if (llvm::isa<StreamType>(stream.getType())) {
@@ -1043,6 +1062,8 @@ void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
 // Non-blocking get: <result>; <success> = <stream>[idx].PopNB(<result>);
 // (Base try_get path, with .read_nb -> .PopNB.)
 void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
+  if (isLocalStream(op->getOperand(0)))
+    return CatapultModuleEmitter::emitStreamTryGet(op); // local ac_channel
   Value result = op.getResult(0);
   Value success = op.getResult(1);
   fixUnsignedType(result, op->hasAttr("unsigned"));
@@ -1068,6 +1089,8 @@ void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
 
 // Non-blocking put: <success> = <stream>[idx].PushNB(<value>);
 void SystemCModuleEmitter::emitStreamTryPut(StreamTryPutOp op) {
+  if (isLocalStream(op->getOperand(0)))
+    return CatapultModuleEmitter::emitStreamTryPut(op); // local ac_channel
   Value success = op.getResult();
   auto stream = op->getOperand(0);
   auto value = op->getOperand(1);
@@ -1094,6 +1117,8 @@ void SystemCModuleEmitter::emitStreamTryPut(StreamTryPutOp op) {
 // strict CONNECTIONS_ASSERT_ON_QUERY flag (off by default), so they are
 // csim-faithful (like try_get/try_put, prefer a one-shot check, not a spin).
 void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
+  if (isLocalStream(op->getOperand(0)))
+    return CatapultModuleEmitter::emitStreamEmpty(op); // !ac_channel.available(1)
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   auto stream = op->getOperand(0);
@@ -1109,6 +1134,8 @@ void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
   emitInfoAndNewLine(op);
 }
 void SystemCModuleEmitter::emitStreamFull(StreamFullOp op) {
+  if (isLocalStream(op->getOperand(0)))
+    return CatapultModuleEmitter::emitStreamFull(op); // ac_channel: false
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   auto stream = op->getOperand(0);
@@ -1186,6 +1213,8 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   //   depth 0  -> a bare Connections::Combinational (combinational wire)
   //   depth>=1 -> an AlloFifo<T,depth> between two _in/_out wires (buffered)
   for (auto sc : channels) {
+    if (localStreamConstructs.count(sc.getResult()))
+      continue; // self-FIFO: lives as a local ac_channel in its one kernel
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
     std::string T = std::string(getSCTypeName(st.getBaseType()).str());
     std::string nm = std::string(addName(sc.getResult(), /*isPtr=*/false).str());
@@ -1285,6 +1314,8 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     sep = ", ";
   }
   for (auto sc : channels) {
+    if (localStreamConstructs.count(sc.getResult()))
+      continue; // self-FIFO: local ac_channel, no top-level member to init
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
     std::string nm = std::string(getName(sc.getResult()).str());
     if (st.getDepth() == 0) {
@@ -1335,6 +1366,8 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       Value ov = opnd.value();
       Value carg = callee.getArgument(opnd.index());
       if (auto sty = llvm::dyn_cast<StreamType>(ov.getType())) {
+        if (localStreamConstructs.count(ov))
+          continue; // self-FIFO: local ac_channel member, no port to bind
         // stream operand -> stream channel. For a buffered stream (depth>=1) the
         // producer (Out) binds the FIFO's input wire, the consumer (In) its
         // output wire; a depth-0 stream is the bare Combinational.
@@ -1384,6 +1417,8 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   }
   // Wire each buffered-stream FIFO: clk/rst + its _in/_out wires.
   for (auto sc : channels) {
+    if (localStreamConstructs.count(sc.getResult()))
+      continue; // self-FIFO: no top-level FIFO, it's local to its kernel
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
     if (st.getDepth() == 0)
       continue;
@@ -1419,6 +1454,32 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
   // flat top before emission — SystemC can't nest regions inside a thread.
   flattenHierarchy(module);
 
+  // A stream passed to exactly ONE kernel call is a self-FIFO (one kernel both
+  // produces and queries it) -> realize as a local ac_channel, not a directional
+  // Connections port. Mark the construct result + the callee's block arg.
+  for (auto topf : module.getOps<func::FuncOp>()) {
+    if (!topf->hasAttr("dataflow"))
+      continue;
+    llvm::DenseMap<Value, int> cnt;
+    SmallVector<func::CallOp> callv;
+    topf.walk([&](func::CallOp c) {
+      callv.push_back(c);
+      for (Value o : c.getArgOperands())
+        if (llvm::isa<StreamType>(o.getType()))
+          cnt[o]++;
+    });
+    for (auto c : callv) {
+      auto callee = module.lookupSymbol<func::FuncOp>(c.getCallee());
+      if (!callee)
+        continue;
+      for (auto it : llvm::enumerate(c.getArgOperands()))
+        if (llvm::isa<StreamType>(it.value().getType()) && cnt[it.value()] == 1) {
+          localStreamConstructs.insert(it.value());
+          localStreamArgs.insert(callee.getArgument(it.index()));
+        }
+    }
+  }
+
   std::string device_header = R"XXX(
 //===------------------------------------------------------------*- C++ -*-===//
 // Automatically generated file for SystemC (Catapult HLS / MatchLib Connections).
@@ -1428,6 +1489,7 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
 #include <mc_scverify.h>      // SCVerify testbench macros (CCS_MAIN / CCS_DESIGN)
 #include <ac_int.h>
 #include <ac_fixed.h>
+#include <ac_channel.h>     // local self-FIFO streams (one-kernel put+get+status)
 #include <ac_std_float.h>   // IEEE floats: ac_ieee_float<binaryNN>
 #include <cstring>          // std::memcpy for bit-reinterpret (bitcast)
 #include <stdint.h>
