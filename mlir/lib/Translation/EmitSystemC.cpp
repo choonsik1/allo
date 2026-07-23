@@ -814,10 +814,18 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
     if (auto st = llvm::dyn_cast<StreamType>(v.getType())) {
       std::string pn = std::string(addName(v, /*isPtr=*/false).str());
       if (isLocalStream(v)) {
-        // self-FIFO (one kernel put+get+status): a local ac_channel member; its
-        // ops route to the inherited Catapult ac_channel impls, NOT a port.
-        os << "ac_channel< " << getSCTypeName(st.getBaseType()) << " > " << pn
-           << ";\n";
+        // self-FIFO (one kernel both produces AND queries it): realized as a
+        // bounded MatchLib AlloFifo wired as a self-loop at the top. This one
+        // kernel therefore needs BOTH ends -- an Out (enq: put/try_put/full) and
+        // an In (deq: get/try_get/empty). A bounded FIFO makes Full()/Empty()
+        // correct, unlike an unbounded ac_channel.
+        std::string T = std::string(getSCTypeName(st.getBaseType()).str());
+        std::string en = pn + "_enq", dq = pn + "_deq";
+        streamPorts.push_back(en);
+        streamPorts.push_back(dq);
+        os << "Connections::Out< " << T << " > " << en << ";\n";
+        indent();
+        os << "Connections::In< " << T << " > " << dq << ";\n";
       } else {
         // stream arg -> Connections::In/Out<T> port (direction from stypes)
         char d = streamDir(func, i);
@@ -984,8 +992,16 @@ void SystemCModuleEmitter::emitChannelPut(ChannelPutOp op) {
 // Connections get: <result> = <stream>[indices].Pop();
 // (Base scalar path, with .read() -> .Pop(); block-streams deferred.)
 void SystemCModuleEmitter::emitStreamGet(StreamGetOp op) {
-  if (isLocalStream(op->getOperand(0)))
-    return CatapultModuleEmitter::emitStreamGet(op); // local ac_channel .read()
+  if (isLocalStream(op->getOperand(0))) {
+    // self-FIFO consumer end: <result> = <stream>_deq.Pop();
+    Value result = op.getResult();
+    fixUnsignedType(result, op->hasAttr("unsigned"));
+    indent();
+    emitValue(result);
+    os << " = " << std::string(getName(op->getOperand(0)).str()) << "_deq.Pop();";
+    emitInfoAndNewLine(op);
+    return;
+  }
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   auto stream = op->getOperand(0);
@@ -1024,8 +1040,15 @@ void SystemCModuleEmitter::emitStreamGet(StreamGetOp op) {
 // Connections put: <stream>[indices].Push(<value>);
 // (Base scalar path, with .write(v) -> .Push(v); block-streams deferred.)
 void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
-  if (isLocalStream(op->getOperand(0)))
-    return CatapultModuleEmitter::emitStreamPut(op); // local ac_channel .write()
+  if (isLocalStream(op->getOperand(0))) {
+    // self-FIFO producer end: <stream>_enq.Push(<value>);
+    indent();
+    os << std::string(getName(op->getOperand(0)).str()) << "_enq.Push(";
+    emitValue(op->getOperand(1));
+    os << ");";
+    emitInfoAndNewLine(op);
+    return;
+  }
   auto stream = op->getOperand(0);
   int rank = 0;
   if (llvm::isa<StreamType>(stream.getType())) {
@@ -1062,8 +1085,21 @@ void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
 // Non-blocking get: <result>; <success> = <stream>[idx].PopNB(<result>);
 // (Base try_get path, with .read_nb -> .PopNB.)
 void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
-  if (isLocalStream(op->getOperand(0)))
-    return CatapultModuleEmitter::emitStreamTryGet(op); // local ac_channel
+  if (isLocalStream(op->getOperand(0))) {
+    // self-FIFO consumer end: <result>; <success> = <stream>_deq.PopNB(<result>);
+    Value r = op.getResult(0), s = op.getResult(1);
+    fixUnsignedType(r, op->hasAttr("unsigned"));
+    indent();
+    emitValue(r);
+    os << ";\n";
+    indent();
+    emitValue(s);
+    os << " = " << std::string(getName(op->getOperand(0)).str()) << "_deq.PopNB(";
+    emitValue(r);
+    os << ");";
+    emitInfoAndNewLine(op);
+    return;
+  }
   Value result = op.getResult(0);
   Value success = op.getResult(1);
   fixUnsignedType(result, op->hasAttr("unsigned"));
@@ -1089,8 +1125,17 @@ void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
 
 // Non-blocking put: <success> = <stream>[idx].PushNB(<value>);
 void SystemCModuleEmitter::emitStreamTryPut(StreamTryPutOp op) {
-  if (isLocalStream(op->getOperand(0)))
-    return CatapultModuleEmitter::emitStreamTryPut(op); // local ac_channel
+  if (isLocalStream(op->getOperand(0))) {
+    // self-FIFO producer end: <success> = <stream>_enq.PushNB(<value>);
+    Value s = op.getResult();
+    indent();
+    emitValue(s);
+    os << " = " << std::string(getName(op->getOperand(0)).str()) << "_enq.PushNB(";
+    emitValue(op->getOperand(1));
+    os << ");";
+    emitInfoAndNewLine(op);
+    return;
+  }
   Value success = op.getResult();
   auto stream = op->getOperand(0);
   auto value = op->getOperand(1);
@@ -1117,8 +1162,17 @@ void SystemCModuleEmitter::emitStreamTryPut(StreamTryPutOp op) {
 // strict CONNECTIONS_ASSERT_ON_QUERY flag (off by default), so they are
 // csim-faithful (like try_get/try_put, prefer a one-shot check, not a spin).
 void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
-  if (isLocalStream(op->getOperand(0)))
-    return CatapultModuleEmitter::emitStreamEmpty(op); // !ac_channel.available(1)
+  if (isLocalStream(op->getOperand(0))) {
+    // self-FIFO consumer end: <result> = <stream>_deq.Empty();
+    Value result = op.getResult();
+    fixUnsignedType(result, op->hasAttr("unsigned"));
+    indent();
+    emitValue(result);
+    os << " = " << std::string(getName(op->getOperand(0)).str())
+       << "_deq.Empty();";
+    emitInfoAndNewLine(op);
+    return;
+  }
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   auto stream = op->getOperand(0);
@@ -1134,8 +1188,17 @@ void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
   emitInfoAndNewLine(op);
 }
 void SystemCModuleEmitter::emitStreamFull(StreamFullOp op) {
-  if (isLocalStream(op->getOperand(0)))
-    return CatapultModuleEmitter::emitStreamFull(op); // ac_channel: false
+  if (isLocalStream(op->getOperand(0))) {
+    // self-FIFO producer end: <result> = <stream>_enq.Full();
+    Value result = op.getResult();
+    fixUnsignedType(result, op->hasAttr("unsigned"));
+    indent();
+    emitValue(result);
+    os << " = " << std::string(getName(op->getOperand(0)).str())
+       << "_enq.Full();";
+    emitInfoAndNewLine(op);
+    return;
+  }
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   auto stream = op->getOperand(0);
@@ -1213,8 +1276,9 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   //   depth 0  -> a bare Connections::Combinational (combinational wire)
   //   depth>=1 -> an AlloFifo<T,depth> between two _in/_out wires (buffered)
   for (auto sc : channels) {
-    if (localStreamConstructs.count(sc.getResult()))
-      continue; // self-FIFO: lives as a local ac_channel in its one kernel
+    // A self-FIFO (one kernel produces+queries) is a NORMAL buffered stream here:
+    // its _in/_out Combinational wires + AlloFifo are declared just like any other
+    // depth>=1 stream; the one kernel simply binds BOTH ends (see the bind loop).
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
     std::string T = std::string(getSCTypeName(st.getBaseType()).str());
     std::string nm = std::string(addName(sc.getResult(), /*isPtr=*/false).str());
@@ -1314,8 +1378,6 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     sep = ", ";
   }
   for (auto sc : channels) {
-    if (localStreamConstructs.count(sc.getResult()))
-      continue; // self-FIFO: local ac_channel, no top-level member to init
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
     std::string nm = std::string(getName(sc.getResult()).str());
     if (st.getDepth() == 0) {
@@ -1366,8 +1428,24 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       Value ov = opnd.value();
       Value carg = callee.getArgument(opnd.index());
       if (auto sty = llvm::dyn_cast<StreamType>(ov.getType())) {
-        if (localStreamConstructs.count(ov))
-          continue; // self-FIFO: local ac_channel member, no port to bind
+        if (localStreamConstructs.count(ov)) {
+          // self-FIFO: this ONE kernel is both producer and consumer. Bind its
+          // enq (Out) to the fifo input wire and its deq (In) to the output wire
+          // (depth 0 -> both bind the bare Combinational).
+          std::string base = std::string(getName(ov).str());
+          std::string cin = base, cout = base;
+          if (sty.getDepth() != 0) {
+            cin += "_in";
+            cout += "_out";
+          }
+          std::string cargn = std::string(getName(carg).str());
+          indent();
+          os << instNames[it.index()] << "." << cargn << "_enq(" << cin << ");\n";
+          indent();
+          os << instNames[it.index()] << "." << cargn << "_deq(" << cout
+             << ");\n";
+          continue;
+        }
         // stream operand -> stream channel. For a buffered stream (depth>=1) the
         // producer (Out) binds the FIFO's input wire, the consumer (In) its
         // output wire; a depth-0 stream is the bare Combinational.
@@ -1417,8 +1495,6 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   }
   // Wire each buffered-stream FIFO: clk/rst + its _in/_out wires.
   for (auto sc : channels) {
-    if (localStreamConstructs.count(sc.getResult()))
-      continue; // self-FIFO: no top-level FIFO, it's local to its kernel
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
     if (st.getDepth() == 0)
       continue;
