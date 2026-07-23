@@ -318,6 +318,14 @@ private:
   llvm::DenseSet<Value> forceMemPortArgs;
   bool forceMemPort(Value v) { return forceMemPortArgs.count(v) > 0; }
 
+  // When ONE kernel call passes the SAME stream/channel to MULTIPLE arg positions
+  // (e.g. a drain PE that merges two sources with two put-sites into one output
+  // stream), the callee has several block-args aliasing one channel. Emitting a
+  // port per arg would bind >1 sc_out to one signal (SystemC E115). Map each such
+  // duplicate block-arg -> the FIRST (primary) block-arg so they share one port.
+  llvm::DenseMap<Value, Value> streamArgAlias;
+  Value aliasOf(Value v) { return streamArgAlias.lookup(v); }
+
   // Number of df.kernel MODULE INSTANCES in the top (calls.size()). The single-
   // shot testbench advances the clock until this many kernels have finished one
   // pass (each bumps the csim-only __allo_done counter) before reading memory.
@@ -821,6 +829,12 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   for (auto arg : llvm::enumerate(func.getArguments())) {
     unsigned i = arg.index();
     Value v = arg.value();
+    // Duplicate stream/channel arg: reuse the primary arg's port (already named,
+    // since it sits at a lower index). No new port, no reset, no binding.
+    if (Value primary = aliasOf(v)) {
+      state.nameTable[v] = getName(primary);
+      continue;
+    }
     indent();
     if (auto st = llvm::dyn_cast<StreamType>(v.getType())) {
       std::string pn = std::string(addName(v, /*isPtr=*/false).str());
@@ -1438,6 +1452,10 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     for (auto opnd : llvm::enumerate(call.getOperands())) {
       Value ov = opnd.value();
       Value carg = callee.getArgument(opnd.index());
+      // Duplicate stream/channel arg: the primary already bound the shared port,
+      // and getName(carg) now resolves to it -- binding again would double-bind.
+      if (aliasOf(carg))
+        continue;
       if (auto sty = llvm::dyn_cast<StreamType>(ov.getType())) {
         if (localStreamConstructs.count(ov)) {
           // self-FIFO: this ONE kernel is both producer and consumer. Bind its
@@ -1601,6 +1619,30 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
             (carg = seqDirArg(c, it.index(), d)))
           forceMemPortArgs.insert(carg);
       }
+  }
+
+  // Same stream/channel passed to MULTIPLE arg positions of one call -> alias the
+  // duplicate callee block-args onto the first so they share a single port.
+  for (auto topf : module.getOps<func::FuncOp>()) {
+    if (!topf->hasAttr("dataflow"))
+      continue;
+    topf.walk([&](func::CallOp c) {
+      auto callee = module.lookupSymbol<func::FuncOp>(c.getCallee());
+      if (!callee)
+        return;
+      llvm::DenseMap<Value, Value> primaryArg; // operand -> its first callee arg
+      for (auto it : llvm::enumerate(c.getArgOperands())) {
+        Value ov = it.value();
+        if (!llvm::isa<StreamType>(ov.getType()) &&
+            !llvm::isa<ChannelType>(ov.getType()))
+          continue;
+        Value carg = callee.getArgument(it.index());
+        if (Value first = primaryArg.lookup(ov))
+          streamArgAlias[carg] = first;
+        else
+          primaryArg[ov] = carg;
+      }
+    });
   }
 
   std::string device_header = R"XXX(
