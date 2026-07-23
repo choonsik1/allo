@@ -310,6 +310,14 @@ private:
   llvm::DenseSet<Value> localStreamConstructs; // the top-level construct results
   bool isLocalStream(Value v) { return localStreamArgs.count(v) > 0; }
 
+  // A boundary memref array used as a seq-streamable directional arg by MORE THAN
+  // ONE kernel call (fan-in output: N producers; fan-out input: N consumers) can't
+  // map to a single Connections::Combinational (exactly one writer + one reader; a
+  // 2nd bind aborts MatchLib's ConManager). These callee block-args are forced to
+  // the random-access memory-port path (per-PE AlloMem[W] replica) instead.
+  llvm::DenseSet<Value> forceMemPortArgs;
+  bool forceMemPort(Value v) { return forceMemPortArgs.count(v) > 0; }
+
   // Number of df.kernel MODULE INSTANCES in the top (calls.size()). The single-
   // shot testbench advances the clock until this many kernels have finished one
   // pass (each bumps the csim-only __allo_done counter) before reading memory.
@@ -387,7 +395,8 @@ char SystemCModuleEmitter::streamArgDir(Value v) {
     return 0;
   char d = argDir(func, barg.getArgNumber());
   // stream only pure in/out AND sequentially-safe args ('both' / random stay memref)
-  return ((d == 'i' || d == 'o') && isSeqStreamable(v)) ? d : 0;
+  // AND single-driver (multi-producer/consumer is forced to the memory-port path).
+  return ((d == 'i' || d == 'o') && isSeqStreamable(v) && !forceMemPort(v)) ? d : 0;
 }
 
 // A df.kernel memref arg that is directional but NOT sequentially streamable is
@@ -403,6 +412,8 @@ char SystemCModuleEmitter::memPortArgDir(Value v) {
   char d = argDir(func, barg.getArgNumber());
   if (d != 'i' && d != 'o' && d != 'b')
     return 0;
+  if (forceMemPort(v))
+    return d; // multi-driver boundary: forced off the stream path onto memory
   return isSeqStreamable(v) ? 0 : d; // streamable -> handled by the stream path
 }
 
@@ -853,7 +864,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
       os << getSCTypeName(wt.getBaseType()) << " > " << pn << ";\n";
     } else if (auto mt = llvm::dyn_cast<MemRefType>(v.getType())) {
       char d = argDir(func, i);
-      if ((d == 'i' || d == 'o') && isSeqStreamable(v)) {
+      if ((d == 'i' || d == 'o') && isSeqStreamable(v) && !forceMemPort(v)) {
         // sequential-stream: boundary array arg -> Connections stream port
         // (body's a[i]/b[i]=v become .Pop()/.Push() via the affine overrides)
         std::string pn = std::string(addName(v, /*isPtr=*/false).str());
@@ -1554,6 +1565,42 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
           localStreamArgs.insert(callee.getArgument(it.index()));
         }
     }
+  }
+
+  // A boundary array that would seq-stream but is driven/consumed by >1 kernel
+  // call (fan-in output / fan-out input) must go to the memory-port path instead
+  // -- binding a 2nd producer/consumer to one Combinational aborts MatchLib.
+  for (auto topf : module.getOps<func::FuncOp>()) {
+    if (!topf->hasAttr("dataflow"))
+      continue;
+    llvm::DenseMap<Value, int> useCnt; // seq-streamable directional uses per array
+    SmallVector<func::CallOp> callv;
+    topf.walk([&](func::CallOp c) { callv.push_back(c); });
+    auto seqDirArg = [&](func::CallOp c, unsigned idx, char &d) -> Value {
+      auto callee = module.lookupSymbol<func::FuncOp>(c.getCallee());
+      if (!callee)
+        return nullptr;
+      Value carg = callee.getArgument(idx);
+      d = argDir(callee, idx);
+      if ((d == 'i' || d == 'o' || d == 'b') && isSeqStreamable(carg))
+        return carg;
+      return nullptr;
+    };
+    for (auto c : callv)
+      for (auto it : llvm::enumerate(c.getArgOperands())) {
+        char d;
+        if (llvm::isa<MemRefType>(it.value().getType()) &&
+            seqDirArg(c, it.index(), d))
+          useCnt[it.value()]++;
+      }
+    for (auto c : callv)
+      for (auto it : llvm::enumerate(c.getArgOperands())) {
+        char d;
+        Value carg;
+        if (llvm::isa<MemRefType>(it.value().getType()) && useCnt[it.value()] > 1 &&
+            (carg = seqDirArg(c, it.index(), d)))
+          forceMemPortArgs.insert(carg);
+      }
   }
 
   std::string device_header = R"XXX(
