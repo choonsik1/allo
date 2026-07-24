@@ -878,6 +878,7 @@ def _process_function_streams(
                         ip=replace_ip,
                     )
                 # Atomic update of tail
+                _stamp_put_ts(ts_ptr, tail_index_op, clock_arg, replace_ip)
                 critical_op = openmp_d.CriticalOp(ip=replace_ip)
                 critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
                 memref_d.StoreOp(tail_next_op, tail_ptr, [], ip=critical_ip)
@@ -970,6 +971,7 @@ def _process_function_streams(
                                     expected_type, loaded_value, ip=replace_ip
                                 )
                     orig_got_val.replace_all_uses_with(loaded_value)
+                _advance_get_ts(ts_ptr, head_index_op, clock_arg, replace_ip)
                 critical_op = openmp_d.CriticalOp(ip=replace_ip)
                 critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
                 memref_d.StoreOp(head_next_op, head_ptr, [], ip=critical_ip)
@@ -1155,6 +1157,7 @@ def _process_function_streams(
                     indices=[tail_index_op],
                     ip=replace_ip,
                 )
+            _stamp_put_ts(ts_ptr, tail_index_op, clock_arg, replace_ip)
             critical_op = openmp_d.CriticalOp(ip=replace_ip)
             critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
             memref_d.StoreOp(tail_next_op, tail_ptr, [], ip=critical_ip)
@@ -1267,6 +1270,7 @@ def _process_function_streams(
                                 expected_type, loaded_value, ip=replace_ip
                             )
                 orig_got_val.replace_all_uses_with(loaded_value)
+            _advance_get_ts(ts_ptr, head_index_op, clock_arg, replace_ip)
             critical_op = openmp_d.CriticalOp(ip=replace_ip)
             critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
             memref_d.StoreOp(head_next_op, head_ptr, [], ip=critical_ip)

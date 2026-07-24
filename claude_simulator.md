@@ -263,8 +263,18 @@ ahead). This is **conservative (Chandy–Misra–Bryant) parallel simulation**.
   nb_scalar/stream_ops_sim/systolic all pass (results unchanged — clock read/written but
   nothing branches on it yet). IR check on a try_put/try_get region: 2 `sim.clock` funcs,
   1 `arith.maxsi` (consumer) — ops really emitted, not skipped.
-- **Remaining Phase 2 chunk 3b:** blocking `put`/`get` also stamp/max (for mixed
-  blocking-producer + NB-consumer designs). Then Phase 3 = the time-barrier.
+- **Phase 2 chunk 3b DONE (uncommitted) — Phase 2 COMPLETE.** Added the same
+  `_stamp_put_ts`/`_advance_get_ts` calls at the 4 blocking put/get sites
+  (cross-call + local, before each atomic index-update critical). Now EVERY put
+  (blocking or NB) stamps `ts_ring[slot]=clock` and EVERY get does
+  `clock=max(clock, ts_ring[slot])`. Validated: nb/stream_ops/systolic(err 0.0)/
+  feedback all pass; blocking design IR-verified to emit `arith.maxsi`. Results
+  still unchanged (clock written, not branched on).
+- **Next — Phase 3 (the payoff): the time-barrier.** `try_get`/`empty` at consumer
+  time T: (a) wait until the PRODUCER's live clock ≥ T, (b) answer `head.ts ≤ T`.
+  Needs the producer's live clock reachable by the consumer → FIFO struct gains
+  `prod_clock`/`cons_clock` pointers, which requires per-stream producer/consumer
+  identification. Success metric: `nb_nondeterminism.py` → ONE answer / 30 runs.
 
 ## Scope / caveats
 - **Blocking ops are unchanged in behavior** (already timing-immune); this only adds
