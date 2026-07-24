@@ -251,18 +251,32 @@ def _stream_producer_consumer_clocks(stream_construct_op, pe_call_define_ops):
     return prod_clock, cons_clock
 
 
-def _emit_wait_peer_gt(peer_clock_ptr, t_val, module, ip):
-    """Time-barrier: spin until *peer_clock_ptr > t_val. A deterministic wait on the
-    peer PE's monotonic simulated clock (a finished peer sets INT64_MAX, so the wait
-    always terminates). Mirrors the FIFO spin loop (flush / taskyield / usleep)."""
+def _emit_read_barrier(head_ptr, tail_ptr, ts_ptr, prod_ptr, t_val, module, ip):
+    """Read-side time-barrier for try_get: spin until the result is DECIDED --
+    either an element produced by time T (=t_val) is present, or the producer's
+    clock has passed T (so no such element is still coming). It does NOT wait while
+    data is already available, so it cannot deadlock against a producer that is
+    itself blocked on a full FIFO. All quantities are deterministic, so the decision
+    (and thus the sampled result) is reproducible."""
+    i1 = IntegerType.get_signless(1, module.context)
+    idx = IndexType.get(module.context)
     while_op = scf_d.WhileOp(results_=[], inits=[], ip=ip)
     before = Block.create_at_start(parent=while_op.before, arg_types=[])
     bip = InsertionPoint(before)
     openmp_d.FlushOp([], ip=bip)
-    pc = memref_d.LoadOp(memref=peer_clock_ptr, indices=[], ip=bip)
-    # keep looping while peer_clock <= T (predicate 3 = signed <=); exit when > T
-    cond = arith_d.CmpIOp(3, lhs=pc.result, rhs=t_val.result, ip=bip)
-    scf_d.ConditionOp(condition=cond, args=[], ip=bip)
+    h = memref_d.LoadOp(memref=head_ptr, indices=[], ip=bip)
+    t = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=bip)
+    ne = arith_d.CmpIOp(1, lhs=h.result, rhs=t.result, ip=bip)          # head != tail
+    hidx = index_d.CastUOp(output=idx, input=h, ip=bip)
+    tsh = memref_d.LoadOp(memref=ts_ptr, indices=[hidx], ip=bip)
+    tsle = arith_d.CmpIOp(3, lhs=tsh.result, rhs=t_val.result, ip=bip)  # ts[head] <= T
+    has_data = arith_d.AndIOp(lhs=ne.result, rhs=tsle.result, ip=bip)
+    pc = memref_d.LoadOp(memref=prod_ptr, indices=[], ip=bip)
+    past = arith_d.CmpIOp(4, lhs=pc.result, rhs=t_val.result, ip=bip)   # prod > T
+    decided = arith_d.OrIOp(lhs=has_data.result, rhs=past.result, ip=bip)
+    true1 = arith_d.ConstantOp(i1, 1, ip=bip)
+    not_decided = arith_d.XOrIOp(lhs=decided.result, rhs=true1.result, ip=bip)
+    scf_d.ConditionOp(condition=not_decided.result, args=[], ip=bip)
     after = Block.create_at_start(parent=while_op.after, arg_types=[])
     aip = InsertionPoint(after)
     openmp_d.TaskyieldOp(ip=aip)
@@ -421,11 +435,14 @@ def _lower_nb_stream_op(
         return True
     if isinstance(stream_access_op, allo_d.StreamTryGetOp):
         openmp_d.FlushOp([], ip=replace_ip)
-        # Phase 3 read barrier: wait for the producer to simulate strictly past our
-        # time T, then sample deterministically (element present AND produced by T).
+        # Phase 3 read barrier: spin only until the result is DECIDED (data present
+        # AND produced by T, OR producer past T). Does not wait while data is
+        # available, so it can't deadlock against a producer blocked on a full FIFO.
         if clock_arg is not None:
             t_val = memref_d.LoadOp(memref=clock_arg, indices=[], ip=replace_ip)
-            _emit_wait_peer_gt(prod_ptr, t_val, module, replace_ip)
+            _emit_read_barrier(
+                head_ptr, tail_ptr, ts_ptr, prod_ptr, t_val, module, replace_ip
+            )
             openmp_d.FlushOp([], ip=replace_ip)
         head_val_op = memref_d.LoadOp(memref=head_ptr, indices=[], ip=replace_ip)
         tail_val_op = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=replace_ip)
@@ -687,6 +704,16 @@ def _process_function_streams(
         i64_type = IntegerType.get_signless(64, func.context)
         ts_ring_type = MemRefType.get([stream_depth + 1], i64_type)
         ts_ring_op = memref_d.AllocOp(ts_ring_type, [], [], ip=ip)
+        # Phase 3 (D1): free-timestamp ring -- free_ts_ring[s] = the consumer's clock
+        # when it freed slot s. Init to 0 so never-occupied slots read as "free".
+        free_ts_ring_op = memref_d.AllocOp(ts_ring_type, [], [], ip=ip)
+        _zero_i64 = arith_d.ConstantOp(i64_type, 0, ip=ip)
+        _init_for = affine_d.AffineForOp(0, stream_depth + 1, ip=ip)
+        _init_ip = InsertionPoint(_init_for.body)
+        memref_d.StoreOp(
+            _zero_i64, free_ts_ring_op, [_init_for.induction_variable], ip=_init_ip
+        )
+        affine_d.AffineYieldOp([], ip=_init_ip)
         # Phase 3 (A2): struct members 4/5 point at the producer's and consumer's
         # live PE clock cells, so the time-barrier (chunk C) can read the peer's
         # clock. Identify by which PE puts/gets this stream; fall back to a fresh
@@ -718,6 +745,7 @@ def _process_function_streams(
                 ts_ring_type,
                 i64_scalar_type,
                 i64_scalar_type,
+                ts_ring_type,
             ],
             context=func.context,
         )
@@ -725,7 +753,7 @@ def _process_function_streams(
             output=fifo_struct_type,
             input=[
                 stream_memref_op, stream_head_op, stream_tail_op, ts_ring_op,
-                prod_clock_val, cons_clock_val,
+                prod_clock_val, cons_clock_val, free_ts_ring_op,
             ],
             ip=ip,
         )
