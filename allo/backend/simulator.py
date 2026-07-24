@@ -167,14 +167,27 @@ def _add_pe_clock_args(module, top_func_name):
             call_op.operation.erase()
 
 
+def _insert_clock_termination(func, clock_arg, module):
+    """Store INT64_MAX to the PE's clock at each function return, so a peer waiting on
+    this (finished) PE's clock in the time-barrier unblocks instead of hanging forever."""
+    i64 = IntegerType.get_signless(64, module.context)
+    returns = []
+    recursive_collect_ops(func, (func_d.ReturnOp,), returns)
+    for ret in returns:
+        ip = InsertionPoint(beforeOperation=ret)
+        sentinel = arith_d.ConstantOp(i64, (1 << 63) - 1, ip=ip)
+        memref_d.StoreOp(sentinel, clock_arg, [], ip=ip)
+
+
 def _insert_pe_clock_increments(module):
-    """Insert per-block clock increments into every clocked PE (tagged sim.clock),
-    using its last block arg as the clock. Runs AFTER stream lowering so spin-wait
-    scf.while loops are present and get skipped by _collect_blocks."""
+    """Insert per-block clock increments + a termination sentinel into every clocked
+    PE (tagged sim.clock), using its last block arg as the clock. Runs AFTER stream
+    lowering so spin-wait scf.while loops are present and skipped by _collect_blocks."""
     for op in module.body.operations:
         if isinstance(op, func_d.FuncOp) and "sim.clock" in op.attributes:
             clock_arg = op.body.blocks[0].arguments[-1]
             _insert_clock_increments(op, clock_arg, module)
+            _insert_clock_termination(op, clock_arg, module)
 
 
 def _clock_of(func):
@@ -205,10 +218,63 @@ def _advance_get_ts(ts_ptr, slot_index, clock_arg, ip):
     memref_d.StoreOp(mx, clock_arg, [], ip=ip)
 
 
+def _stream_producer_consumer_clocks(stream_construct_op, pe_call_define_ops):
+    """For a stream, return (prod_clock, cons_clock): the memref<i64> clock cells of
+    the PE that PUTs to it (producer) and the PE that GETs from it (consumer). Each is
+    the last operand of that PE's call (added by _add_pe_clock_args); either may be
+    None if the role can't be identified (then the time-barrier just no-ops)."""
+    prod_clock = None
+    cons_clock = None
+    s_result = Value(stream_construct_op.result)
+    for call_op, callee in pe_call_define_ops.items():
+        clock = call_op.operands_[-1]
+        for i in range(len(call_op.operands_)):
+            if not (s_result == call_op.operands_[i]):
+                continue
+            ops = []
+            recursive_collect_ops(
+                callee,
+                (allo_d.StreamPutOp, allo_d.StreamTryPutOp,
+                 allo_d.StreamGetOp, allo_d.StreamTryGetOp),
+                ops,
+            )
+            for o in ops:
+                try:
+                    if BlockArgument(o.stream).arg_number != i:
+                        continue
+                except ValueError:
+                    continue
+                if isinstance(o, (allo_d.StreamPutOp, allo_d.StreamTryPutOp)):
+                    prod_clock = clock
+                else:
+                    cons_clock = clock
+    return prod_clock, cons_clock
+
+
+def _emit_wait_peer_gt(peer_clock_ptr, t_val, module, ip):
+    """Time-barrier: spin until *peer_clock_ptr > t_val. A deterministic wait on the
+    peer PE's monotonic simulated clock (a finished peer sets INT64_MAX, so the wait
+    always terminates). Mirrors the FIFO spin loop (flush / taskyield / usleep)."""
+    while_op = scf_d.WhileOp(results_=[], inits=[], ip=ip)
+    before = Block.create_at_start(parent=while_op.before, arg_types=[])
+    bip = InsertionPoint(before)
+    openmp_d.FlushOp([], ip=bip)
+    pc = memref_d.LoadOp(memref=peer_clock_ptr, indices=[], ip=bip)
+    # keep looping while peer_clock <= T (predicate 3 = signed <=); exit when > T
+    cond = arith_d.CmpIOp(3, lhs=pc.result, rhs=t_val.result, ip=bip)
+    scf_d.ConditionOp(condition=cond, args=[], ip=bip)
+    after = Block.create_at_start(parent=while_op.after, arg_types=[])
+    aip = InsertionPoint(after)
+    openmp_d.TaskyieldOp(ip=aip)
+    c1 = arith_d.ConstantOp(IntegerType.get_signless(32, module.context), 1, ip=aip)
+    func_d.CallOp([], FlatSymbolRefAttr.get("usleep"), [c1], ip=aip)
+    scf_d.YieldOp(results_=[], ip=aip)
+
+
 def _lower_nb_stream_op(
     stream_access_op, head_ptr, tail_ptr, fifo_ptr,
     stream_type, const_one, const_fifo_depth, module, replace_ip,
-    ts_ptr, clock_arg,
+    ts_ptr, clock_arg, prod_ptr, cons_ptr,
 ):
     """Lower a non-blocking / status stream op (empty/full/try_put/try_get)
     to its ring-buffer implementation. Returns True if it handled the op,
@@ -355,6 +421,12 @@ def _lower_nb_stream_op(
         return True
     if isinstance(stream_access_op, allo_d.StreamTryGetOp):
         openmp_d.FlushOp([], ip=replace_ip)
+        # Phase 3 read barrier: wait for the producer to simulate strictly past our
+        # time T, then sample deterministically (element present AND produced by T).
+        if clock_arg is not None:
+            t_val = memref_d.LoadOp(memref=clock_arg, indices=[], ip=replace_ip)
+            _emit_wait_peer_gt(prod_ptr, t_val, module, replace_ip)
+            openmp_d.FlushOp([], ip=replace_ip)
         head_val_op = memref_d.LoadOp(memref=head_ptr, indices=[], ip=replace_ip)
         tail_val_op = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=replace_ip)
         is_empty = arith_d.CmpIOp(
@@ -363,10 +435,24 @@ def _lower_nb_stream_op(
         is_not_empty = arith_d.CmpIOp(
             1, lhs=head_val_op.result, rhs=tail_val_op.result, ip=replace_ip
         )
+        if clock_arg is not None:
+            # available = not_empty AND ts_ring[head] <= T
+            head_idx = index_d.CastUOp(
+                output=IndexType.get(module.context), input=head_val_op, ip=replace_ip
+            )
+            ts_head = memref_d.LoadOp(memref=ts_ptr, indices=[head_idx], ip=replace_ip)
+            ts_le = arith_d.CmpIOp(
+                3, lhs=ts_head.result, rhs=t_val.result, ip=replace_ip
+            )
+            get_cond = arith_d.AndIOp(
+                lhs=is_not_empty.result, rhs=ts_le.result, ip=replace_ip
+            )
+        else:
+            get_cond = is_not_empty
         orig_got_val = stream_access_op.results[0]
         expected_type = orig_got_val.type
         if_op = scf_d.IfOp(
-            is_not_empty.result,
+            get_cond.result,
             [expected_type, IntegerType.get_signless(1, module.context)],
             has_else=True,
             ip=replace_ip,
@@ -601,6 +687,24 @@ def _process_function_streams(
         i64_type = IntegerType.get_signless(64, func.context)
         ts_ring_type = MemRefType.get([stream_depth + 1], i64_type)
         ts_ring_op = memref_d.AllocOp(ts_ring_type, [], [], ip=ip)
+        # Phase 3 (A2): struct members 4/5 point at the producer's and consumer's
+        # live PE clock cells, so the time-barrier (chunk C) can read the peer's
+        # clock. Identify by which PE puts/gets this stream; fall back to a fresh
+        # (inert) cell when the role can't be identified.
+        i64_scalar_type = MemRefType.get([], i64_type)
+        _prod_clk, _cons_clk = _stream_producer_consumer_clocks(
+            stream_access_op, pe_call_define_ops
+        )
+        def _fallback_maxed_cell():
+            # A cell pinned to INT64_MAX so a time-barrier on it never waits
+            # (used when the producer/consumer role couldn't be identified).
+            cell = memref_d.AllocOp(i64_scalar_type, [], [], ip=ip)
+            maxc = arith_d.ConstantOp(i64_type, (1 << 63) - 1, ip=ip)
+            memref_d.StoreOp(maxc, cell, [], ip=ip)
+            return cell.result
+
+        prod_clock_val = _prod_clk if _prod_clk is not None else _fallback_maxed_cell()
+        cons_clock_val = _cons_clk if _cons_clk is not None else _fallback_maxed_cell()
         if not const_0_defined:
             const_zero = arith_d.ConstantOp(int_type, 0, ip=ip)
             const_0_defined = True
@@ -612,12 +716,17 @@ def _process_function_streams(
                 memref_scalar_int_type,
                 memref_scalar_int_type,
                 ts_ring_type,
+                i64_scalar_type,
+                i64_scalar_type,
             ],
             context=func.context,
         )
         fifo_struct_op = allo_d.StructConstructOp(
             output=fifo_struct_type,
-            input=[stream_memref_op, stream_head_op, stream_tail_op, ts_ring_op],
+            input=[
+                stream_memref_op, stream_head_op, stream_tail_op, ts_ring_op,
+                prod_clock_val, cons_clock_val,
+            ],
             ip=ip,
         )
         fifo_struct_memref_type = MemRefType.get([], fifo_struct_type)
@@ -740,6 +849,15 @@ def _process_function_streams(
             ts_ptr = allo_d.StructGetOp(
                 output=ts_ring_type, input=stream_struct, index=3, ip=replace_ip
             )
+            i64_scalar = MemRefType.get(
+                [], IntegerType.get_signless(64, module.context)
+            )
+            prod_ptr = allo_d.StructGetOp(
+                output=i64_scalar, input=stream_struct, index=4, ip=replace_ip
+            )
+            cons_ptr = allo_d.StructGetOp(
+                output=i64_scalar, input=stream_struct, index=5, ip=replace_ip
+            )
             clock_arg = _clock_of(func_def_op)
             const_one = arith_d.ConstantOp(int_type, 1, ip=replace_ip)
             const_fifo_depth = arith_d.ConstantOp(
@@ -748,7 +866,7 @@ def _process_function_streams(
             if _lower_nb_stream_op(
                 stream_access_op, head_ptr, tail_ptr, fifo_ptr,
                 stream_type, const_one, const_fifo_depth, module, replace_ip,
-                ts_ptr, clock_arg,
+                ts_ptr, clock_arg, prod_ptr, cons_ptr,
             ):
                 continue
             if isinstance(stream_access_op, allo_d.StreamPutOp):
@@ -1043,6 +1161,15 @@ def _process_function_streams(
         ts_ptr = allo_d.StructGetOp(
             output=ts_ring_type, input=stream_struct, index=3, ip=replace_ip
         )
+        i64_scalar = MemRefType.get(
+            [], IntegerType.get_signless(64, module.context)
+        )
+        prod_ptr = allo_d.StructGetOp(
+            output=i64_scalar, input=stream_struct, index=4, ip=replace_ip
+        )
+        cons_ptr = allo_d.StructGetOp(
+            output=i64_scalar, input=stream_struct, index=5, ip=replace_ip
+        )
         clock_arg = _clock_of(func)
         const_one = arith_d.ConstantOp(int_type, 1, ip=replace_ip)
         const_fifo_depth = arith_d.ConstantOp(
@@ -1051,7 +1178,7 @@ def _process_function_streams(
         if _lower_nb_stream_op(
             stream_access_op, head_ptr, tail_ptr, fifo_ptr,
             stream_type, const_one, const_fifo_depth, module, replace_ip,
-            ts_ptr, clock_arg,
+            ts_ptr, clock_arg, prod_ptr, cons_ptr,
         ):
             continue
         if isinstance(stream_access_op, allo_d.StreamPutOp):
