@@ -139,13 +139,17 @@ def _add_pe_clock_args(module, top_func_name):
     for caller in funcs.values():
         calls = []
         recursive_collect_ops(caller, (func_d.CallOp,), calls)
-        entry_ip = InsertionPoint.at_block_begin(caller.body.blocks[0])
         for call_op in calls:
             callee_name = str(call_op.callee)[1:]
             callee = funcs.get(callee_name)
             if callee is None or callee_name.startswith(
                 ("load_buf", "store_res", "usleep")
             ):
+                continue
+            # PE kernels are void; a value-returning callee is a pure helper (e.g. an
+            # index-calc func called inside a PE loop) -- not a PE, so don't clock it
+            # (and don't recreate its call, which would need result rewiring).
+            if len(callee.type.results) > 0:
                 continue
             if callee_name not in clocked:
                 clocked.add(callee_name)
@@ -156,14 +160,26 @@ def _add_pe_clock_args(module, top_func_name):
                 )
                 callee.attributes["function_type"] = TypeAttr.get(new_ty)
                 callee.attributes["sim.clock"] = UnitAttr.get()
+            # Recompute the entry IP each iteration: at_block_begin captures the
+            # current first op, and in a stream-less design the first op is a PE call
+            # that we erase below -- reusing a stale IP inserts before a dead op. The
+            # allocs stack at the block top, so they still dominate the (soon omp-
+            # sectioned) calls.
+            entry_ip = InsertionPoint.at_block_begin(caller.body.blocks[0])
             clk = memref_d.AllocOp(clk_ty, [], [], ip=entry_ip)
             c0 = arith_d.ConstantOp(i64, 0, ip=entry_ip)
             memref_d.StoreOp(c0, clk, [], ip=entry_ip)
-            func_d.CallOp(
-                [], call_op.callee,
+            # Preserve the call's result types (value-returning helpers called from
+            # inside a PE, e.g. an index-calc func, have results still in use) --
+            # adding a clock arg adds no result, so recreate with the SAME results
+            # and rewire uses, else erase() trips "op destroyed but still has uses".
+            new_call = func_d.CallOp(
+                [r.type for r in call_op.results], call_op.callee,
                 list(call_op.operands_) + [clk.result],
                 ip=InsertionPoint(beforeOperation=call_op),
             )
+            for old_res, new_res in zip(call_op.results, new_call.results):
+                old_res.replace_all_uses_with(new_res)
             call_op.operation.erase()
 
 
