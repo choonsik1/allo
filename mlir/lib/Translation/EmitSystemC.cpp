@@ -2012,7 +2012,11 @@ SC_MODULE(AlloFifo) {
 
     os << "int sc_main(int, char *[]) {\n";
     addIndent();
-    indent(); os << "tb t(\"t\");\n";
+    // static (not a stack local): the tb inlines the whole design (every
+    // sub-module + AlloFifo buf[] + AlloMem mem[]), which at large mesh sizes
+    // (e.g. EVA 8x8) overflows the ~8MB stack. Static storage has no such cap;
+    // sc_main runs once so the single construction is unchanged.
+    indent(); os << "static tb t(\"t\");\n";
     // Preload every INPUT memory (each shared-read replica gets its own copy)
     // from the array's input file (csim only: direct hierarchical poke of
     // AlloMem.mem[], done before reset is released).
