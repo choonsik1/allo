@@ -218,6 +218,21 @@ def _advance_get_ts(ts_ptr, slot_index, clock_arg, ip):
     memref_d.StoreOp(mx, clock_arg, [], ip=ip)
 
 
+def _tick_clock(clock_arg, module, ip):
+    """Advance the PE clock by 1 (one cycle). Called on a FAILED non-blocking poll so
+    that spin-wait loops (while not try_put / while ok==0: try_get) advance simulated
+    time -- otherwise a PE polling a full/empty FIFO freezes its clock and a peer's
+    time-barrier deadlocks. The failure (and thus the tick count) is made deterministic
+    by the barriers, so the clock stays deterministic. No-op without a clock."""
+    if clock_arg is None:
+        return
+    i64 = IntegerType.get_signless(64, module.context)
+    cur = memref_d.LoadOp(memref=clock_arg, indices=[], ip=ip)
+    one = arith_d.ConstantOp(i64, 1, ip=ip)
+    nxt = arith_d.AddIOp(lhs=cur.result, rhs=one.result, ip=ip)
+    memref_d.StoreOp(nxt, clock_arg, [], ip=ip)
+
+
 def _stream_producer_consumer_clocks(stream_construct_op, pe_call_define_ops):
     """For a stream, return (prod_clock, cons_clock): the memref<i64> clock cells of
     the PE that PUTs to it (producer) and the PE that GETs from it (consumer). Each is
@@ -580,6 +595,8 @@ def _lower_nb_stream_op(
         false_val = arith_d.ConstantOp(
             IntegerType.get_signless(1, module.context), 0, ip=else_ip
         )
+        # Failed poll consumes a cycle so a spin-wait consumer advances its clock.
+        _tick_clock(clock_arg, module, else_ip)
         scf_d.YieldOp(results_=[dummy_data_val, false_val.result], ip=else_ip)
         stream_access_op.results[0].replace_all_uses_with(if_op.results[0])
         stream_access_op.results[1].replace_all_uses_with(if_op.results[1])
