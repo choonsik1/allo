@@ -233,6 +233,27 @@ def _tick_clock(clock_arg, module, ip):
     memref_d.StoreOp(nxt, clock_arg, [], ip=ip)
 
 
+def _stamp_free_ts(free_ts_ptr, slot_index, clock_arg, ip):
+    """On get: free_ts_ring[slot] = clock -- record the consumer's simulated time
+    when it frees this slot (the write barrier reads it). No-op without a clock."""
+    if clock_arg is None:
+        return
+    clk_val = memref_d.LoadOp(memref=clock_arg, indices=[], ip=ip)
+    memref_d.StoreOp(clk_val, free_ts_ptr, [slot_index], ip=ip)
+
+
+def _mark_occupied(free_ts_ptr, slot_index, clock_arg, module, ip):
+    """On put: free_ts_ring[slot] = INT64_MAX -- mark the slot occupied (NOT free)
+    until the consumer frees it (which overwrites it with the free time). Without
+    this, a re-used slot's stale free-time makes the write barrier think it is free
+    and the producer overfills the ring. No-op without a clock."""
+    if clock_arg is None:
+        return
+    i64 = IntegerType.get_signless(64, module.context)
+    maxc = arith_d.ConstantOp(i64, (1 << 63) - 1, ip=ip)
+    memref_d.StoreOp(maxc, free_ts_ptr, [slot_index], ip=ip)
+
+
 def _stream_producer_consumer_clocks(stream_construct_op, pe_call_define_ops):
     """For a stream, return (prod_clock, cons_clock): the memref<i64> clock cells of
     the PE that PUTs to it (producer) and the PE that GETs from it (consumer). Each is
@@ -300,10 +321,36 @@ def _emit_read_barrier(head_ptr, tail_ptr, ts_ptr, prod_ptr, t_val, module, ip):
     scf_d.YieldOp(results_=[], ip=aip)
 
 
+def _emit_write_barrier(free_ts_ptr, tail_next_idx, cons_ptr, t_val, module, ip):
+    """Write-side time-barrier for try_put: spin until DECIDED = (the target slot was
+    freed by time T: free_ts_ring[tail_next] <= T) OR (consumer passed T). Does not
+    wait while space is available, so it can't deadlock against a consumer blocked on
+    its own downstream. Deterministic (clocks/timestamps only)."""
+    i1 = IntegerType.get_signless(1, module.context)
+    while_op = scf_d.WhileOp(results_=[], inits=[], ip=ip)
+    before = Block.create_at_start(parent=while_op.before, arg_types=[])
+    bip = InsertionPoint(before)
+    openmp_d.FlushOp([], ip=bip)
+    ft = memref_d.LoadOp(memref=free_ts_ptr, indices=[tail_next_idx], ip=bip)
+    free = arith_d.CmpIOp(3, lhs=ft.result, rhs=t_val.result, ip=bip)   # free_ts <= T
+    cc = memref_d.LoadOp(memref=cons_ptr, indices=[], ip=bip)
+    past = arith_d.CmpIOp(4, lhs=cc.result, rhs=t_val.result, ip=bip)   # cons > T
+    decided = arith_d.OrIOp(lhs=free.result, rhs=past.result, ip=bip)
+    true1 = arith_d.ConstantOp(i1, 1, ip=bip)
+    not_decided = arith_d.XOrIOp(lhs=decided.result, rhs=true1.result, ip=bip)
+    scf_d.ConditionOp(condition=not_decided.result, args=[], ip=bip)
+    after = Block.create_at_start(parent=while_op.after, arg_types=[])
+    aip = InsertionPoint(after)
+    openmp_d.TaskyieldOp(ip=aip)
+    c1 = arith_d.ConstantOp(IntegerType.get_signless(32, module.context), 1, ip=aip)
+    func_d.CallOp([], FlatSymbolRefAttr.get("usleep"), [c1], ip=aip)
+    scf_d.YieldOp(results_=[], ip=aip)
+
+
 def _lower_nb_stream_op(
     stream_access_op, head_ptr, tail_ptr, fifo_ptr,
     stream_type, const_one, const_fifo_depth, module, replace_ip,
-    ts_ptr, clock_arg, prod_ptr, cons_ptr,
+    ts_ptr, clock_arg, prod_ptr, cons_ptr, free_ts_ptr,
 ):
     """Lower a non-blocking / status stream op (empty/full/try_put/try_get)
     to its ring-buffer implementation. Returns True if it handled the op,
@@ -342,15 +389,28 @@ def _lower_nb_stream_op(
         tail_next_op = arith_d.RemUIOp(
             lhs=tail_inc_op.result, rhs=const_fifo_depth.result, ip=replace_ip
         )
-        head_val_op = memref_d.LoadOp(memref=head_ptr, indices=[], ip=replace_ip)
-        is_full = arith_d.CmpIOp(
-            0, lhs=head_val_op.result, rhs=tail_next_op.result, ip=replace_ip
-        )
-        is_not_full = arith_d.CmpIOp(
-            1, lhs=head_val_op.result, rhs=tail_next_op.result, ip=replace_ip
-        )
+        if clock_arg is not None:
+            # Write barrier: wait until the target slot is free by our time T, or the
+            # consumer has passed T; then put_cond = free_ts_ring[tail_next] <= T.
+            t_val = memref_d.LoadOp(memref=clock_arg, indices=[], ip=replace_ip)
+            tail_next_idx = index_d.CastUOp(
+                output=IndexType.get(module.context), input=tail_next_op, ip=replace_ip
+            )
+            _emit_write_barrier(
+                free_ts_ptr, tail_next_idx, cons_ptr, t_val, module, replace_ip
+            )
+            openmp_d.FlushOp([], ip=replace_ip)
+            ft = memref_d.LoadOp(memref=free_ts_ptr, indices=[tail_next_idx], ip=replace_ip)
+            put_cond = arith_d.CmpIOp(  # free_ts_ring[tail_next] <= T  (not full at T)
+                3, lhs=ft.result, rhs=t_val.result, ip=replace_ip
+            )
+        else:
+            head_val_op = memref_d.LoadOp(memref=head_ptr, indices=[], ip=replace_ip)
+            put_cond = arith_d.CmpIOp(  # head != tail_next  (physical not-full)
+                1, lhs=head_val_op.result, rhs=tail_next_op.result, ip=replace_ip
+            )
         if_op = scf_d.IfOp(
-            is_not_full.result,
+            put_cond.result,
             [IntegerType.get_signless(1, module.context)],
             has_else=True,
             ip=replace_ip,
@@ -430,6 +490,7 @@ def _lower_nb_stream_op(
                 ip=then_ip,
             )
         _stamp_put_ts(ts_ptr, tail_index_op, clock_arg, then_ip)
+        _mark_occupied(free_ts_ptr, tail_index_op, clock_arg, module, then_ip)
         critical_op = openmp_d.CriticalOp(ip=then_ip)
         critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
         memref_d.StoreOp(tail_next_op, tail_ptr, [], ip=critical_ip)
@@ -444,6 +505,9 @@ def _lower_nb_stream_op(
         false_val = arith_d.ConstantOp(
             IntegerType.get_signless(1, module.context), 0, ip=else_ip
         )
+        # Failed poll consumes a cycle so a spin-wait producer advances its clock
+        # (this is what un-freezes the producer that deadlocked before).
+        _tick_clock(clock_arg, module, else_ip)
         scf_d.YieldOp(results_=[false_val.result], ip=else_ip)
         stream_access_op.results[0].replace_all_uses_with(if_op.results[0])
         stream_access_op.operation.erase()
@@ -563,6 +627,7 @@ def _lower_nb_stream_op(
                         )
             data_val = loaded_value
         _advance_get_ts(ts_ptr, head_index_op, clock_arg, then_ip)
+        _stamp_free_ts(free_ts_ptr, head_index_op, clock_arg, then_ip)
         critical_op = openmp_d.CriticalOp(ip=then_ip)
         critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
         memref_d.StoreOp(head_next_op, head_ptr, [], ip=critical_ip)
@@ -903,6 +968,9 @@ def _process_function_streams(
             cons_ptr = allo_d.StructGetOp(
                 output=i64_scalar, input=stream_struct, index=5, ip=replace_ip
             )
+            free_ts_ptr = allo_d.StructGetOp(
+                output=ts_ring_type, input=stream_struct, index=6, ip=replace_ip
+            )
             clock_arg = _clock_of(func_def_op)
             const_one = arith_d.ConstantOp(int_type, 1, ip=replace_ip)
             const_fifo_depth = arith_d.ConstantOp(
@@ -911,7 +979,7 @@ def _process_function_streams(
             if _lower_nb_stream_op(
                 stream_access_op, head_ptr, tail_ptr, fifo_ptr,
                 stream_type, const_one, const_fifo_depth, module, replace_ip,
-                ts_ptr, clock_arg, prod_ptr, cons_ptr,
+                ts_ptr, clock_arg, prod_ptr, cons_ptr, free_ts_ptr,
             ):
                 continue
             if isinstance(stream_access_op, allo_d.StreamPutOp):
@@ -1042,6 +1110,7 @@ def _process_function_streams(
                     )
                 # Atomic update of tail
                 _stamp_put_ts(ts_ptr, tail_index_op, clock_arg, replace_ip)
+                _mark_occupied(free_ts_ptr, tail_index_op, clock_arg, module, replace_ip)
                 critical_op = openmp_d.CriticalOp(ip=replace_ip)
                 critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
                 memref_d.StoreOp(tail_next_op, tail_ptr, [], ip=critical_ip)
@@ -1135,6 +1204,7 @@ def _process_function_streams(
                                 )
                     orig_got_val.replace_all_uses_with(loaded_value)
                 _advance_get_ts(ts_ptr, head_index_op, clock_arg, replace_ip)
+                _stamp_free_ts(free_ts_ptr, head_index_op, clock_arg, replace_ip)
                 critical_op = openmp_d.CriticalOp(ip=replace_ip)
                 critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
                 memref_d.StoreOp(head_next_op, head_ptr, [], ip=critical_ip)
@@ -1215,6 +1285,9 @@ def _process_function_streams(
         cons_ptr = allo_d.StructGetOp(
             output=i64_scalar, input=stream_struct, index=5, ip=replace_ip
         )
+        free_ts_ptr = allo_d.StructGetOp(
+            output=ts_ring_type, input=stream_struct, index=6, ip=replace_ip
+        )
         clock_arg = _clock_of(func)
         const_one = arith_d.ConstantOp(int_type, 1, ip=replace_ip)
         const_fifo_depth = arith_d.ConstantOp(
@@ -1223,7 +1296,7 @@ def _process_function_streams(
         if _lower_nb_stream_op(
             stream_access_op, head_ptr, tail_ptr, fifo_ptr,
             stream_type, const_one, const_fifo_depth, module, replace_ip,
-            ts_ptr, clock_arg, prod_ptr, cons_ptr,
+            ts_ptr, clock_arg, prod_ptr, cons_ptr, free_ts_ptr,
         ):
             continue
         if isinstance(stream_access_op, allo_d.StreamPutOp):
@@ -1330,6 +1403,7 @@ def _process_function_streams(
                     ip=replace_ip,
                 )
             _stamp_put_ts(ts_ptr, tail_index_op, clock_arg, replace_ip)
+            _mark_occupied(free_ts_ptr, tail_index_op, clock_arg, module, replace_ip)
             critical_op = openmp_d.CriticalOp(ip=replace_ip)
             critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
             memref_d.StoreOp(tail_next_op, tail_ptr, [], ip=critical_ip)
@@ -1443,6 +1517,7 @@ def _process_function_streams(
                             )
                 orig_got_val.replace_all_uses_with(loaded_value)
             _advance_get_ts(ts_ptr, head_index_op, clock_arg, replace_ip)
+            _stamp_free_ts(free_ts_ptr, head_index_op, clock_arg, replace_ip)
             critical_op = openmp_d.CriticalOp(ip=replace_ip)
             critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
             memref_d.StoreOp(head_next_op, head_ptr, [], ip=critical_ip)
