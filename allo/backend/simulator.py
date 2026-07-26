@@ -227,8 +227,9 @@ def _insert_clock_termination(func, clock_arg, module):
 
 def _insert_pe_clock_increments(module):
     """Insert per-block clock increments + a termination sentinel into every clocked
-    PE (tagged sim.clock), using its last block arg as the clock. Runs AFTER stream
-    lowering so spin-wait scf.while loops are present and skipped by _collect_blocks."""
+    PE (tagged sim.clock), using its last block arg as the clock. Runs BEFORE stream
+    lowering, so the cost model sees user-level ops only -- none of the ring-buffer
+    plumbing that lowering inserts, and none of its spin-wait blocks."""
     for op in module.body.operations:
         if isinstance(op, func_d.FuncOp) and "sim.clock" in op.attributes:
             clock_arg = op.body.blocks[0].arguments[-1]
@@ -1710,6 +1711,15 @@ def build_dataflow_simulator(module: Module, top_func_name: str):
         # stream lowering, so put/get lowering can stamp/advance the clock.
         clock_cells = _add_pe_clock_args(module, top_func_name)
 
+        # Charge the clock BEFORE stream lowering, while the IR still holds only
+        # user-level ops.  After lowering, a PE body is ~90% simulator plumbing
+        # (allo.struct_get, ring-buffer head/tail loads, omp.flush/critical), which
+        # has no hardware cost -- charging it made the cycle count mostly overhead.
+        # Blocks that lowering creates later (the try_* scf.if arms, and the spin-wait
+        # scf.while bodies) get no increment, which is exactly what the old
+        # _collect_blocks scf.while skip hand-coded.
+        _insert_pe_clock_increments(module)
+
         # Recursively process the top function and all its callees
         _, _, pe_call_define_ops, _ = _process_function_streams(
             module, func, processed_funcs, all_pe_calls_by_func
@@ -1728,11 +1738,6 @@ def build_dataflow_simulator(module: Module, top_func_name: str):
                                     pe_call_define_ops[op] = mod_op
                                     break
             all_pe_calls_by_func[top_func_name] = pe_call_define_ops
-
-        # Phase 1: insert the per-PE clock increments (after stream lowering, so
-        # spin-wait scf.while loops exist and are skipped). Clock args were already
-        # threaded before lowering by _add_pe_clock_args above.
-        _insert_pe_clock_increments(module)
 
         # Inject omp.parallel/sections into every function that has PE calls
         for func_pe_calls in all_pe_calls_by_func.values():
