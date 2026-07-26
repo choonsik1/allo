@@ -4,6 +4,8 @@
 # pylint: disable=consider-using-enumerate, no-value-for-parameter, too-many-function-args, redefined-variable-type
 
 import os
+import ctypes
+import numpy as np
 from ..backend.llvm import LLVMModule
 from .._mlir.ir import (
     Location,
@@ -28,6 +30,9 @@ from .._mlir.ir import (
     AffineExpr,
     FunctionType,
     MemRefType,
+    RankedTensorType,
+    DenseElementsAttr,
+    IntegerAttr,
     IntegerType,
     FloatType,
     IndexType,
@@ -46,6 +51,7 @@ from .._mlir.dialects import (
 )
 from .._mlir.passmanager import PassManager
 from .._mlir.execution_engine import ExecutionEngine
+from .._mlir.runtime import get_ranked_memref_descriptor
 from ..ir.transform import find_func_in_module
 from ..passes import decompose_library_function
 from ..utils import get_func_inputs_outputs
@@ -127,7 +133,11 @@ def _add_pe_clock_args(module, top_func_name):
     """Reorder step: give each PE a trailing memref<i64> clock arg and thread it
     through the (recreated) calls, BEFORE streams are lowered -- so put/get lowering
     can stamp/advance the clock. Each clocked PE func is tagged 'sim.clock'; its
-    clock is the last block arg. Per-block increments come later (after lowering)."""
+    clock is the last block arg. Per-block increments come later (after lowering).
+
+    Returns the per-call-site clock cells as a list of (caller_func, callee_name,
+    clock_value) in a deterministic order -- the index into this list is the PE index
+    used by the cycle read-out (_emit_cycle_harvest)."""
     i64 = IntegerType.get_signless(64, module.context)
     clk_ty = MemRefType.get([], i64)
     funcs = {
@@ -136,6 +146,7 @@ def _add_pe_clock_args(module, top_func_name):
         if isinstance(op, func_d.FuncOp) and len(op.body.blocks) > 0
     }
     clocked = set()
+    clock_cells = []
     for caller in funcs.values():
         calls = []
         recursive_collect_ops(caller, (func_d.CallOp,), calls)
@@ -181,18 +192,37 @@ def _add_pe_clock_args(module, top_func_name):
             for old_res, new_res in zip(call_op.results, new_call.results):
                 old_res.replace_all_uses_with(new_res)
             call_op.operation.erase()
+            clock_cells.append((caller, callee_name, clk.result))
+    return clock_cells
+
+
+# A finished PE ORs this bit into its clock: the value becomes larger than any real
+# simulated time, so a peer stuck in a time-barrier on this PE unblocks -- while the
+# PE's *final* cycle count stays recoverable by masking the bit off (see
+# _emit_cycle_harvest).  Real clocks stay well under 2^62, and 2^62 is positive in
+# i64, so the signed >= comparisons in the barriers keep working.
+_CLOCK_DONE_BIT = 1 << 62
+_CLOCK_VALUE_MASK = _CLOCK_DONE_BIT - 1
+
+# Symbols for reading the per-PE cycle counts back out into Python.
+SIM_CYCLES_GLOBAL = "__allo_sim_cycles"
+SIM_CYCLES_READER = "__allo_sim_cycles_read"
 
 
 def _insert_clock_termination(func, clock_arg, module):
-    """Store INT64_MAX to the PE's clock at each function return, so a peer waiting on
-    this (finished) PE's clock in the time-barrier unblocks instead of hanging forever."""
+    """Mark the PE's clock 'done' at each function return, so a peer waiting on this
+    (finished) PE's clock in the time-barrier unblocks instead of hanging forever.
+    The mark is an OR of _CLOCK_DONE_BIT rather than an overwrite, so the final cycle
+    count survives for _emit_cycle_harvest to read."""
     i64 = IntegerType.get_signless(64, module.context)
     returns = []
     recursive_collect_ops(func, (func_d.ReturnOp,), returns)
     for ret in returns:
         ip = InsertionPoint(beforeOperation=ret)
-        sentinel = arith_d.ConstantOp(i64, (1 << 63) - 1, ip=ip)
-        memref_d.StoreOp(sentinel, clock_arg, [], ip=ip)
+        cur = memref_d.LoadOp(memref=clock_arg, indices=[], ip=ip)
+        bit = arith_d.ConstantOp(i64, _CLOCK_DONE_BIT, ip=ip)
+        done = arith_d.OrIOp(cur.result, bit.result, ip=ip)
+        memref_d.StoreOp(done, clock_arg, [], ip=ip)
 
 
 def _insert_pe_clock_increments(module):
@@ -204,6 +234,64 @@ def _insert_pe_clock_increments(module):
             clock_arg = op.body.blocks[0].arguments[-1]
             _insert_clock_increments(op, clock_arg, module)
             _insert_clock_termination(op, clock_arg, module)
+
+
+def _emit_cycle_harvest(module, clock_cells):
+    """Make the per-PE simulated-cycle counts readable from Python.
+
+    Emits (a) a module-level `memref<Nxi64>` global, (b) a copy of each PE's final
+    clock into `global[pe_index]` just before its caller returns (all PE calls are
+    joined by then -- they sit inside omp.parallel), masking off _CLOCK_DONE_BIT, and
+    (c) an exported reader `__allo_sim_cycles_read(memref<Nxi64>)` that copies the
+    global into a caller-provided buffer.  Returns the list of PE names, whose order
+    matches the buffer."""
+    n = len(clock_cells)
+    if n == 0:
+        return []
+    i64 = IntegerType.get_signless(64, module.context)
+    idx_ty = IndexType.get(module.context)
+    arr_ty = MemRefType.get([n], i64)
+
+    memref_d.GlobalOp(
+        sym_name=StringAttr.get(SIM_CYCLES_GLOBAL),
+        type_=TypeAttr.get(arr_ty),
+        sym_visibility=StringAttr.get("private"),
+        initial_value=DenseElementsAttr.get_splat(
+            RankedTensorType.get([n], i64), IntegerAttr.get(i64, 0)
+        ),
+        ip=InsertionPoint(module.body),
+    )
+
+    # (b) harvest: written before the caller's return, once per call site.
+    for pe_index, (caller, _name, clk) in enumerate(clock_cells):
+        returns = []
+        recursive_collect_ops(caller, (func_d.ReturnOp,), returns)
+        for ret in returns:
+            ip = InsertionPoint(beforeOperation=ret)
+            g = memref_d.GetGlobalOp(arr_ty, SIM_CYCLES_GLOBAL, ip=ip)
+            val = memref_d.LoadOp(memref=clk, indices=[], ip=ip)
+            mask = arith_d.ConstantOp(i64, _CLOCK_VALUE_MASK, ip=ip)
+            final = arith_d.AndIOp(val.result, mask.result, ip=ip)
+            slot = arith_d.ConstantOp(idx_ty, pe_index, ip=ip)
+            memref_d.StoreOp(final, g.result, [slot.result], ip=ip)
+
+    # (c) reader
+    reader = func_d.FuncOp(
+        name=SIM_CYCLES_READER,
+        type=FunctionType.get([arr_ty], []),
+        ip=InsertionPoint(module.body),
+    )
+    reader.attributes["llvm.emit_c_interface"] = UnitAttr.get()
+    entry = reader.add_entry_block()
+    ip = InsertionPoint(entry)
+    g = memref_d.GetGlobalOp(arr_ty, SIM_CYCLES_GLOBAL, ip=ip)
+    for k in range(n):
+        slot = arith_d.ConstantOp(idx_ty, k, ip=ip)
+        v = memref_d.LoadOp(memref=g.result, indices=[slot.result], ip=ip)
+        memref_d.StoreOp(v, entry.arguments[0], [slot.result], ip=ip)
+    func_d.ReturnOp([], ip=ip)
+
+    return [name for _caller, name, _clk in clock_cells]
 
 
 def _clock_of(func):
@@ -1620,7 +1708,7 @@ def build_dataflow_simulator(module: Module, top_func_name: str):
 
         # Phase 1/2 reorder: thread a per-PE clock arg through the calls BEFORE
         # stream lowering, so put/get lowering can stamp/advance the clock.
-        _add_pe_clock_args(module, top_func_name)
+        clock_cells = _add_pe_clock_args(module, top_func_name)
 
         # Recursively process the top function and all its callees
         _, _, pe_call_define_ops, _ = _process_function_streams(
@@ -1650,6 +1738,11 @@ def build_dataflow_simulator(module: Module, top_func_name: str):
         for func_pe_calls in all_pe_calls_by_func.values():
             if func_pe_calls:
                 _inject_omp_parallel_sections(func_pe_calls)
+
+        # Cycle read-out: must come AFTER the omp injection -- the harvest loads each
+        # PE's final clock just before the caller returns, and omp.parallel is the
+        # join, so before it the clocks are still being written by live threads.
+        return _emit_cycle_harvest(module, clock_cells)
 
 
 # This pass is only meant to run on fully lowered MLIR code
@@ -1684,6 +1777,17 @@ def convert_critical_write_to_atomic_write(module: Module):
             critical_op.operation.erase()
 
 
+class SimCycles:
+    """Per-PE simulated cycle counts plus the makespan (max over PEs)."""
+
+    def __init__(self, per_pe):
+        self.per_pe = per_pe
+        self.makespan = max(per_pe.values()) if per_pe else 0
+
+    def __repr__(self):
+        return f"SimCycles(makespan={self.makespan}, pes={len(self.per_pe)})"
+
+
 class LLVMOMPModule(LLVMModule):
     def __init__(self, mod: Module, top_func_name: str, ext_libs=None):
         with Context() as ctx:
@@ -1696,7 +1800,9 @@ class LLVMOMPModule(LLVMModule):
             self.in_types, self.out_types = get_func_inputs_outputs(func)
             self.module = decompose_library_function(self.module)
 
-            build_dataflow_simulator(self.module, self.top_func_name)
+            self.sim_pe_names = build_dataflow_simulator(
+                self.module, self.top_func_name
+            )
             # Attach necessary attributes
             func = find_func_in_module(self.module, top_func_name)
             if func is None:
@@ -1751,3 +1857,27 @@ class LLVMOMPModule(LLVMModule):
             self.execution_engine = ExecutionEngine(
                 self.module, opt_level=2, shared_libs=shared_libs
             )
+
+    def get_cycles(self):
+        """Simulated cycle counts from the most recent run, under the per-PE clock's
+        cost model (see _op_latency).  Returns a SimCycles: `.per_pe` maps each PE to
+        its final clock, `.makespan` is the max over PEs -- the number to score a
+        design with.  These are *abstract* cycles: correct in ordering, only
+        approximate in magnitude.  Returns an empty result if the design has no
+        clocked PEs, or if called before the first run."""
+        names = getattr(self, "sim_pe_names", None) or []
+        if len(names) == 0:
+            return SimCycles({})
+        buf = np.zeros(len(names), dtype=np.int64)
+        self.execution_engine.invoke(
+            SIM_CYCLES_READER,
+            ctypes.pointer(ctypes.pointer(get_ranked_memref_descriptor(buf))),
+        )
+        # Disambiguate repeated kernel names (mapping=[...] gives one func, many calls).
+        per_pe = {}
+        seen = {}
+        for name, cycles in zip(names, buf.tolist()):
+            k = seen.get(name, 0)
+            seen[name] = k + 1
+            per_pe[name if k == 0 else f"{name}#{k}"] = cycles
+        return SimCycles(per_pe)
