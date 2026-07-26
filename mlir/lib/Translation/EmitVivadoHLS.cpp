@@ -2377,6 +2377,18 @@ void allo::hls::VhlsModuleEmitter::emitCast(CastOpType op) {
   emitValue(result);
   os << " = ";
   emitValue(op.getOperand());
+  // SystemC synthesis: narrowing a >64-bit integer to a native int needs an
+  // EXPLICIT .to_int64()/.to_uint64(). The ap_int shim's implicit narrowing is
+  // csim-only (a plain ac_int under __SYNTHESIS__ lacks it -> Catapult CRD-413);
+  // the explicit call compiles in both csim and synthesis. Gated to the SystemC
+  // flow so Vivado/Vitis output (whose ap_int narrows implicitly) is unchanged.
+  if (state.explicitWideNarrow)
+    if (auto si = llvm::dyn_cast<IntegerType>(op.getOperand().getType()))
+      if (auto di = llvm::dyn_cast<IntegerType>(op.getResult().getType()))
+        if (si.getWidth() > 64 && di.getWidth() <= 64)
+          os << (di.getSignedness() == IntegerType::SignednessSemantics::Unsigned
+                     ? ".to_uint64()"
+                     : ".to_int64()");
   os << ";";
   emitInfoAndNewLine(op);
 }

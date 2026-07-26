@@ -1,14 +1,13 @@
 /*
  * Copyright Allo authors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
- * Minimal SystemC (sc_fifo) backend — Track B / X1.
+ *
+ * Minimal SystemC backend
  * Based on EmitCatapultHLS.cpp; subclasses the Vivado emitter so all loop/arith/
  * memref emission is REUSED. Only the module/thread STRUCTURE + sc_fifo channel
  * construction are SystemC-specific. put/get already emit .write()/.read() in the
  * base, which is exactly sc_fifo's API, so they are reused unchanged.
  *
- * Target = the hand-verified golden in
- *   Allo_extension/systemc_backend/golden_producer_consumer.cpp
  *   Stream[T,depth] -> sc_fifo<T>(depth) ; put->write ; get->read
  *   @df.kernel      -> SC_MODULE + SC_THREAD(run)
  *   @df.region/top  -> wiring SC_MODULE (sc_fifo members + submodule instances + port binds)
@@ -35,7 +34,7 @@ using namespace allo;
 
 //===----------------------------------------------------------------------===//
 // Type name for SC interface (ports / channels). Mirrors the Vhls emitter's
-// (file-local, uncallable) getTypeName so port/channel types MATCH the reused
+// getTypeName so port/channel types MATCH the reused
 // body: i8/16/32/64 -> (u)intN_t, other widths -> ap_(u)int<N> (aliased to
 // ac_int in the emitted header), f16 -> half, f32 -> float, fixed -> ap_(u)fixed.
 // 
@@ -67,7 +66,7 @@ static SmallString<32> getSCTypeName(Type valType) {
 // Address width for a memory of `total` elements: ceil(log2(total)), min 1.
 static unsigned scAddrW(int64_t total) {
   unsigned w = 1;
-  while ((int64_t(1) << w) < total)
+  while ((int64_t(1) << w) < total) // 2´w
     w++;
   return w;
 }
@@ -173,6 +172,7 @@ public:
       : allo::CatapultModuleEmitter(state) {
     // SystemC/Catapult-native flow: f16 constants -> explicit half(...) ctor.
     state.acFloatConstCtor = true;
+    state.explicitWideNarrow = true;
   }
 
   void emitModule(ModuleOp module) override;
@@ -1555,6 +1555,28 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
 //===----------------------------------------------------------------------===//
 
 void SystemCModuleEmitter::emitModule(ModuleOp module) {
+  // The SystemC backend is a DATAFLOW backend: it emits SC_MODULEs + a self-
+  // contained sc_main testbench for @df.region / @df.kernel designs. A plain
+  // (customize) kernel has no dataflow region, so it would emit only as a bodiless
+  // helper function with no top module and no testbench -- it compiles but cannot
+  // be simulated (there is nothing to drive). Fail early with a clear message so
+  // the user picks the right backend, instead of a confusing csim failure later.
+  bool hasDataflow = false;
+  for (auto f : module.getOps<func::FuncOp>())
+    if (f->hasAttr("dataflow") || f->hasAttr("df.kernel")) {
+      hasDataflow = true;
+      break;
+    }
+  if (!hasDataflow) {
+    module.emitError(
+        "target=\"systemc\" requires a dataflow design (@df.region with "
+        "@df.kernel); this module has no dataflow region, so no top module or "
+        "testbench can be generated. Use target=\"vhls\" for non-dataflow "
+        "(customize) kernels.");
+    state.encounteredError = true;
+    return;
+  }
+
   // Flatten any @df.region hierarchy (sub-regions called from kernels) into a
   // flat top before emission — SystemC can't nest regions inside a thread.
   flattenHierarchy(module);
