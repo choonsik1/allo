@@ -1673,7 +1673,6 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
 //===----------------------------------------------------------------------===//
 #include <systemc.h>
 #include <mc_connections.h>   // MatchLib Connections (LI valid/ready channels)
-#include <mc_scverify.h>      // SCVerify testbench macros (CCS_MAIN / CCS_DESIGN)
 #include <ac_int.h>
 #include <ac_fixed.h>
 #include <ac_channel.h>     // local self-FIFO streams (one-kernel put+get+status)
@@ -1691,22 +1690,42 @@ typedef ac_ieee_float<binary16> half;
 // Floats have no implicit int/stream conversions (and half is non-trivial), so
 // memory ports (which transport a raw bit pattern in an ac_int req word) and the
 // testbench (text I/O + waveform trace) need these shims.
-// float -> raw bits (memcpy handles half=2B, ac_ieee_float<binary32>=4B, double=8B).
+// float -> raw bits. Catapult's front end rejects memcpy/void* casts under
+// __SYNTHESIS__ (CIN-71: "Invalid pointer cast from ... to void *"), which broke
+// every float MEMORY-PORT design at csynth. Floats use their IEEE type's own bit
+// accessor (data_ac_int(), works in csim AND synthesis); the generic template is
+// a csim-only fallback for any non-float mem-port payload (memcpy guarded out of
+// synthesis, where it would only be reached by an untested double mem-port).
+inline unsigned long long _fbits(const half &v) {
+  return (unsigned long long)v.data_ac_int().to_uint();
+}
+inline unsigned long long _fbits(const ac_ieee_float<binary32> &v) {
+  return (unsigned long long)v.data_ac_int().to_uint();
+}
 template <class T> inline unsigned long long _fbits(const T &v) {
+#ifdef __SYNTHESIS__
+  return (unsigned long long)v;
+#else
   unsigned long long b = 0; std::memcpy(&b, &v, sizeof(T)); return b;
+#endif
 }
 // Reconstruct a memory element from the DATAW raw bits: value-cast for integers,
-// bit-reinterpret for floats (a value-cast would corrupt the float).
+// set_data() bit-load for floats (a value-cast would corrupt the float; memcpy is
+// rejected under synthesis as above).
 template <typename T> inline T _mem_decode(unsigned long long r) { return (T)(long long)r; }
 template <> inline half _mem_decode<half>(unsigned long long r) {
-  uint16_t u = (uint16_t)r; half h; std::memcpy(&h, &u, sizeof(u)); return h;
+  half h; h.set_data(ac_int<16, true>((int)(uint16_t)r)); return h;
 }
 template <>
 inline ac_ieee_float<binary32> _mem_decode<ac_ieee_float<binary32> >(unsigned long long r) {
-  uint32_t u = (uint32_t)r; ac_ieee_float<binary32> f; std::memcpy(&f, &u, sizeof(u)); return f;
+  ac_ieee_float<binary32> f; f.set_data(ac_int<32, true>((int)(uint32_t)r)); return f;
 }
 template <> inline double _mem_decode<double>(unsigned long long r) {
+#ifdef __SYNTHESIS__
+  return (double)(long long)r;
+#else
   double d; std::memcpy(&d, &r, sizeof(d)); return d;
+#endif
 }
 // tb: data files hold float text -> read a float and convert.
 inline std::istream &operator>>(std::istream &is, half &h) { float f; is >> f; h = half(f); return is; }
@@ -1722,6 +1741,44 @@ inline void sc_trace(sc_core::sc_trace_file *tf, const ac_ieee_float<binary32> &
                      const std::string &n) {
   sc_trace(tf, (unsigned)_fbits(h), n);
 }
+// Make ac_ieee_float<Format> a valid Connections channel/Combinational payload.
+// Connections' marshaller.h ships Wrapped<> specializations for ac_std_float,
+// ac::bfloat16 and ac_float, but NOT ac_ieee_float -- so a Stream/Channel of
+// f32 (ac_ieee_float<binary32>) fails to synthesize (marshaller.h needs
+// T::width + T::Marshall()). This specialization marshals the raw IEEE bits
+// (data_ac_int()/set_data(), a lossless bit copy through the standard ac_int
+// AddField path), exactly as the ac_std_float specialization does. Wrapped lives
+// at GLOBAL scope (marshaller.h opens no namespace), so this must be global too.
+// Guarded: the SCVerify wrapper TU (sysc_sim.cpp) needs this same specialization,
+// and the cosim flow re-injects an identical guarded copy into sysc_sim.h; the
+// guard keeps the kernel.cpp TU (which sees both this AND, via mc_scverify ->
+// sysc_sim.h, the injected copy) from double-defining it.
+#ifndef ALLO_IEEE_FLOAT_MARSHALL_DEF
+#define ALLO_IEEE_FLOAT_MARSHALL_DEF
+template <ac_ieee_float_format Format>
+class Wrapped<ac_ieee_float<Format> > {
+public:
+  ac_ieee_float<Format> val;
+  Wrapped() : val(0.0f) {}
+  Wrapped(const ac_ieee_float<Format> &v) : val(v) {}
+  static const unsigned int width = ac_ieee_float<Format>::width;
+  static const bool is_signed = 1;
+  template <unsigned int Size>
+  void Marshall(Marshaller<Size> &m) {
+    ac_int<ac_ieee_float<Format>::width, true> bits = val.data_ac_int();
+    m & bits;                // packs bits on marshal-out, fills bits on marshal-in
+    val.set_data(bits);      // write unpacked bits back into the float
+  }
+};
+#endif // ALLO_IEEE_FLOAT_MARSHALL_DEF
+// mc_scverify.h MUST come after the float shims above: under CCS_DUT_RTL it pulls
+// in the SCVerify RTL wrapper (sysc_sim.h), which instantiates the ports'
+// Wrapped<ac_ieee_float<...>>::Marshall and sc_trace(ac_ieee_float) at include
+// time. A C++ specialization must be visible BEFORE the first implicit
+// instantiation, so both must be declared above this include -- otherwise the
+// wrapper binds the primary Wrapped<T> template ("ac_ieee_float has no member
+// Marshall") and float-channel cosim fails to compile.
+#include <mc_scverify.h>      // SCVerify testbench macros (CCS_MAIN / CCS_DESIGN)
 // Single-shot completion counter (csim/testbench ONLY). Each kernel bumps this
 // once, right after its body finishes its single pass; the sc_main testbench for
 // memory-mapped-output designs advances the clock until all kernels are done
@@ -1864,49 +1921,69 @@ SC_MODULE(AlloMemW) {
   }
 };
 
-// Depth-N buffered stream channel (Stream[T, N>=1]) — a SHIFT-REGISTER FIFO that
-// Catapult can schedule. The read is the STATIC index buf[0] and the only
-// runtime-indexed access is the append write buf[count], so there is NO
-// same-cycle runtime read+write to buf (a ring buffer's buf[head]-read +
-// buf[tail]-write couldn't be scheduled: the tool can't prove head != tail).
-// Non-blocking, throughput 1: a dequeue frees a slot an enqueue can fill the
-// same cycle. (Connections::Fifo is the official channel but trips a Catapult
-// 2024.2 front-end assertion, sif_ci_expr:2080, on its named constructor.)
+// Depth-N buffered stream channel (Stream[T, N>=1]) — a TWO-THREAD ring-buffer
+// FIFO that Catapult can synthesize AND schedule.
+//
+// Why two threads: a single SC_THREAD doing BOTH a non-blocking out.PushNB() and
+// in.PopNB() couples the two handshakes' sc_signal writes (in.rdy, out.vld/dat)
+// to the FIFO's internal state, and Catapult can't place them at the fixed cycle
+// offset its iomode requires -> the while loop won't close at II=1 (SCHD-30). A
+// shift-register, ring buffer, and even depth-1 all fail identically, because the
+// blocker is the *bidirectional* non-blocking handshake in one thread, not the
+// buffer layout. Splitting into an enqueue thread (touches only `in`) and a
+// dequeue thread (touches only `out`) gives each thread clean UNIDIRECTIONAL I/O
+// -- exactly the shape producer/consumer kernels schedule with.
+//
+// enq owns `tail`, deq owns `head`; each reads the other's pointer through a
+// registered sc_signal. The shared storage is an sc_signal register file (a plain
+// array shared across threads is rejected, HIER-41; sc_signal has a single writer
+// = enq). N+1 slots (one sacrificed) so head==tail unambiguously means EMPTY, with
+// no cross-thread last_action flag. (MatchLib's Connections::Fifo is the official
+// buffered channel but its SC_METHOD raw-signal reads can't bind to an internal
+// Combinational -- CIN-198 -- and its ctor trips a 2024.2 front-end assertion,
+// sif_ci_expr:2080; Connections::Buffer/Pipeline are forward-declared but never
+// implemented. This thread+PushNB/PopNB shell binds correctly and schedules.)
 template <typename T, int N>
 SC_MODULE(AlloFifo) {
   sc_in_clk clk;
   sc_in<bool> rst;
   Connections::In<T> in;
   Connections::Out<T> out;
+  sc_signal<T> buf[N + 1];        // register file shared across threads (enq writes, deq reads)
+  sc_signal<int> head_s, tail_s;  // deq owns head, enq owns tail; each reads the other
   SC_HAS_PROCESS(AlloFifo);
-  AlloFifo(sc_module_name nm) : sc_module(nm), in("in"), out("out") {
-    SC_THREAD(run);
-    sensitive << clk.pos();
-    async_reset_signal_is(rst, false);
+  AlloFifo(sc_module_name nm)
+      : sc_module(nm), in("in"), out("out"), head_s("head_s"), tail_s("tail_s") {
+    SC_THREAD(enq_thread); sensitive << clk.pos(); async_reset_signal_is(rst, false);
+    SC_THREAD(deq_thread); sensitive << clk.pos(); async_reset_signal_is(rst, false);
   }
-  void run() {
-    T buf[N];
-    int count = 0;
+  static int ModIncr(int i) { return (i == N) ? 0 : i + 1; }  // modulo (N+1)
+  void enq_thread() {              // only touches `in` (unidirectional input)
     in.Reset();
-    out.Reset();
+    int t = 0;
+    tail_s.write(0);
+    for (int k = 0; k < N + 1; k++) buf[k].write(T());  // reset the register file
     wait();
     while (1) {
-      // enqueue and dequeue decisions are INDEPENDENT (both from the
-      // start-of-cycle count) so the in.rdy / out.vld handshakes don't chain,
-      // which is what let Catapult schedule the fixed-timing Connections I/O.
-      bool deq = (count > 0) && out.PushNB(buf[0]);
-      bool enq = false;
-      T v;
-      if (count < N)
-        enq = in.PopNB(v);
-      if (deq) { // shift the queue down by one (static indices)
-        for (int k = 0; k < N - 1; k++)
-          buf[k] = buf[k + 1];
-        count--;
+      int h = head_s.read();
+      bool full = (ModIncr(t) == h);
+      if (!full) {
+        T v;
+        if (in.PopNB(v)) { buf[t].write(v); t = ModIncr(t); tail_s.write(t); }
       }
-      if (enq) { // append the new element (only runtime-indexed access)
-        buf[count] = v;
-        count++;
+      wait();
+    }
+  }
+  void deq_thread() {              // only touches `out` (unidirectional output)
+    out.Reset();
+    int h = 0;
+    head_s.write(0);
+    wait();
+    while (1) {
+      int t = tail_s.read();
+      bool empty = (h == t);
+      if (!empty) {
+        if (out.PushNB(buf[h].read())) { h = ModIncr(h); head_s.write(h); }
       }
       wait();
     }
@@ -2039,6 +2116,14 @@ SC_MODULE(AlloFifo) {
     // (e.g. EVA 8x8) overflows the ~8MB stack. Static storage has no such cap;
     // sc_main runs once so the single construction is unchanged.
     indent(); os << "static tb t(\"t\");\n";
+    // RTL cosim (Catapult SCVerify on Xcelium/NCSC) compiles with
+    // -DCONNECTIONS_ACCURATE_SIM, under which the Connections ConManager
+    // requires the sim clock be registered before sc_start() -- else
+    // connections.h asserts "call Connections::set_sim_clk(&clk)". Plain csim
+    // (OSCI, no such define) does not need it, so this is compiled out there.
+    indent(); os << "#ifdef CONNECTIONS_ACCURATE_SIM\n";
+    indent(); os << "Connections::set_sim_clk(&t.clk);\n";
+    indent(); os << "#endif\n";
     // Preload every INPUT memory (each shared-read replica gets its own copy)
     // from the array's input file (csim only: direct hierarchical poke of
     // AlloMem.mem[], done before reset is released).
