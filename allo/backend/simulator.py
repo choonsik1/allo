@@ -82,44 +82,254 @@ def recursive_collect_ops_by_name(
 
 
 # ---------------------------------------------------------------------------
-# Phase 1: per-PE simulated-time clock (default "all-ones" cost model).
+# The cost model.
+#
+# Latencies are abstract cycles, roughly calibrated to Vitis-HLS FPGA operator
+# latencies.  The model is deliberately *correct, not cycle-accurate*: op ordering
+# and determinism are exact, magnitudes are approximate.  Its job is to let DSE
+# score one design against another, not to predict silicon.
+#
+# The model runs on user-level IR (before stream lowering), so none of the
+# simulator's own ring-buffer plumbing is charged.
+#
+# DSE can retune it by mutating OP_LATENCY / the constants below before df.build.
 # ---------------------------------------------------------------------------
+
+# Ops with no cost of their own: pure bookkeeping, or combinational logic that HLS
+# chains into a neighbouring cycle.  Integer add/compare/select live here -- a chain
+# of them is one cycle, and the per-block floor below keeps a block from going free.
+_FREE_OPS = frozenset(
+    [
+        # structural / addressing
+        "arith.constant", "arith.index_cast", "arith.index_castui",
+        "arith.extsi", "arith.extui", "arith.trunci", "arith.bitcast",
+        "affine.apply", "affine.yield", "scf.yield", "func.return",
+        "memref.alloc", "memref.alloca", "memref.dealloc", "memref.get_global",
+        "memref.cast", "memref.subview", "memref.expand_shape",
+        "memref.collapse_shape", "memref.dim",
+        "unrealized_conversion_cast",
+        "allo.struct_construct", "allo.struct_get",
+        # control flow: the branch is free, the bodies are charged as their own blocks
+        "affine.if", "affine.for", "scf.if", "scf.for", "scf.while", "scf.condition",
+        # combinational integer logic
+        "arith.addi", "arith.subi", "arith.andi", "arith.ori", "arith.xori",
+        "arith.shli", "arith.shrsi", "arith.shrui", "arith.cmpi", "arith.select",
+        "arith.maxsi", "arith.minsi", "arith.maxui", "arith.minui",
+        "arith.negf", "math.absf", "math.absi",
+        # a stream status probe reads a signal; it does not move data
+        "allo.stream_empty", "allo.stream_full",
+    ]
+)
+
+# Fixed-latency ops that do not depend on operand width.
+OP_LATENCY = {
+    "arith.cmpf": 1,
+    "arith.sitofp": 2, "arith.uitofp": 2,
+    "arith.fptosi": 2, "arith.fptoui": 2,
+    "arith.extf": 1, "arith.truncf": 1,
+    "math.sqrt": 15, "math.rsqrt": 15,
+    "math.exp": 20, "math.log": 20, "math.powf": 25,
+    "math.sin": 25, "math.cos": 25, "math.tanh": 25,
+    # the data movement itself; *waiting* is modelled by the timestamp barriers,
+    # not charged here
+    "allo.stream_put": 1, "allo.stream_get": 1,
+    "allo.stream_try_put": 1, "allo.stream_try_get": 1,
+}
+
+# Width-dependent arithmetic: (latency at <=32 bits, latency at >32 bits).
+_FLOAT_LATENCY = {
+    "arith.addf": (4, 6), "arith.subf": (4, 6),
+    "arith.mulf": (3, 5),
+    "arith.divf": (14, 24), "arith.remf": (14, 24),
+}
+_INT_MUL_LATENCY = (1, 3)  # one DSP-registered cycle; wider needs a DSP cascade
+
+# BRAM access: a read has a registered output, a write posts in one cycle.  Scalars
+# that HLS keeps in registers cost nothing -- see _is_register_memref.
+ARRAY_LOAD_LATENCY = 2
+ARRAY_STORE_LATENCY = 1
+
+# An opaque helper call. A sharper model would charge the callee's own latency;
+# this is a known approximation.
+CALL_LATENCY = 1
+
+# Assumed initiation interval for loops with no explicit `pipeline_ii`.  Measured, not
+# guessed: Vitis 2023.2 auto-pipelines these loops at II=1 with NO pragma in the emitted
+# C++ (config_compile -pipeline_loops), so an unpipelined default overcharged a
+# producer/consumer PE 2.7x (16 modelled vs 6 reported).  None = unpipelined.
+DEFAULT_II = 1
+
+
+def _bitwidth(ty):
+    if isinstance(ty, IntegerType):
+        return ty.width
+    if isinstance(ty, FloatType):
+        return ty.width
+    return 32
+
+
+def _is_register_memref(value):
+    """True if this memref is a scalar cell -- rank 0 or a single element.  Allo
+    materialises PE-local scalars (`c: float32 = 0`, `c += ...`) as memrefs, but HLS
+    keeps them in registers, so their loads/stores are free rather than BRAM
+    accesses."""
+    try:
+        ty = MemRefType(value.type)
+    except (ValueError, TypeError):
+        return False
+    shape = list(ty.shape)
+    return len(shape) == 0 or all(d == 1 for d in shape)
+
+
 def _op_latency(op):
-    """Static latency (abstract cycles) of one op for the per-PE clock.
-    Default cost model: every op costs 1 tick. This is the single place to
-    refine later toward the HLS II / latency schedule."""
+    """Static latency (abstract cycles) of one op under the cost model above."""
+    name = op.operation.name
+
+    if name in _FREE_OPS:
+        # a pipelined loop still costs its fill/drain once, where the loop sits
+        if name in ("affine.for", "scf.for"):
+            return _loop_prologue_latency(op)
+        return 0
+
+    if name in OP_LATENCY:
+        return OP_LATENCY[name]
+
+    if name in _FLOAT_LATENCY:
+        narrow, wide = _FLOAT_LATENCY[name]
+        return narrow if _bitwidth(op.results[0].type) <= 32 else wide
+
+    if name == "arith.muli":
+        narrow, wide = _INT_MUL_LATENCY
+        return narrow if _bitwidth(op.results[0].type) <= 32 else wide
+
+    if name in ("arith.divsi", "arith.divui", "arith.remsi", "arith.remui"):
+        # non-restoring division is roughly one cycle per result bit
+        return max(_bitwidth(op.results[0].type), 8)
+
+    if name in ("affine.load", "memref.load"):
+        return 0 if _is_register_memref(op.operands[0]) else ARRAY_LOAD_LATENCY
+
+    if name in ("affine.store", "memref.store"):
+        # (value, memref, indices...)
+        return 0 if _is_register_memref(op.operands[1]) else ARRAY_STORE_LATENCY
+
+    if name == "func.call":
+        return CALL_LATENCY
+
+    # Unknown op: charge one cycle rather than silently zero, so a design using
+    # something the table has not seen still advances its clock.
     return 1
 
 
-def _block_latency(block):
-    """Sum of _op_latency over ops DIRECTLY in this block (nested regions get
-    their own increments, so a loop body is charged once per iteration)."""
-    return sum(_op_latency(op) for op in block.operations)
+def _loop_ii(loop_op):
+    """The initiation interval of a pipelined loop, or None if it is not pipelined."""
+    if "pipeline_ii" in loop_op.attributes:
+        return max(int(IntegerAttr(loop_op.attributes["pipeline_ii"]).value), 1)
+    return DEFAULT_II
+
+
+def _loop_body_latency(loop_op):
+    """Latency of one iteration of the loop body, ignoring pipelining."""
+    total = 0
+    for region in loop_op.regions:
+        for block in region.blocks:
+            total += sum(_op_latency(inner) for inner in block.operations)
+    return total
+
+
+def _loop_prologue_latency(loop_op):
+    """Charged once where a pipelined loop sits: its fill/drain.  With the body block
+    charged `II` per iteration, `n*II + (body - II)` = `(n-1)*II + body`, the standard
+    pipelined-loop latency.  Zero for an unpipelined loop."""
+    ii = _loop_ii(loop_op)
+    if ii is None:
+        return 0
+    return max(0, _loop_body_latency(loop_op) - ii)
+
+
+def _block_latency(block, parent_op=None):
+    """Cost charged once per execution of this block.  Ops directly in the block only
+    -- nested regions get their own increments, so a loop body is charged per
+    iteration.  A pipelined loop body costs its II instead of its full latency."""
+    if parent_op is not None and parent_op.operation.name in ("affine.for", "scf.for"):
+        ii = _loop_ii(parent_op)
+        if ii is not None:
+            return ii
+    total = sum(_op_latency(op) for op in block.operations)
+    # Floor: any block doing real work takes at least a cycle. Keeps a body of purely
+    # combinational ops from advancing the clock by zero, which would let a peer spin
+    # forever in a time barrier waiting on a clock that never moves.
+    if total == 0 and any(op.operation.name not in _FREE_OPS for op in block.operations):
+        return 1
+    return total
 
 
 def _collect_blocks(op, res):
-    """Collect every Block in op's regions, recursively -- but NOT inside spin-wait
-    scf.while loops: their iteration count is scheduler-dependent, so charging the
-    clock per spin would make it non-deterministic. The while op still counts once
-    in its enclosing block (via _block_latency)."""
+    """Collect (block, parent_op) for every Block in op's regions, recursively -- but
+    NOT inside spin-wait scf.while loops: their iteration count is scheduler-dependent,
+    so charging the clock per spin would make it non-deterministic. The while op still
+    counts once in its enclosing block (via _block_latency)."""
     for region in op.regions:
         for block in region.blocks:
-            res.append(block)
+            res.append((block, op))
             for inner in block.operations:
-                if inner.name == "scf.while":
+                if inner.operation.name == "scf.while":
                     continue
                 _collect_blocks(inner, res)
+
+
+def _collect_top_loop_bodies(func, res):
+    """Body blocks of loops sitting DIRECTLY in the function's entry block -- i.e. the
+    PE's outermost (cycle) loop. Used by the shared-clock cost model, which treats one
+    such iteration as one cycle rather than charging each nested scalar op."""
+    for region in func.regions:
+        for block in region.blocks:
+            for op in block.operations:
+                if op.operation.name in ("affine.for", "scf.for"):
+                    for r in op.regions:
+                        for b in r.blocks:
+                            res.append(b)
+
+
+def _insert_cycle_clock_increments(func, clock_arg, module):
+    """Shared-clock cost model: charge +1 per iteration of the PE's OUTERMOST loop, so
+    every PE's clock counts *cycles* and all PEs advance at the same rate.
+
+    Rationale (see simulator_shared_clock.md): the per-op model charges a router's
+    decode + 5x5 arbitration + crossbar ~270 cycles per pass while a collector pass
+    charges ~2.  Since the read barrier compares clocks ACROSS PEs (ts[head] <= T), the
+    heavy PE's output timestamps become unreachable and its data is never read -- packet
+    written, never delivered, no deadlock.  In hardware that router body is one
+    pipelined cycle (II=1), so per-iteration is both the fairer and the truer model."""
+    i64 = IntegerType.get_signless(64, module.context)
+    bodies = []
+    _collect_top_loop_bodies(func, bodies)
+    if not bodies:
+        # No cycle loop (e.g. a one-shot loader): charge the whole body as one cycle so
+        # the PE still advances and peers waiting on its clock are released.
+        entry = func.body.blocks[0]
+        bodies = [entry] if len(entry.operations) > 0 else []
+    for block in bodies:
+        if len(block.operations) == 0:
+            continue
+        ip = InsertionPoint(beforeOperation=block.operations[0])
+        cur = memref_d.LoadOp(memref=clock_arg, indices=[], ip=ip)
+        inc = arith_d.ConstantOp(i64, 1, ip=ip)
+        nxt = arith_d.AddIOp(lhs=cur.result, rhs=inc.result, ip=ip)
+        memref_d.StoreOp(nxt, clock_arg, [], ip=ip)
 
 
 def _insert_clock_increments(func, clock_arg, module):
     """Insert `clock_arg += static_block_latency` at the start of every block of
     the PE function (recursively), so the PE's clock tracks simulated time under
-    the default cost model. Inert until the clock is read (Phase 3)."""
+    the cost model."""
+    if os.getenv("ALLO_SIM_CLOCK") == "cycle":
+        return _insert_cycle_clock_increments(func, clock_arg, module)
     i64 = IntegerType.get_signless(64, module.context)
     blocks = []
     _collect_blocks(func, blocks)
-    for block in blocks:
-        lat = _block_latency(block)
+    for block, parent_op in blocks:
+        lat = _block_latency(block, parent_op)
         if lat == 0:
             continue
         ip = InsertionPoint(beforeOperation=block.operations[0])
@@ -392,6 +602,27 @@ def _stream_producer_consumer_clocks(stream_construct_op, pe_call_define_ops):
     return prod_clock, cons_clock
 
 
+
+# Back-off used by both time barriers.  usleep(1) really sleeps ~50-60us (Linux timer
+# granularity), which looks like pure overhead -- but removing it is NOT a win: measured
+# 2026-07-27, spinning on taskyield alone stopped even a 2x2 mesh from completing while
+# burning ~1040% CPU.  taskyield is only a hint; without a real sleep a spinner can hold
+# its core against the very peer it is waiting for.  ALLO_SIM_SPIN=hot opts out, but only
+# do that after measuring that a run is sleep-bound rather than spin-bound.
+def _spin_backoff(module, aip):
+    """Emit the barrier's back-off: taskyield, plus usleep(1) unless spinning hot."""
+    openmp_d.TaskyieldOp(ip=aip)
+    # NOTE: the usleep is NOT optional by default.  Dropping it (spinning on taskyield
+    # alone) made even a 2x2 mesh stop completing, at ~1040% CPU: taskyield is only a
+    # hint, so a spinner can burn its slice waiting on a peer the runtime never
+    # schedules.  The sleep forces a real yield.  Opt in with ALLO_SIM_SPIN=hot only
+    # after measuring that a run is sleep-bound rather than spin-bound.
+    if os.getenv("ALLO_SIM_SPIN") == "hot":
+        return
+    c1 = arith_d.ConstantOp(IntegerType.get_signless(32, module.context), 1, ip=aip)
+    func_d.CallOp([], FlatSymbolRefAttr.get("usleep"), [c1], ip=aip)
+
+
 def _emit_read_barrier(head_ptr, tail_ptr, ts_ptr, prod_ptr, t_val, module, ip):
     """Read-side time-barrier for try_get: spin until the result is DECIDED --
     either an element produced by time T (=t_val) is present, or the producer's
@@ -420,9 +651,7 @@ def _emit_read_barrier(head_ptr, tail_ptr, ts_ptr, prod_ptr, t_val, module, ip):
     scf_d.ConditionOp(condition=not_decided.result, args=[], ip=bip)
     after = Block.create_at_start(parent=while_op.after, arg_types=[])
     aip = InsertionPoint(after)
-    openmp_d.TaskyieldOp(ip=aip)
-    c1 = arith_d.ConstantOp(IntegerType.get_signless(32, module.context), 1, ip=aip)
-    func_d.CallOp([], FlatSymbolRefAttr.get("usleep"), [c1], ip=aip)
+    _spin_backoff(module, aip)
     scf_d.YieldOp(results_=[], ip=aip)
 
 
@@ -446,9 +675,7 @@ def _emit_write_barrier(free_ts_ptr, tail_next_idx, cons_ptr, t_val, module, ip)
     scf_d.ConditionOp(condition=not_decided.result, args=[], ip=bip)
     after = Block.create_at_start(parent=while_op.after, arg_types=[])
     aip = InsertionPoint(after)
-    openmp_d.TaskyieldOp(ip=aip)
-    c1 = arith_d.ConstantOp(IntegerType.get_signless(32, module.context), 1, ip=aip)
-    func_d.CallOp([], FlatSymbolRefAttr.get("usleep"), [c1], ip=aip)
+    _spin_backoff(module, aip)
     scf_d.YieldOp(results_=[], ip=aip)
 
 
