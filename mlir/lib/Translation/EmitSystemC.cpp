@@ -192,6 +192,8 @@ private:
   // empty()/full() have no synthesizable Connections equivalent -> errored.
   void emitStreamTryGet(allo::StreamTryGetOp op) override;
   void emitStreamTryPut(allo::StreamTryPutOp op) override;
+  void emitChannelTryGet(allo::ChannelTryGetOp op) override;
+  void emitChannelTryPut(allo::ChannelTryPutOp op) override;
   void emitStreamEmpty(allo::StreamEmptyOp op) override;
   void emitStreamFull(allo::StreamFullOp op) override;
 
@@ -822,6 +824,12 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   // Clock + reset (required for synthesizable clocked threads).
   indent(); os << "sc_in_clk clk;\n";
   indent(); os << "sc_in<bool> rst;\n";
+  // Hardware completion flag: raised (synthesized logic, RTL-observable) after the
+  // kernel's single pass. The top ANDs all kernels' `done` into a top-level output
+  // port the tb polls -- a real done signal that works in RTL cosim, unlike the
+  // C-side __allo_done counter (which the synthesized DUT can't increment, forcing
+  // the tb to burn a huge fixed completion cap every cosim).
+  indent(); os << "sc_out<bool> done;\n";
 
   // Ports + members from arguments.
   SmallVector<std::string, 4> streamPorts;
@@ -930,7 +938,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
 
   // Constructor: name the ports + register a clocked, reset-aware thread.
   indent(); os << "SC_HAS_PROCESS(" << name << ");\n";
-  indent(); os << name << "(sc_module_name n) : sc_module(n)";
+  indent(); os << name << "(sc_module_name n) : sc_module(n), done(\"done\")";
   for (auto &pn : streamPorts)
     os << ", " << pn << "(\"" << pn << "\")";
   os << " {\n";
@@ -951,6 +959,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   for (auto &pn : wireOutPorts) {
     indent(); os << pn << ".write(0);\n";
   }
+  indent(); os << "done.write(false);  // completion flag low until the pass finishes\n";
   indent(); os << "wait();\n";
   // Single-shot: run the body EXACTLY ONCE, then idle. Free-running (while(1)
   // around the body) is safe for stream kernels (they re-block on an empty input
@@ -959,6 +968,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   // lets the tb read memory outputs after a real completion instead of guessing a
   // settle time. The idle `while(1) wait()` keeps the clocked thread alive.
   emitBlock(func.front()); // put/get now emit .Push()/.Pop()
+  indent(); os << "done.write(true);  // RTL-observable completion (see the done port)\n";
   os << "#ifndef __SYNTHESIS__\n";
   indent(); os << "__allo_done++; // csim: this kernel finished its single pass\n";
   os << "#endif\n";
@@ -1247,6 +1257,10 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   // Clock + reset (fanned out to every submodule).
   indent(); os << "sc_in_clk clk;\n";
   indent(); os << "sc_in<bool> rst;\n";
+  // Top-level completion port = AND of every kernel's `done` (see below). The tb
+  // polls this to stop exactly when the design finishes -- valid in RTL cosim,
+  // unlike the C-side __allo_done counter.
+  indent(); os << "sc_out<bool> done;\n";
 
   // Region boundary arrays -> top-level Connections stream ports (In=input,
   // Out=output; direction from arg_dirs). A random-access array is routed to an
@@ -1343,6 +1357,10 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     instNames.push_back(inst);
     indent();
     os << it.value().getCallee() << " " << inst << ";\n";
+  }
+  // Per-kernel completion signals; an SC_METHOD ANDs them into the top `done` port.
+  for (auto &inst : instNames) {
+    indent(); os << "sc_signal<bool> " << inst << "_done;\n";
   }
   // Discover one physical memory per (call, memory-port arg). A grid replica
   // that uses a shared boundary array gets its OWN memory (replication), keyed
@@ -1445,6 +1463,8 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     auto callee = parent.lookupSymbol<func::FuncOp>(call.getCallee());
     indent(); os << instNames[it.index()] << ".clk(clk);\n";
     indent(); os << instNames[it.index()] << ".rst(rst);\n";
+    indent(); os << instNames[it.index()] << ".done(" << instNames[it.index()]
+                 << "_done);\n";
     // Bind each operand to the port THIS callee actually emitted for it. A grid
     // shares one boundary array across all replicas, but only the replica that
     // uses it (feeder/body/drain) has a port; unused args are internal members
@@ -1542,9 +1562,27 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       indent(); os << mi.chan << "_mem.rsp(" << mi.chan << "_rsp_ch);\n";
     }
   }
+  // Combinational aggregator: drive the top `done` port from all kernel dones.
+  indent(); os << "SC_METHOD(_agg_done); sensitive";
+  for (auto &inst : instNames)
+    os << " << " << inst << "_done";
+  os << ";\n";
   reduceIndent();
   indent();
   os << "}\n";
+
+  // done = AND of every kernel's completion flag (all kernels finished their pass).
+  indent(); os << "void _agg_done() { done.write(";
+  if (instNames.empty()) {
+    os << "true";
+  } else {
+    std::string sep2;
+    for (auto &inst : instNames) {
+      os << sep2 << inst << "_done.read()";
+      sep2 = " && ";
+    }
+  }
+  os << "); }\n";
 
   reduceIndent();
   os << "};\n\n";
@@ -2023,6 +2061,7 @@ SC_MODULE(AlloFifo) {
     indent(); os << "sc_clock clk;\n";
     indent(); os << "sc_signal<bool> rst;\n";
     indent(); os << topName << " dut;\n";
+    indent(); os << "sc_signal<bool> done_sig;  // DUT completion (polled by sc_main)\n";
     for (auto &a : ioArrays) {
       indent();
       os << "Connections::Combinational< " << a.ctype << " > ch_" << a.member
@@ -2035,7 +2074,7 @@ SC_MODULE(AlloFifo) {
       os << ", ch_" << a.member << "(\"ch_" << a.member << "\")";
     os << " {\n";
     addIndent();
-    indent(); os << "dut.clk(clk); dut.rst(rst);\n";
+    indent(); os << "dut.clk(clk); dut.rst(rst); dut.done(done_sig);\n";
     for (auto &a : ioArrays) {
       indent();
       os << "dut." << a.member << "(ch_" << a.member << ");\n";
@@ -2153,12 +2192,14 @@ SC_MODULE(AlloFifo) {
     if (hasStreamOut) {
       indent(); os << "sc_start();\n";
     } else {
-      // Generous safety cap: the loop EXITS as soon as all kernels finish (real
-      // completion), so this only bounds wall-clock if the design deadlocks.
+      // Poll the DUT's hardware `done` port (AND of all kernels' completion) --
+      // valid in BOTH csim and RTL cosim, unlike the C-side __allo_done counter
+      // (which the synthesized DUT can't touch). The cap only bounds wall-clock if
+      // the design never asserts done (deadlock / missing token).
       int64_t capCycles = maxTotal * 2000 + 200000;
       indent();
-      os << "for (long long _c = 0; _c < " << capCycles << "LL && __allo_done < "
-         << numKernelInsts << "; ++_c) sc_start(1, SC_NS); // wait for completion\n";
+      os << "for (long long _c = 0; _c < " << capCycles
+         << "LL && !t.done_sig.read(); ++_c) sc_start(1, SC_NS); // until DUT done\n";
       indent();
       os << "sc_start(" << (memInsts.empty() ? 64 : 256)
          << ", SC_NS); // settle in-flight memory writes\n";
