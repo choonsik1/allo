@@ -14,6 +14,7 @@ import numpy as np
 import allo
 from allo.ir.types import int32, Stream
 import allo.dataflow as df
+from allo.backend.simulator import DeadlockError
 
 CASE = sys.argv[1]
 
@@ -110,5 +111,8 @@ BUILDERS = {
 top, args = BUILDERS[CASE]()
 sim = df.build(top, target="simulator")
 print("BUILD_DONE calling sim", flush=True)
-sim(*args)
-print("RESULT: COMPLETED", flush=True)
+try:
+    sim(*args)
+    print("RESULT: COMPLETED", flush=True)
+except DeadlockError as e:
+    print(f"RESULT: DEADLOCK {e}", flush=True)

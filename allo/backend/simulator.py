@@ -57,6 +57,11 @@ from ..passes import decompose_library_function
 from ..utils import get_func_inputs_outputs
 
 
+class DeadlockError(RuntimeError):
+    """The design provably cannot make progress, raised instead of hanging forever.
+    `.detail` carries the localisation (which stream, which PE, which role)."""
+
+
 # The `walk` function
 def recursive_collect_ops(
     top_op: Operation, target_op_type: tuple[type], res_list: list
@@ -414,9 +419,30 @@ def _add_pe_clock_args(module, top_func_name):
 _CLOCK_DONE_BIT = 1 << 62
 _CLOCK_VALUE_MASK = _CLOCK_DONE_BIT - 1
 
-# Symbols for reading the per-PE cycle counts back out into Python.
+# Symbols for reading the per-PE cycle counts back out into Python.  The global has
+# three extra trailing slots carrying the deadlock report, so detection needs no
+# second global/reader pair: [.. N per-PE cycles .., flag, stream_id, role].
 SIM_CYCLES_GLOBAL = "__allo_sim_cycles"
 SIM_CYCLES_READER = "__allo_sim_cycles_read"
+_DL_SLOTS = 3
+_DL_ROLE_PUT, _DL_ROLE_GET = 1, 2
+
+
+# Per-build state the deep stream-lowering call chain needs but does not thread:
+# how wide the read-out global is, and a small integer id per stream (so a deadlock
+# report can name the stream). Reset at the top of build_dataflow_simulator.
+_SIM_CTX = {"n_pes": 0, "stream_ids": {}}
+
+
+def _stream_id(name):
+    """Stable small integer for a stream name, assigned in first-seen order."""
+    return _SIM_CTX["stream_ids"].setdefault(str(name).strip('"'), len(_SIM_CTX["stream_ids"]))
+
+
+def _sim_global_type(module, n_pes):
+    """Type of the shared read-out global: N per-PE cycle slots + the deadlock triple."""
+    i64 = IntegerType.get_signless(64, module.context)
+    return MemRefType.get([n_pes + _DL_SLOTS], i64)
 
 
 def _insert_clock_termination(func, clock_arg, module):
@@ -447,6 +473,22 @@ def _insert_pe_clock_increments(module):
             _insert_clock_termination(op, clock_arg, module)
 
 
+def _declare_sim_global(module, n_pes):
+    """Declare the read-out global. Must run BEFORE stream lowering: the spin loops
+    emit `memref.get_global` against this symbol as they are generated."""
+    i64 = IntegerType.get_signless(64, module.context)
+    arr_ty = _sim_global_type(module, n_pes)
+    memref_d.GlobalOp(
+        sym_name=StringAttr.get(SIM_CYCLES_GLOBAL),
+        type_=TypeAttr.get(arr_ty),
+        sym_visibility=StringAttr.get("private"),
+        initial_value=DenseElementsAttr.get_splat(
+            RankedTensorType.get([n_pes + _DL_SLOTS], i64), IntegerAttr.get(i64, 0)
+        ),
+        ip=InsertionPoint(module.body),
+    )
+
+
 def _emit_cycle_harvest(module, clock_cells):
     """Make the per-PE simulated-cycle counts readable from Python.
 
@@ -461,17 +503,7 @@ def _emit_cycle_harvest(module, clock_cells):
         return []
     i64 = IntegerType.get_signless(64, module.context)
     idx_ty = IndexType.get(module.context)
-    arr_ty = MemRefType.get([n], i64)
-
-    memref_d.GlobalOp(
-        sym_name=StringAttr.get(SIM_CYCLES_GLOBAL),
-        type_=TypeAttr.get(arr_ty),
-        sym_visibility=StringAttr.get("private"),
-        initial_value=DenseElementsAttr.get_splat(
-            RankedTensorType.get([n], i64), IntegerAttr.get(i64, 0)
-        ),
-        ip=InsertionPoint(module.body),
-    )
+    arr_ty = _sim_global_type(module, n)
 
     # (b) harvest: written before the caller's return, once per call site.
     for pe_index, (caller, _name, clk) in enumerate(clock_cells):
@@ -1937,6 +1969,13 @@ def build_dataflow_simulator(module: Module, top_func_name: str):
         # Phase 1/2 reorder: thread a per-PE clock arg through the calls BEFORE
         # stream lowering, so put/get lowering can stamp/advance the clock.
         clock_cells = _add_pe_clock_args(module, top_func_name)
+
+        # Declare the read-out global now: stream lowering below emits
+        # `memref.get_global` against it when it generates the deadlock checks.
+        _SIM_CTX["n_pes"] = len(clock_cells)
+        _SIM_CTX["stream_ids"] = {}
+        if clock_cells:
+            _declare_sim_global(module, len(clock_cells))
 
         # Charge the clock BEFORE stream lowering, while the IR still holds only
         # user-level ops.  After lowering, a PE body is ~90% simulator plumbing
