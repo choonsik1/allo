@@ -63,6 +63,28 @@ static SmallString<32> getSCTypeName(Type valType) {
   return SmallString<32>(allo::getCatapultTypeName(valType).str());
 }
 
+// Payload type for a Connections stream/channel/wire. These go through the
+// marshaller (Wrapped<T> needs T::width + T::Marshall), which ships specializations
+// only for SOME native integers -- `short`/`int`/`long` have them but `signed char`
+// (int8_t) does NOT, so an int8 stream fails to synthesize (marshaller.h:203,
+// CRD-276). ac_int<W> always carries the marshaller interface, so emit EVERY <=64
+// bit integer payload as ac_int<W> (uniform, and a no-op for cosim bit-width). Wider
+// ints keep the ap_int shim (an ac_int subclass, already marshaller-compatible);
+// non-integers (ac_ieee_float, ac_fixed) marshal as-is via getSCTypeName.
+static SmallString<32> getStreamPayloadTypeName(Type valType) {
+  Type scalar = valType;
+  if (auto st = llvm::dyn_cast<ShapedType>(scalar))
+    scalar = st.getElementType();
+  if (auto it = llvm::dyn_cast<IntegerType>(scalar))
+    if (it.getWidth() <= 64) {
+      bool uns =
+          it.getSignedness() == IntegerType::SignednessSemantics::Unsigned;
+      return SmallString<32>("ac_int<" + std::to_string(it.getWidth()) + ", " +
+                             (uns ? "false" : "true") + ">");
+    }
+  return getSCTypeName(valType);
+}
+
 // Address width for a memory of `total` elements: ceil(log2(total)), min 1.
 static unsigned scAddrW(int64_t total) {
   unsigned w = 1;
@@ -863,7 +885,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         // kernel therefore needs BOTH ends -- an Out (enq: put/try_put/full) and
         // an In (deq: get/try_get/empty). A bounded FIFO makes Full()/Empty()
         // correct, unlike an unbounded ac_channel.
-        std::string T = std::string(getSCTypeName(st.getBaseType()).str());
+        std::string T = std::string(getStreamPayloadTypeName(st.getBaseType()).str());
         std::string en = pn + "_enq", dq = pn + "_deq";
         streamPorts.push_back(en);
         streamPorts.push_back(dq);
@@ -876,7 +898,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         char d = streamDir(func, i);
         streamPorts.push_back(pn);
         os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
-        os << getSCTypeName(st.getBaseType()) << " > " << pn << ";\n";
+        os << getStreamPayloadTypeName(st.getBaseType()) << " > " << pn << ";\n";
       }
     } else if (auto ct = llvm::dyn_cast<ChannelType>(v.getType())) {
       // channel arg -> Connections::In/Out<T> port (combinational, no buffer)
@@ -904,7 +926,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         std::string pn = std::string(addName(v, /*isPtr=*/false).str());
         streamPorts.push_back(pn);
         os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
-        os << getSCTypeName(mt.getElementType()) << " > " << pn << ";\n";
+        os << getStreamPayloadTypeName(mt.getElementType()) << " > " << pn << ";\n";
       } else if (d == 'i' || d == 'b') {
         // random-access INPUT ('i') or read+write ('b') array -> memory port:
         // Out<req> + In<T>. Body loads become req.Push(LOAD,addr)/rsp.Pop() and
@@ -922,7 +944,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         streamPorts.push_back(rspn);
         os << "Connections::Out< " << reqT << " > " << reqn << ";\n";
         indent();
-        os << "Connections::In< " << getSCTypeName(mt.getElementType()) << " > "
+        os << "Connections::In< " << getStreamPayloadTypeName(mt.getElementType()) << " > "
            << rspn << ";\n";
       } else if (d == 'o') {
         // random-access OUTPUT array -> write-only memory port: Out<req> only.
@@ -1418,7 +1440,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     if (!mt)
       continue;
     std::string nm = std::string(addName(arg.value(), /*isPtr=*/false).str());
-    std::string ct = std::string(getSCTypeName(mt.getElementType()).str());
+    std::string ct = std::string(getStreamPayloadTypeName(mt.getElementType()).str());
     int64_t total = 1;
     for (auto s : mt.getShape())
       total *= s;
@@ -1473,7 +1495,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     // its _in/_out Combinational wires + AlloFifo are declared just like any other
     // depth>=1 stream; the one kernel simply binds BOTH ends (see the bind loop).
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
-    std::string T = std::string(getSCTypeName(st.getBaseType()).str());
+    std::string T = std::string(getStreamPayloadTypeName(st.getBaseType()).str());
     std::string nm = std::string(addName(sc.getResult(), /*isPtr=*/false).str());
     if (st.getDepth() == 0) {
       indent();
@@ -1543,7 +1565,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
           {"mp" + std::to_string(it.index()) + "_" +
                std::to_string(opnd.index()),
            instNames[it.index()], std::string(getName(carg).str()),
-           std::string(getSCTypeName(mt.getElementType()).str()), total,
+           std::string(getStreamPayloadTypeName(mt.getElementType()).str()), total,
            scAddrW(total), scDataW(mt.getElementType()), mp, ii, oo});
     }
   }

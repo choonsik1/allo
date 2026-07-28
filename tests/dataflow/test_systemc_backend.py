@@ -463,10 +463,12 @@ def test_systemc_stream_depth_flavor():
     depth >= 1 -> a schedulable AlloFifo<T,depth> between _in/_out wires."""
     code0 = df.build(_depth_pc(0)[0], target="systemc").hls_code
     assert "_fifo;" not in code0  # depth 0 -> no FIFO instance, a plain wire
-    assert "Connections::Combinational< int32_t > v" in code0
+    # Integer stream payloads emit as ac_int<W> (not native int32_t) so Connections'
+    # marshaller can serialize them -- native int8_t lacks a Wrapped<> specialization.
+    assert "Connections::Combinational< ac_int<32, true> > v" in code0
 
     code4 = df.build(_depth_pc(4)[0], target="systemc").hls_code
-    assert code4.count("AlloFifo< int32_t, 4 >") == 2  # both streams buffered
+    assert code4.count("AlloFifo< ac_int<32, true>, 4 >") == 2  # both streams buffered
     assert "_fifo.in(" in code4 and "_fifo.out(" in code4  # wired through
     print("stream depth honored: 0 -> Combinational, >=1 -> AlloFifo")
 
