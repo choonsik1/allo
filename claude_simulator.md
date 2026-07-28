@@ -1,3 +1,146 @@
+# ═══════════════════════════════════════════════════════════════════════
+# HANDOFF — START HERE (simulator shell) · updated 2026-07-27
+# ═══════════════════════════════════════════════════════════════════════
+
+## 2026-07-27: Task 1 DONE. Task 2 in progress (plumbing committed, detection next).
+
+**Resume point: write `_emit_deadlock_guard` in `simulator.py`, then wire it into the
+3 blocking spin sites (lines ~1365 cross-call, ~1666/~1776 local).** Design below.
+
+Task 1 (cost model) is complete — commits `ebd572f` (cycle read-out), `676f059`
+(charge before lowering), `a48eacb` (real per-op latencies + II).
+- **`mod.get_cycles()` now exists** → `SimCycles{per_pe, makespan}`. There was no way
+  to read a cycle count at all before; DSE can now score a design.
+- The clock is **no longer "all-ones" and no longer purely logical** (the old text
+  lower in this file is stale on both counts). Typed latencies: fp32 add 4 / mul 3 /
+  div 14, int mul 1, int div ≈ bitwidth, BRAM load 2 / store 1, register-resident
+  scalars 0, structural 0, and `(n-1)*II + body` for pipelined loops.
+- **Calibrated against Vitis csynth: 7 modelled vs 6 reported** on a blocking
+  producer/consumer. Caveat — that is ONE point, two trivial integer PEs; float and
+  BRAM latencies remain uncalibrated. Say "cycle-approximate, 1.17× at one point",
+  not "cycle-approximate" flat.
+- Biggest finding: **NB designs csynth to `undef` latency** — there is no static
+  schedule to ingest for exactly the designs this work targets, which kills
+  OmniSim-style schedule ingestion as an accuracy route. Blocking designs report
+  fine. Details + the csynth recipe: memory [[csynth-cost-model-ground-truth]].
+- Known gaps, deliberately NOT chased (they shift every DSE score by a constant, so
+  they don't change rankings): `load_buf`/`store_res` wrappers aren't clocked at all
+  (Vitis charges `store_res0` 11–12 cycles); per-op microbenchmark calibration.
+
+Task 2 (deadlock detection) — `ed99cc2` has phase 0 + phase 1 plumbing, no behaviour
+change yet. Baseline: `control` COMPLETED, the other 3 cases hang and are killed at 25 s.
+- `DeadlockError` exists; `deadlock_worker.py` prints COMPLETED / DEADLOCK / nothing.
+- Read-out global widened N → N+3, extra slots `[flag, stream_id, role]`; declared by
+  `_declare_sim_global` BEFORE stream lowering (spin loops emit `get_global` against it).
+- `_SIM_CTX`/`_stream_id` carry `n_pes` + per-stream ids into the deep lowering chain.
+- **The design idea:** `_CLOCK_DONE_BIT` (added for the read-out) makes detection
+  *exact*. A PE blocked on a stream whose peer has already finished is a proof, not a
+  heuristic — no threshold, no false positives — and covers starvation +
+  back-pressure (2 of 3 classes). Plan: in the spin `after` block, if the peer clock
+  has DONE set, write `(stream_id, role)` + flag into the global; add `flag == 0` to
+  the `before` condition so every blocked PE unwinds; Python raises after the run.
+  Note the `after` block is already terminated when the guard is added — insert with
+  `InsertionPoint(beforeOperation=<after_block terminator>)`.
+- Still open: **circular wait** needs a no-progress watchdog (heuristic, phase 2), and
+  **livelock** — NB retry loops call `_tick_clock`, so their clocks keep advancing and
+  the frozen-clock signature misses them entirely. May matter more than circular wait
+  since the agents' generator emits NB wirings.
+
+Env note: HOME quota hit 100% mid-session and blocked ALL writes (`EDQUOT`). Freed by
+`conda clean --all` (miniconda3/pkgs was 3.8G). Watch it — Vitis projects are ~20 MB each.
+
+# ═══════════════════════════════════════════════════════════════════════
+
+This shell works on **Allo's dataflow JIT simulator** (`df.build(target="simulator")`,
+file `allo/backend/simulator.py`, branch `wire`). A **separate "agents" shell** works
+on interface/IP generation (`agents/` folder). **The two tracks join at DSE**: the
+agents shell *generates* interconnect designs; this shell provides the *evaluate* half
+(cost model + deadlock detection) that scores them. So the top-priority items below are
+exactly what the agents' DSE loop will need.
+
+## Current state (committed, branch `wire`)
+The **DAM-lite timing layer is done and non-blocking is deterministic**:
+- `ca437b0` spin-advance (failed try_get ticks the clock)
+- `340363e` D2+D3+occupancy — write-side barrier; **`nb_nondeterminism.py` 23 distinct → 1**
+- `198b415` clock-threading crash fix (non-stream / helper-calling PEs)  ← HEAD
+
+Validated: `nb_nondeterminism` single outcome; `read_barrier_test.py` `[8]`; `test_df_unit`
+(all 4), `test_stream_ops_sim`, `test_region_stateful`, nb_simple/nb_scalar pass;
+systolic 2×2 err ~0. The distributed timing layer works; details in memory
+`simulator-timing-layer-wip` and the design sections lower in this file.
+
+## Environment / how to validate
+```bash
+source /home/zsm9/miniconda3/etc/profile.d/conda.sh && conda activate allo
+export LLVM_BUILD_DIR=/work/shared/common/llvm-project-main/build-rhel8   # build-rhel8 ONLY
+export PYTHONPATH=/home/zsm9/allo_sup && export OMP_NUM_THREADS=8
+python tests/dataflow/test_df_unit.py            # golden
+python tests/dataflow/test_region_stateful.py
+python simulator_profiling/nb_nondeterminism.py  # determinism metric (expect single outcome)
+python simulator_profiling/read_barrier_test.py  # expect [8]
+```
+Gotchas (memory): interactive `conda activate` needed (plain `conda run` → "Unknown function
+top"; overriding LLVM_BUILD_DIR to `build/` → GLIBC abort). Force `PYTHONPATH=/home/zsm9/allo_sup`
+(import otherwise grabs installed `/home/zsm9/allo`). See [[simulator-llvm-build-dir-run]],
+[[allo-two-checkouts-trap]].
+
+## TASKS (priority order)
+
+1. **Cost model for DSE (the #1 join-point item).** The clock is all-ones today =
+   a **logical** clock (deterministic ordering only, NOT real cycles). For DSE
+   *performance numbers*, refine `_op_latency` in `simulator.py` toward real per-op /
+   II latencies. Supervisor stance is explicit: **correct, not cycle-accurate** — "try
+   many things." This is what lets a generated design be *scored*, so do it first.
+
+2. **Deadlock detection.** The sim currently **hangs forever** on deadlock with no
+   diagnostic (profiling finding #5). Add detection (watchdog on no-progress, or the
+   converge-fails-with-error of task 4). The agents' generator will produce broken
+   wirings — it needs "deadlock: here" instead of an infinite hang.
+
+3. **Wire / valid-only / valid-ready IN THE SIMULATOR.** These exist **only for the
+   SystemC backend today** (`allo/ir/types.py` `Wire`/`Channel`; guarded in
+   `allo/backend/hls.py`). The simulator has only `Stream` (blocking + the new
+   deterministic non-blocking). Bring them to the sim so it can model + DSE the
+   protocols the agent picks. Design = the unified `max(producer_time, consumer_time)`
+   handshake-over-timestamps rule (see "Wire / ValidOnly / ValidReady as one handshake"
+   section below). Rules: **pure-wire-connected kernels → fuse into one (latency 0)**;
+   a bare wire doesn't self-synchronize; every feedback cycle needs a registered
+   element (Stream) or it's a combinational loop. Op×primitive: `try_*` works on
+   Stream/Channel, NOT Wire; only Stream has empty/full. Ref: `agents/INTERCONNECT.md`,
+   memory [[wire-channel-dataflow-types]].
+
+4. **(Bigger, optional) Three-phase DES rewrite — the ARC2HS model.** A colleague's
+   event-driven simulator (setup → block(converge) → commit) gives determinism,
+   combinational loops, AND deadlock detection **structurally**: the block phase
+   iterates same-time to a fixed point with **monotone pressure** (only add
+   backpressure during block, resolve releases in commit → provably terminates; a real
+   combinational loop hits the iteration cap → *errors* instead of hanging) + **lazy
+   cancellation**. Recommended shape = **hybrid**: keep JIT'd PE bodies as threads,
+   adopt the three-phase converge only for the **channel/interconnect layer**. De-risk
+   first: how a PE gets "stepped" (thread-per-PE + per-cycle barrier vs coroutine).
+   This would subsume tasks 2 and much of 3. ARC2HS spec + NoC/Local model code are in
+   the 2026-07-26 conversation; consider saving them under `simulator_papers/` or a note.
+
+## Key decisions / facts (don't relearn)
+- All-ones clock = **logical** (determinism); real cycles need an HLS II/latency schedule
+  or DAM-style annotations — refine via `_op_latency`. Cycle-*approximate* is the ceiling.
+- **Wire/Channel = SystemC-only; Stream = universal.** Non-blocking (`try_*`) = Stream &
+  Channel; **never Wire** (a wire has no "empty" — always its current value).
+- Spin-wait `scf.while` loops are excluded from clock increments (else non-deterministic);
+  failed NB polls tick the clock so spin-waits still advance sim time.
+- The agents shell's blocks (routers/PE) run on the **current** sim (Stream) — no new sim
+  feature is needed to *run* them; new features (1–4) are for *scoring* them.
+
+## Pointers
+- Memory: [[simulator-timing-layer-wip]] (resume doc), [[simulator-profiling-harness]],
+  [[wire-channel-dataflow-types]], [[sim-direction-wires-dse-agents]] (supervisor
+  direction), [[simulator-combinational-wire-design]].
+- Deep reference: the rest of THIS file (DAM-lite design; current-sim analysis; paper
+  analysis incl. OmniSim/DAM). Profiling harness + findings: `simulator_profiling/`.
+- Notes: `notes/PITFALLS_DATAFLOW_REGION.md`, `STATE.md`, `BRANCHES.md`.
+
+# ═══════════════════════════════════════════════════════════════════════
+
 # claude_simulator — Session Goals
 
 This file tracks the goals and working context for the **simulator** shell:
