@@ -1024,6 +1024,56 @@ void SystemCModuleEmitter::emitChannelPut(ChannelPutOp op) {
   emitInfoAndNewLine(op);
 }
 
+// Non-blocking channel get: <result>; <success> = <channel>.PopNB(<result>);
+// Same Connections NB primitive the Stream try_get uses -- a channel lowers to a
+// Connections::Combinational just as a stream does, so PopNB applies unchanged.
+// (A Wire has no non-blocking form and never reaches here: the frontend rejects
+// wire.try_get(), since a wire is always its current value.)
+void SystemCModuleEmitter::emitChannelTryGet(ChannelTryGetOp op) {
+  Value result = op.getResult(0);
+  Value success = op.getResult(1);
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  auto channel = op->getOperand(0);
+  indent();
+  emitValue(result);
+  os << ";\n";
+  indent();
+  emitValue(success);
+  os << " = ";
+  emitValue(channel, 0, false);
+  if (llvm::isa<ShapedType>(channel.getType())) {
+    auto idx = op->getAttrOfType<DenseI64ArrayAttr>("indices");
+    if (idx)
+      for (int64_t v : idx.asArrayRef())
+        os << "[" << v << "]";
+  }
+  os << ".PopNB(";
+  emitValue(result);
+  os << ");";
+  emitInfoAndNewLine(op);
+}
+
+// Non-blocking channel put: <success> = <channel>.PushNB(<value>);
+void SystemCModuleEmitter::emitChannelTryPut(ChannelTryPutOp op) {
+  Value success = op.getResult();
+  auto channel = op->getOperand(0);
+  auto value = op->getOperand(1);
+  indent();
+  emitValue(success);
+  os << " = ";
+  emitValue(channel, 0, false);
+  if (llvm::isa<ShapedType>(channel.getType())) {
+    auto idx = op->getAttrOfType<DenseI64ArrayAttr>("indices");
+    if (idx)
+      for (int64_t v : idx.asArrayRef())
+        os << "[" << v << "]";
+  }
+  os << ".PushNB(";
+  emitValue(value);
+  os << ");";
+  emitInfoAndNewLine(op);
+}
+
 // Connections get: <result> = <stream>[indices].Pop();
 // (Base scalar path, with .read() -> .Pop(); block-streams deferred.)
 void SystemCModuleEmitter::emitStreamGet(StreamGetOp op) {
@@ -1315,6 +1365,14 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   //   depth 0  -> a bare Connections::Combinational (combinational wire)
   //   depth>=1 -> an AlloFifo<T,depth> between two _in/_out wires (buffered)
   for (auto sc : channels) {
+    // Skip a DANGLING stream (declared but no PE puts/gets it -- e.g. an unused
+    // cell of a Stream[T,d][P0,P1] systolic grid). Emitting its Combinational +
+    // AlloFifo leaves the channel's producer/consumer end unbound and unreset, which
+    // aborts RTL cosim (Connections CONNECTIONS-101 "wasn't reset" -> CONNECTIONS-125
+    // "unable to resolve clock"). No PE binds it, so dropping it changes nothing.
+    // MUST match the skip in the ctor-init and self-wiring loops below.
+    if (sc.getResult().use_empty())
+      continue;
     // A self-FIFO (one kernel produces+queries) is a NORMAL buffered stream here:
     // its _in/_out Combinational wires + AlloFifo are declared just like any other
     // depth>=1 stream; the one kernel simply binds BOTH ends (see the bind loop).
@@ -1421,6 +1479,8 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     sep = ", ";
   }
   for (auto sc : channels) {
+    if (sc.getResult().use_empty()) // dangling stream: skipped above, no member to init
+      continue;
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
     std::string nm = std::string(getName(sc.getResult()).str());
     if (st.getDepth() == 0) {
@@ -1544,6 +1604,8 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   }
   // Wire each buffered-stream FIFO: clk/rst + its _in/_out wires.
   for (auto sc : channels) {
+    if (sc.getResult().use_empty()) // dangling stream: no member emitted, nothing to wire
+      continue;
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
     if (st.getDepth() == 0)
       continue;
