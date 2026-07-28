@@ -424,8 +424,18 @@ _CLOCK_VALUE_MASK = _CLOCK_DONE_BIT - 1
 # second global/reader pair: [.. N per-PE cycles .., flag, stream_id, role].
 SIM_CYCLES_GLOBAL = "__allo_sim_cycles"
 SIM_CYCLES_READER = "__allo_sim_cycles_read"
-_DL_SLOTS = 3
+# [.. N cycles .., flag, stream_id, role, n_blocked, atomic_sink, cause]
+_DL_SLOTS = 6
 _DL_ROLE_PUT, _DL_ROLE_GET = 1, 2
+# Which detector fired.  Worth distinguishing: PEER_DONE is a proof and names the
+# guilty stream, CIRCULAR is a threshold and the reporting PE is just whichever
+# noticed -- so the two need different wording and carry different confidence.
+_DL_CAUSE_PEER_DONE, _DL_CAUSE_CIRCULAR = 1, 2
+# Consecutive all-blocked polls before declaring circular wait.  Each poll costs one
+# usleep(1) (~50-60us real), so the default is roughly a second of total quiescence.
+# Unlike the peer-done proof this IS a threshold: too low false-positives a slow
+# design, too high just delays the report.  Override with ALLO_SIM_DEADLOCK_POLLS.
+_DL_POLLS = int(os.getenv("ALLO_SIM_DEADLOCK_POLLS", "16384"))
 
 
 # Per-build state the deep stream-lowering call chain needs but does not thread:
@@ -445,9 +455,47 @@ def _sim_global_type(module, n_pes):
     return MemRefType.get([n_pes + _DL_SLOTS], i64)
 
 
+def _emit_report_store(module, n, sid, role, ip, cause):
+    """Record [flag=1, stream_id, role] in the read-out global -- the deadlock report
+    Python reads back after the run.  Shared by both detectors."""
+    i64 = IntegerType.get_signless(64, module.context)
+    idx_ty = IndexType.get(module.context)
+    g = memref_d.GetGlobalOp(_sim_global_type(module, n), SIM_CYCLES_GLOBAL, ip=ip)
+    for off, v in ((0, 1), (1, sid), (2, role), (5, cause)):
+        memref_d.StoreOp(
+            arith_d.ConstantOp(i64, v, ip=ip),
+            g.result,
+            [arith_d.ConstantOp(idx_ty, n + off, ip=ip).result],
+            ip=ip,
+        )
+
+
+def _emit_blocked_delta(module, n, delta, ip):
+    """Atomically add `delta` to the shared blocked-PE counter.  Must be atomic: every
+    PE thread updates it concurrently, so a load/add/store would lose increments and
+    the count would drift below n_pes, silently disabling circular-wait detection."""
+    i64 = IntegerType.get_signless(64, module.context)
+    idx_ty = IndexType.get(module.context)
+    g = memref_d.GetGlobalOp(_sim_global_type(module, n), SIM_CYCLES_GLOBAL, ip=ip)
+    slot = arith_d.ConstantOp(idx_ty, n + 3, ip=ip)
+    amt = arith_d.ConstantOp(i64, delta, ip=ip)
+    rmw = memref_d.AtomicRMWOp(
+        arith_d.AtomicRMWKind.addi, amt.result, g.result, [slot.result], ip=ip
+    )
+    # MemRefDCE.cpp:28 erases ANY op with results and no uses -- it does not check for
+    # side effects -- so an atomic whose old value we ignore is silently deleted (the
+    # same trap as a try_put whose ok flag is unread).  Sink the result into a live
+    # global slot: a store has no results, and the target is read back by the reader,
+    # so neither this nor the atomic can be folded away.
+    memref_d.StoreOp(
+        rmw.result, g.result,
+        [arith_d.ConstantOp(idx_ty, n + 4, ip=ip).result], ip=ip,
+    )
+
+
 def _emit_deadlock_guard(
     blocked, peer_ptr, role, stream_name, module, before_ip, after_block,
-    head_ptr, tail_ptr, depth_val,
+    head_ptr, tail_ptr, depth_val, while_op, outer_ip,
 ):
     """Make a blocking spin loop give up instead of hanging forever.
 
@@ -476,6 +524,14 @@ def _emit_deadlock_guard(
     arr_ty = _sim_global_type(module, n)
     # The spin body already ends in scf.yield by the time we get here, so insert
     # ahead of that terminator rather than at the end of the block.
+    # Count this PE as blocked for as long as the spin runs.  The alloca and the +1
+    # go before the loop; the -1 goes after it (outer_ip inserts after the while, so
+    # we are already unblocked before the transfer that follows).
+    pre_ip = InsertionPoint(beforeOperation=while_op)
+    polls = memref_d.AllocaOp(MemRefType.get([], i64), [], [], ip=pre_ip)
+    memref_d.StoreOp(arith_d.ConstantOp(i64, 0, ip=pre_ip), polls.memref, [], ip=pre_ip)
+    _emit_blocked_delta(module, n, 1, pre_ip)
+    _emit_blocked_delta(module, n, -1, outer_ip)
     ops = after_block.operations
     aip = InsertionPoint(beforeOperation=ops[len(ops) - 1])
     pc = memref_d.LoadOp(memref=peer_ptr, indices=[], ip=aip)
@@ -500,15 +556,33 @@ def _emit_deadlock_guard(
     still_if = scf_d.IfOp(still.result, [], has_else=False, ip=dip)
     scf_d.YieldOp(results_=[], ip=dip)
     tip = InsertionPoint(still_if.then_block)
-    g = memref_d.GetGlobalOp(arr_ty, SIM_CYCLES_GLOBAL, ip=tip)
-    for off, v in ((0, 1), (1, _stream_id(stream_name)), (2, role)):
-        memref_d.StoreOp(
-            arith_d.ConstantOp(i64, v, ip=tip),
-            g.result,
-            [arith_d.ConstantOp(idx_ty, n + off, ip=tip).result],
-            ip=tip,
-        )
+    _emit_report_store(module, n, _stream_id(stream_name), role, tip,
+                       _DL_CAUSE_PEER_DONE)
     scf_d.YieldOp(results_=[], ip=tip)
+    # Circular-wait watchdog.  No PE ever finishes in a cycle of blocked PEs, so the
+    # peer-done proof above never fires.  Instead count polls where EVERY PE is
+    # blocked-or-finished; the loop body only runs while we are still blocked, so
+    # reaching the threshold means nothing moved anywhere for that whole window.
+    gw = memref_d.GetGlobalOp(arr_ty, SIM_CYCLES_GLOBAL, ip=aip)
+    bslot = arith_d.ConstantOp(idx_ty, n + 3, ip=aip)
+    nb = memref_d.LoadOp(memref=gw.result, indices=[bslot.result], ip=aip)
+    n_all = arith_d.ConstantOp(i64, n, ip=aip)
+    all_blocked = arith_d.CmpIOp(0, lhs=nb.result, rhs=n_all.result, ip=aip)
+    cur = memref_d.LoadOp(memref=polls.memref, indices=[], ip=aip)
+    one_i = arith_d.ConstantOp(i64, 1, ip=aip)
+    inc = arith_d.AddIOp(lhs=cur.result, rhs=one_i.result, ip=aip)
+    zero_i = arith_d.ConstantOp(i64, 0, ip=aip)
+    # Any poll where someone was runnable resets the run to zero.
+    nxt_polls = arith_d.SelectOp(all_blocked.result, inc.result, zero_i.result, ip=aip)
+    memref_d.StoreOp(nxt_polls, polls.memref, [], ip=aip)
+    limit = arith_d.ConstantOp(i64, _DL_POLLS, ip=aip)
+    hit = arith_d.CmpIOp(5, lhs=nxt_polls.result, rhs=limit.result, ip=aip)  # sge
+    wif = scf_d.IfOp(hit.result, [], has_else=False, ip=aip)
+    wtip = InsertionPoint(wif.then_block)
+    _emit_report_store(module, n, _stream_id(stream_name), role, wtip,
+                       _DL_CAUSE_CIRCULAR)
+    scf_d.YieldOp(results_=[], ip=wtip)
+
     # Loop condition: keep spinning only while nobody (this PE or any other) has
     # reported, so a single report unwinds every blocked PE.
     g2 = memref_d.GetGlobalOp(arr_ty, SIM_CYCLES_GLOBAL, ip=before_ip)
@@ -535,6 +609,11 @@ def _insert_clock_termination(func, clock_arg, module):
         bit = arith_d.ConstantOp(i64, _CLOCK_DONE_BIT, ip=ip)
         done = arith_d.OrIOp(cur.result, bit.result, ip=ip)
         memref_d.StoreOp(done, clock_arg, [], ip=ip)
+        # A finished PE never makes progress again, so it counts as permanently
+        # blocked -- otherwise n_blocked could never reach n_pes once any PE exits
+        # and the circular-wait watchdog would be dead code in mixed designs.
+        if _SIM_CTX["n_pes"]:
+            _emit_blocked_delta(module, _SIM_CTX["n_pes"], 1, ip)
 
 
 def _insert_pe_clock_increments(module):
@@ -1480,6 +1559,7 @@ def _process_function_streams(
                     cmp_op.result, cons_ptr.result, _DL_ROLE_PUT, stream_name,
                     module, before_ip, after_block,
                     head_ptr, tail_ptr, const_fifo_depth.result,
+                    spin_while_op, replace_ip,
                 )
                 scf_d.ConditionOp(condition=spin_cond, args=[], ip=before_ip)
                 data = stream_access_op.data
@@ -1575,6 +1655,7 @@ def _process_function_streams(
                     cmp_op.result, prod_ptr.result, _DL_ROLE_GET, stream_name,
                     module, before_ip, after_block,
                     head_ptr, tail_ptr, const_fifo_depth.result,
+                    spin_while_op, replace_ip,
                 )
                 scf_d.ConditionOp(condition=spin_cond, args=[], ip=before_ip)
                 orig_got_val = stream_access_op.res
@@ -1792,6 +1873,7 @@ def _process_function_streams(
                 cmp_op.result, cons_ptr.result, _DL_ROLE_PUT, stream_name,
                 module, before_ip, after_block,
                 head_ptr, tail_ptr, const_fifo_depth.result,
+                spin_while_op, replace_ip,
             )
             scf_d.ConditionOp(condition=spin_cond, args=[], ip=before_ip)
             data = stream_access_op.data
@@ -1906,6 +1988,7 @@ def _process_function_streams(
                 cmp_op.result, prod_ptr.result, _DL_ROLE_GET, stream_name,
                 module, before_ip, after_block,
                 head_ptr, tail_ptr, const_fifo_depth.result,
+                spin_while_op, replace_ip,
             )
             scf_d.ConditionOp(condition=spin_cond, args=[], ip=before_ip)
             orig_got_val = stream_access_op.res
@@ -2250,14 +2333,27 @@ class LLVMOMPModule(LLVMModule):
         names, buf = self._read_sim_buf()
         if buf is None or int(buf[len(names)]) == 0:
             return
-        sid, role = int(buf[len(names) + 1]), int(buf[len(names) + 2])
+        n = len(names)
+        sid, role, cause = int(buf[n + 1]), int(buf[n + 2]), int(buf[n + 5])
         stream = getattr(self, "sim_stream_names", {}).get(sid, f"#{sid}")
         verb = "put to (FIFO full)" if role == _DL_ROLE_PUT else "get from (FIFO empty)"
-        err = DeadlockError(
-            f"deadlock: a PE blocked trying to {verb} stream '{stream}', but the "
-            f"peer PE on that stream had already finished, so it can never unblock"
-        )
-        err.detail = {"stream": stream, "stream_id": sid, "role": role}
+        if cause == _DL_CAUSE_CIRCULAR:
+            msg = (
+                f"deadlock (circular wait): every PE was blocked or finished for "
+                f"{_DL_POLLS} consecutive polls with no progress anywhere.  The "
+                f"reporting PE was blocked trying to {verb} stream '{stream}' -- it "
+                f"is one participant, not necessarily the root cause."
+            )
+        else:
+            msg = (
+                f"deadlock: a PE blocked trying to {verb} stream '{stream}', but the "
+                f"peer PE on that stream had already finished, so it can never unblock"
+            )
+        err = DeadlockError(msg)
+        err.detail = {
+            "stream": stream, "stream_id": sid, "role": role,
+            "cause": "circular" if cause == _DL_CAUSE_CIRCULAR else "peer_done",
+        }
         raise err
 
     def _read_sim_buf(self):
