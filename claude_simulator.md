@@ -27,7 +27,49 @@ Task 1 (cost model) is complete — commits `ebd572f` (cycle read-out), `676f059
   they don't change rankings): `load_buf`/`store_res` wrappers aren't clocked at all
   (Vitis charges `store_res0` 11–12 cycles); per-op microbenchmark calibration.
 
-Task 2 (deadlock detection) — `ed99cc2` has phase 0 + phase 1 plumbing, no behaviour
+## 2026-07-28: Task 2 DONE — all 3 deadlock classes detected, no more silent hangs.
+
+`ed99cc2` plumbing → `3831021` peer-done proof → `62d5e4b` circular watchdog.
+Was: 3 of 4 cases hang forever with no output. Now all 4 resolve in 1–3 s.
+
+| case | before | after |
+|---|---|---|
+| `control` | COMPLETED | COMPLETED |
+| `mismatch_get` | hangs | DEADLOCK (peer-done, names stream+side) |
+| `overfill_put` | hangs | DEADLOCK (peer-done, names stream+side) |
+| `circular` | hangs | DEADLOCK (circular wait) |
+
+**Two detectors, different confidence — keep them distinguished.**
+- **peer-done = a proof.** A PE blocked on a stream whose peer already returned can
+  never unblock. No threshold, no false positives. Keys off `_CLOCK_DONE_BIT`.
+- **circular = a heuristic.** Counts consecutive polls where every PE is
+  blocked-or-finished (`ALLO_SIM_DEADLOCK_POLLS`, default 16384 ≈ 1 s). An
+  *instantaneous* all-blocked reading is NOT sufficient (a PE can be counted blocked
+  with its condition already satisfied) — the consecutive-poll run is what makes it
+  robust. Its message says the reporting PE is one participant, not the root cause.
+
+**Independent of the cost model** — verified by running the whole matrix under
+`ALLO_SIM_CLOCK=cycle`, which bypasses the per-op latency table entirely. Detection
+keys off *completion*, not simulated time. But it DOES need the clock plumbing:
+no `sim.clock` PEs → `n_pes == 0` → guard is a no-op and the design hangs as before.
+
+**Trap that cost real time — `MemRefDCE.cpp:28` erases ANY op with results and no
+uses, with no side-effect check.** All 10 `memref.atomic_rmw` ops were emitted and
+then silently deleted before LLVM, so the watchdog was dead code and `circular` still
+hung with zero diagnostics. Same trap as [[allo-try-put-unused-ok-dce]]. Fix: sink the
+atomic's old value into a live global slot. **Always verify emitted-vs-survived at the
+IR level** (`str(module).count(...)` before the pipeline vs after) — the helper was
+provably called 10 times and still produced nothing.
+
+Still uncovered: the `try_put`/`try_get` **time barriers** (`_emit_read_barrier` /
+`_emit_write_barrier`) are not instrumented, so a PE parked there is not counted
+blocked — undercounts, costing detection rather than causing false positives.
+**Livelock** in NB retry loops is missed entirely (they keep ticking and re-entering,
+so they never look blocked) — likely the bigger gap for the agents' generator.
+
+---
+
+Task 2 history — `ed99cc2` had phase 0 + phase 1 plumbing, no behaviour
 change yet. Baseline: `control` COMPLETED, the other 3 cases hang and are killed at 25 s.
 - `DeadlockError` exists; `deadlock_worker.py` prints COMPLETED / DEADLOCK / nothing.
 - Read-out global widened N → N+3, extra slots `[flag, stream_id, role]`; declared by
