@@ -36,6 +36,48 @@ cannot know.** The thing we concluded was missing is the thing the trace provide
 Caveat: the *outer* loops (`l_S_i_0_i`) still report `-`, so the schedule is partial —
 usable for the pipelined inner regions, not a complete static timing of the design.
 
+### 0a. Confirmed at operation granularity — `.verbose.sched.rpt`
+
+`csynth.rpt` is the wrong file to read anyway. `…/solution1/.autopilot/db/*.verbose.sched.rpt`
+schedules **every operation**, names the hardware core, and gives its latency and II.
+**These reports exist and are complete for the NB project**, despite its `undef` aggregate.
+
+The NB retry loop is a single state:
+
+```
+State 1 <SV = 0> <Delay = 1.21>
+  ST_1 : 'nbwrite'  @_ssdm_op_NbWrite.ap_fifo  [kernel.cpp:27]   <Delay = 1.21>
+  ST_1 : 'br' %v4 → cleanup.cont | for.inc.exitStub               (the retry branch)
+```
+
+**One state, II=1 → a failed `try_put` attempt costs exactly 1 cycle**, matching the
+`csynth.rpt` row (`VITIS_LOOP_24_1: Iteration Latency = 1`). Vitis supplies
+cost-per-attempt; our simulator supplies the attempt count; neither alone yields the
+total. That is §3.2 demonstrated on the hardest case.
+
+Measured cores, both projects (`xcu280`, 3.33 ns clock):
+
+| core | latency | our table says |
+|---|---|---|
+| `RAM` | **1** | `ARRAY_LOAD_LATENCY = 2` — **too high** |
+| `FIFO_SRL` | 0 | `stream_put/get = 1` — see the chaining caveat |
+| register scalar (no core) | 0 | 0 — **confirms `_is_register_memref`** |
+| `Adder`, `Cmp` | 0 | free — **confirms `_FREE_OPS`** |
+| NB retry iteration | 1 cycle | `stream_try_put = 1` — **correct** |
+
+**Chaining caveat — core latency ≠ scheduled cost.** `FIFO_SRL` reports `Latency = 0`,
+yet in `producer_0` the write still occupies its own state because its 1.21 ns delay
+will not chain under a 3.33 ns clock. So the quantity to ingest is the **state distance
+(`ST_n`)**, not the core's structural latency. Reading `Latency = 0` and charging streams
+zero would be wrong.
+
+**Join is easier than assumed:** Vitis extracts each pipelined loop into its own function
+(`producer_0_Pipeline_VITIS_LOOP_24_1`), so the extracted function name carries the loop
+identity — join on that rather than needing a per-source-line fallback.
+
+Cheap first win that needs no join at all: harvest `(opcode, core, latency, delay)`
+across a sweep and fit the table empirically.
+
 ---
 
 ## 1. What "accurate" has to mean here
