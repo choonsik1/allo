@@ -173,6 +173,7 @@ public:
     // SystemC/Catapult-native flow: f16 constants -> explicit half(...) ctor.
     state.acFloatConstCtor = true;
     state.explicitWideNarrow = true;
+    state.scfWhileWait = true; // clocked SC_THREADs: wait() per while iteration
   }
 
   void emitModule(ModuleOp module) override;

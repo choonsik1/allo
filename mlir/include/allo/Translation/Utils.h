@@ -58,6 +58,17 @@ public:
   // Vivado/Vitis (whose ap_int already narrows) so their output is unchanged.
   bool explicitWideNarrow = false;
 
+  // When set (SystemC clocked-thread flow), a wait() is emitted at the end of
+  // each scf.while body. A `while not S.try_put(x): pass` busy-wait spins on a
+  // non-blocking op; without a clock advance per iteration it retries in ZERO
+  // simulation time -- an infinite combinational loop that hangs RTL cosim (the
+  // FIFO can't advance its handshake without a clock edge). The wait() lets the
+  // clock tick so the retry can succeed. A successful iteration breaks BEFORE the
+  // wait (the scf.condition break precedes the body), so it costs nothing there;
+  // on any other while loop a wait() only adds a cycle, never changes a value.
+  // Left false for Vivado/Vitis (no clocked threads).
+  bool scfWhileWait = false;
+
   // Track which values are top-level function arguments (for linearization)
   DenseSet<Value> topLevelFunctionArgs;
 

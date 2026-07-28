@@ -879,6 +879,14 @@ void allo::hls::VhlsModuleEmitter::emitScfWhile(scf::WhileOp op) {
   // emit the after block (loop body)
   emitBlock(*op.getAfterBody());
 
+  // SystemC clocked-thread flow: advance the clock each iteration so a busy-wait
+  // spin on a non-blocking op (try_put/try_get) can make progress instead of
+  // hanging RTL cosim in a zero-time combinational loop (see scfWhileWait).
+  if (state.scfWhileWait) {
+    indent();
+    os << "wait();\n";
+  }
+
   reduceIndent();
   indent();
   os << "}\n";
