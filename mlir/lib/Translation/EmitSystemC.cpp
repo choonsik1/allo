@@ -199,6 +199,9 @@ private:
   // Narrow a >64-bit ac_int to a native int/index with an explicit
   // .to_int64()/.to_uint64() (no implicit conversion under __SYNTHESIS__).
   void emitNarrowCastSuffix(Value src, Value dst) override;
+  // max/min with both operands cast to the result type (a float literal mixed
+  // with an ac_ieee_float operand otherwise fails template deduction).
+  void emitMaxMin(Operation *op, const char *syntax) override;
 
   // Sequential-stream body transform: a boundary memref arg becomes a Connections
   // stream port, so load a[i] -> port.Pop(), store b[i]=v -> port.Push(v).
@@ -975,6 +978,31 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   }
   indent(); os << "done.write(false);  // completion flag low until the pass finishes\n";
   indent(); os << "wait();\n";
+  // Baked-in constant arrays (e.g. `W: T[M,N] = np_W` weights) referenced by this
+  // kernel: a memref.global holds the data and a GetGlobalOp aliases it, but the
+  // SystemC path (unlike Vhls emitFunction) never emitted the global itself, so the
+  // body's reads of `W` were undefined at synthesis. Emit each such const array as
+  // a local `[static] const T W[...] = {...}` before the body reads it. Stateful
+  // (__stateful_) globals need cross-call persistence and are out of scope here.
+  {
+    llvm::SmallVector<memref::GlobalOp, 4> constGlobals;
+    func.walk([&](memref::GetGlobalOp gg) {
+      auto g = gg->getParentOfType<ModuleOp>()
+                   .lookupSymbol<memref::GlobalOp>(gg.getName());
+      if (!g || !g.getInitialValue().has_value())
+        return;
+      // Stateful/static globals need cross-call persistence -- out of scope.
+      if (g->hasAttr("static") ||
+          g.getSymName().str().find("__stateful_") != std::string::npos)
+        return;
+      for (auto &e : constGlobals)
+        if (e.getSymName() == g.getSymName())
+          return;
+      constGlobals.push_back(g);
+    });
+    for (auto &g : constGlobals)
+      emitGlobal(g);
+  }
   // Single-shot: run the body EXACTLY ONCE, then idle. Free-running (while(1)
   // around the body) is safe for stream kernels (they re-block on an empty input
   // after one pass) but WRONG for a read-modify-write `both` memory accumulator
@@ -1344,6 +1372,27 @@ void SystemCModuleEmitter::emitNarrowCastSuffix(Value src, Value dst) {
   } else if (llvm::isa<IndexType>(dt)) {
     os << ".to_int64()";
   }
+}
+
+// max/min are std::max<T>(const T&, const T&) -- both args must be the SAME type.
+// A ReLU `max(x, 0.0)` emits max(<ac_ieee_float>, 0.0f), and the float literal
+// vs ac_ieee_float mismatch fails template deduction (Catapult CRD-304). Cast
+// both operands to the result type so deduction succeeds; the cast is a no-op for
+// an operand already of that type and invokes the element ctor for a literal.
+void SystemCModuleEmitter::emitMaxMin(Operation *op, const char *syntax) {
+  auto rank = emitNestedLoopHead(op->getResult(0));
+  indent();
+  Value result = op->getResult(0);
+  fixUnsignedType(result, op->hasAttr("unsigned"));
+  emitValue(result, rank);
+  std::string T = std::string(getSCTypeName(result.getType()).str());
+  os << " = " << syntax << "((" << T << ")";
+  emitValue(op->getOperand(0), rank);
+  os << ", (" << T << ")";
+  emitValue(op->getOperand(1), rank);
+  os << ");";
+  emitInfoAndNewLine(op);
+  emitNestedLoopTail(rank);
 }
 
 void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
