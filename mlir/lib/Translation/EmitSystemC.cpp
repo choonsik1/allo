@@ -63,25 +63,45 @@ static SmallString<32> getSCTypeName(Type valType) {
   return SmallString<32>(allo::getCatapultTypeName(valType).str());
 }
 
-// Payload type for a Connections stream/channel/wire. These go through the
-// marshaller (Wrapped<T> needs T::width + T::Marshall), which ships specializations
-// only for SOME native integers -- `short`/`int`/`long` have them but `signed char`
-// (int8_t) does NOT, so an int8 stream fails to synthesize (marshaller.h:203,
-// CRD-276). ac_int<W> always carries the marshaller interface, so emit EVERY <=64
-// bit integer payload as ac_int<W> (uniform, and a no-op for cosim bit-width). Wider
-// ints keep the ap_int shim (an ac_int subclass, already marshaller-compatible);
-// non-integers (ac_ieee_float, ac_fixed) marshal as-is via getSCTypeName.
-static SmallString<32> getStreamPayloadTypeName(Type valType) {
+// A stream/channel/wire/memory link's element UNSIGNEDNESS is not in its MLIR base
+// type -- allo builds that signless (i22), and carries the sign as an `unsigned`
+// attr instead: on the *construct* op (top level, builder.py sets it for UInt) and
+// on every put/get/load/store *user* op (kernel level). Locals recover it via
+// fixUnsignedType(hasAttr("unsigned")); a link payload type has no such op inline,
+// so recover it here from the defining construct or any user. (Without this every
+// UInt payload emits as ac_int<W,true> -> signed, breaking csim of UInt designs.)
+static bool linkPayloadUnsigned(Value linkVal) {
+  if (Operation *def = linkVal.getDefiningOp())
+    if (def->hasAttr("unsigned"))
+      return true;
+  for (Operation *user : linkVal.getUsers())
+    if (user->hasAttr("unsigned"))
+      return true;
+  return false;
+}
+
+// Payload type for a Connections stream/channel/wire (or a memory port). These go
+// through the marshaller (Wrapped<T> needs T::width + T::Marshall), which ships
+// specializations only for SOME native integers -- `short`/`int`/`long` have them
+// but `signed char` (int8_t) does NOT, so an int8 payload fails to synthesize
+// (marshaller.h:203, CRD-276). ac_int<W> always carries the marshaller interface, so
+// emit EVERY <=64 bit integer payload as ac_int<W> (uniform, a no-op for cosim
+// bit-width). `isUnsigned` comes from linkPayloadUnsigned (the base type is signless,
+// so its own signedness can't be trusted). Wider ints keep the ap_int/ap_uint shim
+// (an ac_int subclass, marshaller-compatible); non-integers marshal as-is.
+static SmallString<32> getStreamPayloadTypeName(Type valType, bool isUnsigned) {
   Type scalar = valType;
   if (auto st = llvm::dyn_cast<ShapedType>(scalar))
     scalar = st.getElementType();
-  if (auto it = llvm::dyn_cast<IntegerType>(scalar))
-    if (it.getWidth() <= 64) {
-      bool uns =
-          it.getSignedness() == IntegerType::SignednessSemantics::Unsigned;
+  if (auto it = llvm::dyn_cast<IntegerType>(scalar)) {
+    bool uns = isUnsigned ||
+               it.getSignedness() == IntegerType::SignednessSemantics::Unsigned;
+    if (it.getWidth() <= 64)
       return SmallString<32>("ac_int<" + std::to_string(it.getWidth()) + ", " +
                              (uns ? "false" : "true") + ">");
-    }
+    return SmallString<32>((uns ? "ap_uint<" : "ap_int<") +
+                           std::to_string(it.getWidth()) + ">");
+  }
   return getSCTypeName(valType);
 }
 
@@ -885,7 +905,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         // kernel therefore needs BOTH ends -- an Out (enq: put/try_put/full) and
         // an In (deq: get/try_get/empty). A bounded FIFO makes Full()/Empty()
         // correct, unlike an unbounded ac_channel.
-        std::string T = std::string(getStreamPayloadTypeName(st.getBaseType()).str());
+        std::string T = std::string(getStreamPayloadTypeName(st.getBaseType(), linkPayloadUnsigned(v)).str());
         std::string en = pn + "_enq", dq = pn + "_deq";
         streamPorts.push_back(en);
         streamPorts.push_back(dq);
@@ -898,7 +918,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         char d = streamDir(func, i);
         streamPorts.push_back(pn);
         os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
-        os << getStreamPayloadTypeName(st.getBaseType()) << " > " << pn << ";\n";
+        os << getStreamPayloadTypeName(st.getBaseType(), linkPayloadUnsigned(v)) << " > " << pn << ";\n";
       }
     } else if (auto ct = llvm::dyn_cast<ChannelType>(v.getType())) {
       // channel arg -> Connections::In/Out<T> port (combinational, no buffer)
@@ -906,7 +926,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
       std::string pn = std::string(addName(v, /*isPtr=*/false).str());
       streamPorts.push_back(pn);
       os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
-      os << getSCTypeName(ct.getBaseType()) << " > " << pn << ";\n";
+      os << getStreamPayloadTypeName(ct.getBaseType(), linkPayloadUnsigned(v)) << " > " << pn << ";\n";
     } else if (auto wt = llvm::dyn_cast<WireType>(v.getType())) {
       // wire arg -> raw sc_in/sc_out<T> port (combinational, no handshake).
       // NOT added to streamPorts: sc ports have no Connections .Reset(). A driven
@@ -917,7 +937,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
       if (d == 'o')
         wireOutPorts.push_back(pn);
       os << (d == 'o' ? "sc_out< " : "sc_in< ");
-      os << getSCTypeName(wt.getBaseType()) << " > " << pn << ";\n";
+      os << getStreamPayloadTypeName(wt.getBaseType(), linkPayloadUnsigned(v)) << " > " << pn << ";\n";
     } else if (auto mt = llvm::dyn_cast<MemRefType>(v.getType())) {
       char d = argDir(func, i);
       if ((d == 'i' || d == 'o') && isSeqStreamable(v) && !forceMemPort(v)) {
@@ -926,7 +946,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         std::string pn = std::string(addName(v, /*isPtr=*/false).str());
         streamPorts.push_back(pn);
         os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
-        os << getStreamPayloadTypeName(mt.getElementType()) << " > " << pn << ";\n";
+        os << getStreamPayloadTypeName(mt.getElementType(), linkPayloadUnsigned(v)) << " > " << pn << ";\n";
       } else if (d == 'i' || d == 'b') {
         // random-access INPUT ('i') or read+write ('b') array -> memory port:
         // Out<req> + In<T>. Body loads become req.Push(LOAD,addr)/rsp.Pop() and
@@ -944,7 +964,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         streamPorts.push_back(rspn);
         os << "Connections::Out< " << reqT << " > " << reqn << ";\n";
         indent();
-        os << "Connections::In< " << getStreamPayloadTypeName(mt.getElementType()) << " > "
+        os << "Connections::In< " << getStreamPayloadTypeName(mt.getElementType(), linkPayloadUnsigned(v)) << " > "
            << rspn << ";\n";
       } else if (d == 'o') {
         // random-access OUTPUT array -> write-only memory port: Out<req> only.
@@ -1440,7 +1460,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     if (!mt)
       continue;
     std::string nm = std::string(addName(arg.value(), /*isPtr=*/false).str());
-    std::string ct = std::string(getStreamPayloadTypeName(mt.getElementType()).str());
+    std::string ct = std::string(getStreamPayloadTypeName(mt.getElementType(), linkPayloadUnsigned(arg.value())).str());
     int64_t total = 1;
     for (auto s : mt.getShape())
       total *= s;
@@ -1495,7 +1515,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     // its _in/_out Combinational wires + AlloFifo are declared just like any other
     // depth>=1 stream; the one kernel simply binds BOTH ends (see the bind loop).
     auto st = llvm::dyn_cast<StreamType>(sc.getResult().getType());
-    std::string T = std::string(getStreamPayloadTypeName(st.getBaseType()).str());
+    std::string T = std::string(getStreamPayloadTypeName(st.getBaseType(), linkPayloadUnsigned(sc.getResult())).str());
     std::string nm = std::string(addName(sc.getResult(), /*isPtr=*/false).str());
     if (st.getDepth() == 0) {
       indent();
@@ -1513,7 +1533,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   // Channel members: a handshake Channel is always a combinational link.
   for (auto cc : chanOps) {
     auto ct = llvm::dyn_cast<ChannelType>(cc.getResult().getType());
-    std::string T = std::string(getSCTypeName(ct.getBaseType()).str());
+    std::string T = std::string(getStreamPayloadTypeName(ct.getBaseType(), linkPayloadUnsigned(cc.getResult())).str());
     std::string nm = std::string(addName(cc.getResult(), /*isPtr=*/false).str());
     indent();
     os << "Connections::Combinational< " << T << " > " << nm << ";\n";
@@ -1521,7 +1541,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   // Wire members: a raw combinational wire is an sc_signal<T>.
   for (auto wc : wireOps) {
     auto wt = llvm::dyn_cast<WireType>(wc.getResult().getType());
-    std::string T = std::string(getSCTypeName(wt.getBaseType()).str());
+    std::string T = std::string(getStreamPayloadTypeName(wt.getBaseType(), linkPayloadUnsigned(wc.getResult())).str());
     std::string nm = std::string(addName(wc.getResult(), /*isPtr=*/false).str());
     indent();
     os << "sc_signal< " << T << " > " << nm << ";\n";
@@ -1565,7 +1585,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
           {"mp" + std::to_string(it.index()) + "_" +
                std::to_string(opnd.index()),
            instNames[it.index()], std::string(getName(carg).str()),
-           std::string(getStreamPayloadTypeName(mt.getElementType()).str()), total,
+           std::string(getStreamPayloadTypeName(mt.getElementType(), linkPayloadUnsigned(carg)).str()), total,
            scAddrW(total), scDataW(mt.getElementType()), mp, ii, oo});
     }
   }
