@@ -298,3 +298,29 @@ Relevant only if DSE needs to score far more candidates than either tier can sim
 - [Hierarchical GNN QoR, DATE'24 (arXiv 2401.08696)](https://arxiv.org/pdf/2401.08696)
 - [StreamTensor (arXiv 2509.13694)](https://arxiv.org/pdf/2509.13694)
 - Local reports: `nb_stream.prj/…/csynth.rpt`, `blocking_stream_csynth.prj/…`
+
+---
+
+## 6. Other ideas (not yet in the plan)
+
+Roughly in order of value.
+
+1. **Calibrate against Catapult, not Vitis.** We emit SystemC → Catapult → Xcelium, and
+   that path is *proven bit-exact*. Vitis is a different scheduler with different cores
+   and clock assumptions, so calibrating to Vitis while shipping through Catapult targets
+   the wrong tool. Catapult emits its own scheduling reports. **This could invalidate the
+   §3 ingestion target and should be resolved before building it** — check which backend
+   the generated designs actually go through.
+2. **Sensitivity analysis before any calibration.** Results are deterministic, so perturb
+   one latency constant at a time and see which move the makespan. Most probably do not —
+   the critical path dominates. Turns "calibrate ~30 constants" into "calibrate the 3 that
+   matter." No tool runs needed.
+3. **Validate rankings, not magnitudes.** If DSE only needs ordering, measure Kendall-τ /
+   Spearman over design pairs instead of per-design absolute error. Far cheaper (a modest
+   RTL-cosim set suffices) and measures the property we actually care about.
+4. **Emit an interval, not a point.** Optimistic/pessimistic bounds rather than one
+   number. DSE can prune on bounds, and it is honest about a model calibrated at one
+   point — an interval that brackets the truth beats a point confidently 20 % off.
+5. **Report critical-path attribution.** We already have per-PE clocks, so we can say
+   *which* PE or stream dominates the makespan. For the agents' generator that is more
+   actionable than a scalar, and it needs no accuracy improvement at all.
