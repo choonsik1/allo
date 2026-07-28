@@ -834,6 +834,11 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   // Ports + members from arguments.
   SmallVector<std::string, 4> streamPorts;
   SmallVector<std::string, 4> wireOutPorts; // sc_out wire ports: need reset action
+  // Self-FIFO base name + depth: this kernel maintains a synchronous occupancy
+  // counter per self-FIFO so empty()/full() read the LOGICAL fill (put -> ++,
+  // get -> --) instead of the clocked AlloFifo's handshake, which lags by a cycle
+  // and made empty()/full() read stale in RTL cosim (off vs the functional sim).
+  SmallVector<std::pair<std::string, int64_t>, 4> localFifos;
   for (auto arg : llvm::enumerate(func.getArguments())) {
     unsigned i = arg.index();
     Value v = arg.value();
@@ -856,6 +861,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         std::string en = pn + "_enq", dq = pn + "_deq";
         streamPorts.push_back(en);
         streamPorts.push_back(dq);
+        localFifos.push_back({pn, st.getDepth()});
         os << "Connections::Out< " << T << " > " << en << ";\n";
         indent();
         os << "Connections::In< " << T << " > " << dq << ";\n";
@@ -954,6 +960,11 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   addIndent();
   for (auto &pn : streamPorts) {
     indent(); os << pn << ".Reset();\n";
+  }
+  // Self-FIFO occupancy counters (see localFifos): synchronous fill tracked by
+  // this kernel so empty()/full() match the functional simulator in RTL cosim.
+  for (auto &lf : localFifos) {
+    indent(); os << "int " << lf.first << "_cnt = 0;\n";
   }
   // Raw sc_out wire ports must be driven in the reset action (Catapult CIN-233).
   for (auto &pn : wireOutPorts) {
@@ -1078,12 +1089,13 @@ void SystemCModuleEmitter::emitChannelTryPut(ChannelTryPutOp op) {
 // (Base scalar path, with .read() -> .Pop(); block-streams deferred.)
 void SystemCModuleEmitter::emitStreamGet(StreamGetOp op) {
   if (isLocalStream(op->getOperand(0))) {
-    // self-FIFO consumer end: <result> = <stream>_deq.Pop();
+    // self-FIFO consumer end: <result> = <stream>_deq.Pop(); occupancy--.
     Value result = op.getResult();
     fixUnsignedType(result, op->hasAttr("unsigned"));
+    std::string sn = std::string(getName(op->getOperand(0)).str());
     indent();
     emitValue(result);
-    os << " = " << std::string(getName(op->getOperand(0)).str()) << "_deq.Pop();";
+    os << " = " << sn << "_deq.Pop(); " << sn << "_cnt--;";
     emitInfoAndNewLine(op);
     return;
   }
@@ -1126,11 +1138,12 @@ void SystemCModuleEmitter::emitStreamGet(StreamGetOp op) {
 // (Base scalar path, with .write(v) -> .Push(v); block-streams deferred.)
 void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
   if (isLocalStream(op->getOperand(0))) {
-    // self-FIFO producer end: <stream>_enq.Push(<value>);
+    // self-FIFO producer end: <stream>_enq.Push(<value>); occupancy++.
+    std::string sn = std::string(getName(op->getOperand(0)).str());
     indent();
-    os << std::string(getName(op->getOperand(0)).str()) << "_enq.Push(";
+    os << sn << "_enq.Push(";
     emitValue(op->getOperand(1));
-    os << ");";
+    os << "); " << sn << "_cnt++;";
     emitInfoAndNewLine(op);
     return;
   }
@@ -1172,16 +1185,20 @@ void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
 void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
   if (isLocalStream(op->getOperand(0))) {
     // self-FIFO consumer end: <result>; <success> = <stream>_deq.PopNB(<result>);
+    // occupancy -= success so empty()/full() track the logical fill.
     Value r = op.getResult(0), s = op.getResult(1);
     fixUnsignedType(r, op->hasAttr("unsigned"));
+    std::string sn = std::string(getName(op->getOperand(0)).str());
     indent();
     emitValue(r);
     os << ";\n";
     indent();
     emitValue(s);
-    os << " = " << std::string(getName(op->getOperand(0)).str()) << "_deq.PopNB(";
+    os << " = " << sn << "_deq.PopNB(";
     emitValue(r);
-    os << ");";
+    os << "); " << sn << "_cnt -= ";
+    emitValue(s);
+    os << ";";
     emitInfoAndNewLine(op);
     return;
   }
@@ -1212,12 +1229,16 @@ void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
 void SystemCModuleEmitter::emitStreamTryPut(StreamTryPutOp op) {
   if (isLocalStream(op->getOperand(0))) {
     // self-FIFO producer end: <success> = <stream>_enq.PushNB(<value>);
+    // occupancy += success (bool -> 0/1) so empty()/full() track the logical fill.
     Value s = op.getResult();
+    std::string sn = std::string(getName(op->getOperand(0)).str());
     indent();
     emitValue(s);
-    os << " = " << std::string(getName(op->getOperand(0)).str()) << "_enq.PushNB(";
+    os << " = " << sn << "_enq.PushNB(";
     emitValue(op->getOperand(1));
-    os << ");";
+    os << "); " << sn << "_cnt += ";
+    emitValue(s);
+    os << ";";
     emitInfoAndNewLine(op);
     return;
   }
@@ -1248,13 +1269,14 @@ void SystemCModuleEmitter::emitStreamTryPut(StreamTryPutOp op) {
 // csim-faithful (like try_get/try_put, prefer a one-shot check, not a spin).
 void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
   if (isLocalStream(op->getOperand(0))) {
-    // self-FIFO consumer end: <result> = <stream>_deq.Empty();
+    // self-FIFO empty(): read the synchronous occupancy counter, not the clocked
+    // AlloFifo handshake (which lags a cycle and reads stale in RTL cosim).
     Value result = op.getResult();
     fixUnsignedType(result, op->hasAttr("unsigned"));
     indent();
     emitValue(result);
-    os << " = " << std::string(getName(op->getOperand(0)).str())
-       << "_deq.Empty();";
+    os << " = (" << std::string(getName(op->getOperand(0)).str())
+       << "_cnt == 0);";
     emitInfoAndNewLine(op);
     return;
   }
@@ -1274,13 +1296,14 @@ void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
 }
 void SystemCModuleEmitter::emitStreamFull(StreamFullOp op) {
   if (isLocalStream(op->getOperand(0))) {
-    // self-FIFO producer end: <result> = <stream>_enq.Full();
+    // self-FIFO full(): counter == depth (synchronous; see emitStreamEmpty).
     Value result = op.getResult();
     fixUnsignedType(result, op->hasAttr("unsigned"));
+    int64_t depth = llvm::cast<StreamType>(op->getOperand(0).getType()).getDepth();
     indent();
     emitValue(result);
-    os << " = " << std::string(getName(op->getOperand(0)).str())
-       << "_enq.Full();";
+    os << " = (" << std::string(getName(op->getOperand(0)).str())
+       << "_cnt == " << depth << ");";
     emitInfoAndNewLine(op);
     return;
   }
