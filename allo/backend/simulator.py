@@ -445,6 +445,82 @@ def _sim_global_type(module, n_pes):
     return MemRefType.get([n_pes + _DL_SLOTS], i64)
 
 
+def _emit_deadlock_guard(
+    blocked, peer_ptr, role, stream_name, module, before_ip, after_block,
+    head_ptr, tail_ptr, depth_val,
+):
+    """Make a blocking spin loop give up instead of hanging forever.
+
+    A PE blocked on a stream whose peer PE has already *finished* can never be
+    unblocked: no one will ever drain the full FIFO / fill the empty one.  That is a
+    proof of deadlock, not a heuristic -- no timeout, no threshold, no false positives.
+
+    Emits two things.  In the spin body: if the peer's clock has _CLOCK_DONE_BIT set,
+    record (stream_id, role) in the read-out global and raise its flag.  Returns a
+    replacement loop condition `blocked AND flag == 0`, so that once ANY PE reports,
+    every spinning PE unwinds rather than hanging behind the one that noticed.
+
+    The peer-done test alone would be a false positive: `blocked` is sampled in the
+    loop condition, and the peer can supply the datum AND return before the body
+    runs, so a healthy PE that is no longer blocked would still report.  The body
+    therefore RE-checks the block condition after observing DONE.  That order is
+    sound: DONE is set at function return, i.e. after the peer's last put, so once
+    DONE is visible and we are still blocked, no datum can ever arrive.
+
+    Returns `blocked` unchanged when there are no clocked PEs (no global exists)."""
+    n = _SIM_CTX["n_pes"]
+    if n == 0:
+        return blocked
+    i64 = IntegerType.get_signless(64, module.context)
+    idx_ty = IndexType.get(module.context)
+    arr_ty = _sim_global_type(module, n)
+    # The spin body already ends in scf.yield by the time we get here, so insert
+    # ahead of that terminator rather than at the end of the block.
+    ops = after_block.operations
+    aip = InsertionPoint(beforeOperation=ops[len(ops) - 1])
+    pc = memref_d.LoadOp(memref=peer_ptr, indices=[], ip=aip)
+    bit = arith_d.ConstantOp(i64, _CLOCK_DONE_BIT, ip=aip)
+    masked = arith_d.AndIOp(lhs=pc.result, rhs=bit.result, ip=aip)
+    zero64 = arith_d.ConstantOp(i64, 0, ip=aip)
+    peer_done = arith_d.CmpIOp(1, lhs=masked.result, rhs=zero64.result, ip=aip)
+    if_op = scf_d.IfOp(peer_done.result, [], has_else=False, ip=aip)
+    dip = InsertionPoint(if_op.then_block)
+    # Re-check under a fresh flush: are we STILL blocked now that the peer is done?
+    openmp_d.FlushOp([], ip=dip)
+    h2 = memref_d.LoadOp(memref=head_ptr, indices=[], ip=dip)
+    t2 = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=dip)
+    if role == _DL_ROLE_PUT:  # full == head equals the slot we are about to write
+        # head/tail are the FIFO's own index type (i32), NOT the i64 clock type.
+        one = arith_d.ConstantOp(t2.result.type, 1, ip=dip)
+        nxt = arith_d.AddIOp(lhs=t2.result, rhs=one.result, ip=dip)
+        t2cmp = arith_d.RemUIOp(lhs=nxt.result, rhs=depth_val, ip=dip)
+    else:  # empty == head equals tail
+        t2cmp = t2.result
+    still = arith_d.CmpIOp(0, lhs=h2.result, rhs=t2cmp, ip=dip)
+    still_if = scf_d.IfOp(still.result, [], has_else=False, ip=dip)
+    scf_d.YieldOp(results_=[], ip=dip)
+    tip = InsertionPoint(still_if.then_block)
+    g = memref_d.GetGlobalOp(arr_ty, SIM_CYCLES_GLOBAL, ip=tip)
+    for off, v in ((0, 1), (1, _stream_id(stream_name)), (2, role)):
+        memref_d.StoreOp(
+            arith_d.ConstantOp(i64, v, ip=tip),
+            g.result,
+            [arith_d.ConstantOp(idx_ty, n + off, ip=tip).result],
+            ip=tip,
+        )
+    scf_d.YieldOp(results_=[], ip=tip)
+    # Loop condition: keep spinning only while nobody (this PE or any other) has
+    # reported, so a single report unwinds every blocked PE.
+    g2 = memref_d.GetGlobalOp(arr_ty, SIM_CYCLES_GLOBAL, ip=before_ip)
+    fslot = arith_d.ConstantOp(idx_ty, n, ip=before_ip)
+    flag = memref_d.LoadOp(memref=g2.result, indices=[fslot.result], ip=before_ip)
+    clear = arith_d.CmpIOp(
+        0, lhs=flag.result, rhs=arith_d.ConstantOp(i64, 0, ip=before_ip).result,
+        ip=before_ip,
+    )
+    return arith_d.AndIOp(lhs=blocked, rhs=clear.result, ip=before_ip).result
+
+
 def _insert_clock_termination(func, clock_arg, module):
     """Mark the PE's clock 'done' at each function return, so a peer waiting on this
     (finished) PE's clock in the time-barrier unblocks instead of hanging forever.
@@ -528,7 +604,9 @@ def _emit_cycle_harvest(module, clock_cells):
     entry = reader.add_entry_block()
     ip = InsertionPoint(entry)
     g = memref_d.GetGlobalOp(arr_ty, SIM_CYCLES_GLOBAL, ip=ip)
-    for k in range(n):
+    # n cycle slots + the deadlock triple: the caller's buffer is sized to match, so
+    # copying short would leave the report unreadable and copying long would overrun.
+    for k in range(n + _DL_SLOTS):
         slot = arith_d.ConstantOp(idx_ty, k, ip=ip)
         v = memref_d.LoadOp(memref=g.result, indices=[slot.result], ip=ip)
         memref_d.StoreOp(v, entry.arguments[0], [slot.result], ip=ip)
@@ -1397,7 +1475,13 @@ def _process_function_streams(
                 cmp_op = arith_d.CmpIOp(
                     predicate=0, lhs=head_val_op, rhs=tail_next_op, ip=before_ip
                 )
-                scf_d.ConditionOp(condition=cmp_op, args=[], ip=before_ip)
+                # Blocked because the FIFO is full -> only the consumer can free it.
+                spin_cond = _emit_deadlock_guard(
+                    cmp_op.result, cons_ptr.result, _DL_ROLE_PUT, stream_name,
+                    module, before_ip, after_block,
+                    head_ptr, tail_ptr, const_fifo_depth.result,
+                )
+                scf_d.ConditionOp(condition=spin_cond, args=[], ip=before_ip)
                 data = stream_access_op.data
                 assert isinstance(data, Value)  # Vector or scalar
                 tail_index_op = index_d.CastUOp(
@@ -1486,7 +1570,13 @@ def _process_function_streams(
                 cmp_op = arith_d.CmpIOp(
                     0, lhs=head_val_op, rhs=tail_val_op, ip=before_ip
                 )
-                scf_d.ConditionOp(condition=cmp_op, args=[], ip=before_ip)
+                # Blocked because the FIFO is empty -> only the producer can fill it.
+                spin_cond = _emit_deadlock_guard(
+                    cmp_op.result, prod_ptr.result, _DL_ROLE_GET, stream_name,
+                    module, before_ip, after_block,
+                    head_ptr, tail_ptr, const_fifo_depth.result,
+                )
+                scf_d.ConditionOp(condition=spin_cond, args=[], ip=before_ip)
                 orig_got_val = stream_access_op.res
                 assert isinstance(orig_got_val, OpResult)
                 head_index_op = index_d.CastUOp(
@@ -1697,7 +1787,13 @@ def _process_function_streams(
             cmp_op = arith_d.CmpIOp(
                 predicate=0, lhs=head_val_op, rhs=tail_next_op, ip=before_ip
             )
-            scf_d.ConditionOp(condition=cmp_op, args=[], ip=before_ip)
+            # Blocked because the FIFO is full -> only the consumer can free it.
+            spin_cond = _emit_deadlock_guard(
+                cmp_op.result, cons_ptr.result, _DL_ROLE_PUT, stream_name,
+                module, before_ip, after_block,
+                head_ptr, tail_ptr, const_fifo_depth.result,
+            )
+            scf_d.ConditionOp(condition=spin_cond, args=[], ip=before_ip)
             data = stream_access_op.data
             assert isinstance(data, Value)
             tail_index_op = index_d.CastUOp(
@@ -1805,7 +1901,13 @@ def _process_function_streams(
             scf_d.YieldOp(results_=[], ip=after_ip)
             tail_val_op = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=before_ip)
             cmp_op = arith_d.CmpIOp(0, lhs=head_val_op, rhs=tail_val_op, ip=before_ip)
-            scf_d.ConditionOp(condition=cmp_op, args=[], ip=before_ip)
+            # Blocked because the FIFO is empty -> only the producer can fill it.
+            spin_cond = _emit_deadlock_guard(
+                cmp_op.result, prod_ptr.result, _DL_ROLE_GET, stream_name,
+                module, before_ip, after_block,
+                head_ptr, tail_ptr, const_fifo_depth.result,
+            )
+            scf_d.ConditionOp(condition=spin_cond, args=[], ip=before_ip)
             orig_got_val = stream_access_op.res
             assert isinstance(orig_got_val, OpResult)
             head_index_op = index_d.CastUOp(
@@ -2074,6 +2176,11 @@ class LLVMOMPModule(LLVMModule):
             self.sim_pe_names = build_dataflow_simulator(
                 self.module, self.top_func_name
             )
+            # Snapshot this build's id->stream-name map while _SIM_CTX still holds it,
+            # so a deadlock report can name the stream rather than print a bare index.
+            self.sim_stream_names = {
+                i: nm for nm, i in _SIM_CTX["stream_ids"].items()
+            }
             # Attach necessary attributes
             func = find_func_in_module(self.module, top_func_name)
             if func is None:
@@ -2129,6 +2236,43 @@ class LLVMOMPModule(LLVMModule):
                 self.module, opt_level=2, shared_libs=shared_libs
             )
 
+    def __call__(self, *args):
+        """Run, then surface a deadlock as an exception instead of returning the
+        garbage the unwound spin loops leave behind."""
+        result = super().__call__(*args)
+        self._raise_if_deadlocked()
+        return result
+
+    def _raise_if_deadlocked(self):
+        """Raise if the run ended because a PE was blocked on a stream whose peer had
+        already finished.  Detection happens in the spin loops (_emit_deadlock_guard);
+        this only reports it.  Called after every run -- the flag reads 0 otherwise."""
+        names, buf = self._read_sim_buf()
+        if buf is None or int(buf[len(names)]) == 0:
+            return
+        sid, role = int(buf[len(names) + 1]), int(buf[len(names) + 2])
+        stream = getattr(self, "sim_stream_names", {}).get(sid, f"#{sid}")
+        verb = "put to (FIFO full)" if role == _DL_ROLE_PUT else "get from (FIFO empty)"
+        err = DeadlockError(
+            f"deadlock: a PE blocked trying to {verb} stream '{stream}', but the "
+            f"peer PE on that stream had already finished, so it can never unblock"
+        )
+        err.detail = {"stream": stream, "stream_id": sid, "role": role}
+        raise err
+
+    def _read_sim_buf(self):
+        """Copy the read-out global out once: `n` cycle slots then [flag, stream, role].
+        Returns (pe_names, buffer), or (names, None) if there is nothing to read."""
+        names = getattr(self, "sim_pe_names", None) or []
+        if len(names) == 0:
+            return names, None
+        buf = np.zeros(len(names) + _DL_SLOTS, dtype=np.int64)
+        self.execution_engine.invoke(
+            SIM_CYCLES_READER,
+            ctypes.pointer(ctypes.pointer(get_ranked_memref_descriptor(buf))),
+        )
+        return names, buf
+
     def get_cycles(self):
         """Simulated cycle counts from the most recent run, under the per-PE clock's
         cost model (see _op_latency).  Returns a SimCycles: `.per_pe` maps each PE to
@@ -2136,14 +2280,9 @@ class LLVMOMPModule(LLVMModule):
         design with.  These are *abstract* cycles: correct in ordering, only
         approximate in magnitude.  Returns an empty result if the design has no
         clocked PEs, or if called before the first run."""
-        names = getattr(self, "sim_pe_names", None) or []
-        if len(names) == 0:
+        names, buf = self._read_sim_buf()
+        if buf is None:
             return SimCycles({})
-        buf = np.zeros(len(names), dtype=np.int64)
-        self.execution_engine.invoke(
-            SIM_CYCLES_READER,
-            ctypes.pointer(ctypes.pointer(get_ranked_memref_descriptor(buf))),
-        )
         # Disambiguate repeated kernel names (mapping=[...] gives one func, many calls).
         per_pe = {}
         seen = {}
