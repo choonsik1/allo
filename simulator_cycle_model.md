@@ -98,45 +98,93 @@ Not an alternative engine; the **measurement infrastructure both A and B need.**
 
 ---
 
-## 3. Recommendation
+## 3. The plan — keep our runtime, replace guessed latencies with measured ones
 
-**Build the oracle first (Route C), then a two-tier model.**
+**One sentence: delete the hand-written per-op latency table and charge the PE clock
+with per-loop timing ingested from csynth instead.**
 
-The binding constraint is not modelling sophistication — it is that **we cannot measure
-accuracy**, so no improvement can be shown to be an improvement. One data point is not a
-calibration; it is an anecdote. Concretely:
+Today `_op_latency` guesses (`fp add = 4`, `mul = 3`, …). Those guesses are the dominant
+error source — the architecture is not the problem, the numbers are.
 
-1. **Ground-truth harness.** A sweep of small designs (int/float mix, varying FIFO
-   depth, blocking vs NB, 2–8 PEs) pushed through both oracles, emitting a table of
-   *design → predicted cycles → csynth cycles → RTL cycles*. Reuse the existing csynth
-   plumbing and the proven Xcelium recipe. **This is the single highest-value artefact**
-   and everything below depends on it.
-2. **Calibrate Tier 1** (Route B) against that table — per-op latencies, and the
-   currently-unclocked `load_buf`/`store_res` wrappers that cause the 0.4× makespan.
-   Report a *distribution* of error, not a single ratio.
-3. **Add Tier 2** (Route A) for designs where magnitude matters: cache per-kernel
-   schedules, join by loop name with a source-line fallback, longest-path over the
-   event graph. Validate against the same table.
+### 3.1 Why this fits us and not the papers' shape
 
-Tier 1 stays in the DSE inner loop; Tier 2 is the accuracy backstop. That mirrors how
-DAM and OmniSim are positioned in the literature — approximate-but-fast vs
-accurate-but-tool-coupled — rather than betting on one.
+**Our simulator already *is* the trace.** That is the whole leverage point.
 
-**What would change this recommendation:** if the DSE consumer only ever needs
-*rankings*, Tier 2 may never be worth building, and the honest move is to calibrate
-Tier 1 well and state its error bars. That is a question about how the agents' generator
-consumes the number, and it should be answered before Tier 2 is started.
+LightningSim and OmniSim need two passes: an instrumented functional run producing a
+trace, then a post-pass joining trace to schedule and taking a longest path. We need
+neither — we already execute the real program, per PE, with a local clock. So the
+measured latencies can be injected **directly into the running simulation**.
+
+Result: OmniSim's *accuracy source* (real HLS schedule numbers) on DAM's *runtime*
+(no trace pass, no event graph, non-blocking handled natively).
+
+### 3.2 The division of labour — the actual point
+
+| supplies | provided by |
+|---|---|
+| **compute latency** — how long a loop body takes | csynth static schedule (iteration latency, II) |
+| **trip counts** — how many times it runs | our execution, free |
+| **stall time** — waiting on full/empty FIFOs, contention | our simulation, dynamically |
+
+This is why §0 matters. csynth *cannot* give trip counts for NB designs (`undef`) — and
+it does not need to, because that is the half we already have. **Each side supplies
+exactly what the other cannot.** A static-schedule-only route dies on NB; a
+guessed-latency-only route (today) dies on accuracy; together they cover each other.
+
+### 3.3 Mechanism
+
+1. csynth each `@df.kernel` body **once**; read per-loop `{iteration latency, II,
+   pipelined}`.
+2. Join report → MLIR by loop name. The naming already does this by construction
+   (`l_<op>_<loop>`, `EmitVivadoHLS.cpp:972`), with a source-line fallback for the NB
+   retry loops that come back as `VITIS_LOOP_24_1`.
+3. In `_insert_clock_increments`, charge the **ingested** per-iteration latency in place
+   of summed guesses. The `(n−1)·II + body` formula already exists — only the numbers
+   change.
+4. **Cache per kernel body.** DSE varies mapping/tiling/FIFO depth, not the PE body, so
+   one csynth run (~35 s) amortises across a whole sweep and stays out of the inner loop.
+5. Ingest the wrappers too: `store_res0_1` reports latency 12 / II 4 and is currently
+   clocked at **zero** — this is what makes makespan 0.4×.
+6. Keep today's table as the fallback when no report exists, so the simulator still runs
+   without Vitis.
+
+### 3.4 Why not the alternatives
+
+- **Full trace+graph (Route A):** buys little over the above while costing a trace pass
+  and an event-graph builder, because it reconstructs dynamic information we already have.
+- **Learned surrogate:** needs a large labelled corpus — i.e. the oracle below. It
+  *raises* the measurement bar rather than removing it. Not a shortcut.
+- **Analytical / max-plus:** closed-form and fast, but assumes static rates; NB and
+  data-dependent control are precisely where it breaks. Candidate Tier 0 for coarse
+  pruning, not the main model.
+
+### 3.5 First step is the oracle, not the ingestion
+
+With one calibration point we could not tell whether ingestion helped. So:
+
+1. **Ground-truth sweep first** — 10–20 small designs spanning int/float, blocking/NB,
+   varying FIFO depth and 2–8 PEs, pushed through both oracles (csynth; Catapult/Xcelium
+   RTL co-sim, which is exact and works for NB). Emit *design → predicted → csynth → RTL*.
+2. **Then ingest**, and report the **error distribution before and after** — not a single
+   ratio.
+
+**The assumption the whole plan rests on:** that a kernel's schedule is stable across the
+configurations DSE varies. If Vitis re-schedules per mapping, per-kernel caching breaks
+and the synthesis cost lands back in the inner loop. **This is untested and should be the
+first thing the sweep answers.**
 
 ---
 
 ## 4. Open questions
 
-- Do rankings actually need absolute accuracy? (Decides whether Tier 2 is ever built.)
-- Does the csynth schedule stay valid across the mappings DSE varies, or does Vitis
-  re-schedule per configuration? If it re-schedules, per-kernel caching breaks.
+- **Does Vitis re-schedule per mapping?** (§3.5 — the load-bearing assumption.)
+- Do rankings actually need absolute accuracy, or only ordering? Decides how much of the
+  wrapper/offset work is worth doing.
 - Can Catapult/Xcelium co-sim be scripted headlessly for a sweep, or is it interactive?
 - The `load_buf`/`store_res` gap: constant offset (harmless for ranking) or
-  design-dependent (fatal for both)? Measurable with the §3.1 harness.
+  design-dependent (fatal for both)? Measurable with the §3.5 sweep.
+- Outer loops still report `-`, so ingestion is partial. How much of a typical PE's time
+  sits in regions the schedule does not cover?
 
 ## 5. Further literature (beyond the four already read)
 
