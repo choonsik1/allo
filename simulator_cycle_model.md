@@ -138,10 +138,73 @@ consumes the number, and it should be answered before Tier 2 is started.
 - The `load_buf`/`store_res` gap: constant offset (harmless for ranking) or
   design-dependent (fatal for both)? Measurable with the §3.1 harness.
 
+## 5. Further literature (beyond the four already read)
+
+Grouped by what each would actually contribute. **Bold = read these first.**
+
+### 5a. Trace-based / pre-RTL simulation (same family as OmniSim)
+
+- **LightningSim** (FPGA'23) — OmniSim's predecessor and the cleaner statement of the
+  method: trace LLVM IR, map static HLS scheduling onto the trace, compute stalls and
+  deadlocks from inter-function interaction. **99.9 % accurate, up to 95× faster than
+  RTL co-sim.** Closest thing to a reference implementation for Route A, and it operates
+  at the level Allo already lowers to.
+- **Aladdin** (ISCA'14) — pre-RTL power/performance from a **dynamic data dependence
+  graph**, no RTL generated; within 10 % of RTL flows. Older and coarser than
+  LightningSim, but it is the origin of the "constrain an unconstrained DDDG" framing
+  and is worth reading for *why* the graph is built the way it is. `gem5-Aladdin`
+  extends it to accelerator+memory-system co-simulation.
+
+### 5b. Analytical throughput models (no trace, no tool run — cheapest tier)
+
+Potentially a **Tier 0** below our current engine: closed-form throughput for a dataflow
+graph, fast enough to evaluate thousands of candidates.
+
+- **Throughput and FIFO sizing for latency-insensitive designs** (INRIA) — max-plus /
+  marked-graph analysis giving optimal FIFO sizes at maximum achievable throughput.
+  Directly relevant: FIFO depth is a DSE knob we currently model only dynamically.
+- **FIFOAdvisor** (arXiv 2510.20981, 2025) — a DSE framework for automated FIFO sizing
+  of HLS designs; SDF buffer sizing via static analysis plus an SDC optimisation model.
+  The most current statement of this line and closest to our DSE use case.
+- **The role of back-pressure in latency-insensitive systems** (Carloni, Columbia) — the
+  foundational semantics for what back-pressure *is*. Useful for making
+  `valid_only` / `valid_ready` / wire precise rather than ad hoc.
+
+### 5c. Learned surrogates (predict cycles instead of simulating them)
+
+Relevant only if DSE needs to score far more candidates than either tier can simulate.
+
+- **IronMan** (GLSVLSI'21) — GNN performance predictor + RL DSE; reduces HLS tool
+  prediction error by 5.7× in timing, 10.9× in resources.
+- **Hierarchical GNN source-to-post-route QoR** (DATE'24) — predicts *post-route* QoR
+  from C source ([code](https://github.com/sjtu-zhao-lab/hierarchical-gnn-for-hls)).
+- Caveat worth stating plainly: a surrogate needs a **large labelled corpus**, which is
+  the §3.1 harness again. Learned models do not remove the ground-truth requirement —
+  they raise it. Do not start here.
+
+### 5d. Directly adjacent to our open problems
+
+- **Latency-insensitivity testing for dataflow HLS designs** (FPGA'25, Edinburgh) —
+  *does a design's result depend on timing?* This is OmniSim's Type A/B/C question posed
+  as a testing problem, and it is the same property our determinism work asserts.
+  **Most relevant single new paper for the non-blocking/livelock gap.**
+- **StreamTensor** (arXiv 2509.13694, 2025) — streaming dataflow accelerators for LLM
+  inference; useful as a workload/topology source once the model needs realistic designs
+  rather than 2-PE toys.
+
 ## Sources
 
 - [LightningSim (arXiv 2304.11219)](https://arxiv.org/pdf/2304.11219)
 - [OmniSim, MICRO'58 (ACM DL)](https://dl.acm.org/doi/full/10.1145/3725843.3756033) ·
   [arXiv 2508.19299](https://arxiv.org/html/2508.19299v1)
 - DAM, ISCA'24 — `simulator_papers/DAM_ISCA24_dataflow_abstract.pdf`
+- [Aladdin, ISCA'14](https://people.eecs.berkeley.edu/~ysshao/assets/papers/shao2014-isca.pdf) ·
+  [code](https://github.com/harvard-acc/ALADDIN)
+- [Throughput and FIFO sizing for latency-insensitive designs (INRIA)](https://inria.hal.science/inria-00381644v1/document)
+- [FIFOAdvisor (arXiv 2510.20981)](https://arxiv.org/pdf/2510.20981)
+- [Back-pressure in latency-insensitive systems (Carloni)](https://www.cs.columbia.edu/~luca/research/rbilsENTCS06.pdf)
+- [Latency-insensitivity testing for dataflow HLS designs, FPGA'25](https://www.pure.ed.ac.uk/ws/portalfiles/portal/486717247/ChengEtalFPGA2025LatencyInsensitivityTesting.pdf)
+- [IronMan (ACM DL)](https://dl.acm.org/doi/abs/10.1145/3453688.3461495)
+- [Hierarchical GNN QoR, DATE'24 (arXiv 2401.08696)](https://arxiv.org/pdf/2401.08696)
+- [StreamTensor (arXiv 2509.13694)](https://arxiv.org/pdf/2509.13694)
 - Local reports: `nb_stream.prj/…/csynth.rpt`, `blocking_stream_csynth.prj/…`
