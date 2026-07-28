@@ -71,6 +71,10 @@ public:
   virtual void emitSelect(arith::SelectOp op) {}
   virtual void emitConstant(arith::ConstantOp op) {}
   virtual void emitGeneralCast(UnrealizedConversionCastOp op) {}
+  // Hook called by emitCast after the operand: a backend may emit a narrowing
+  // suffix (e.g. `.to_int64()`) when converting a >64-bit ac_int to a native
+  // int/index, which under __SYNTHESIS__ has no implicit conversion. Default: none.
+  virtual void emitNarrowCastSuffix(Value src, Value dst) {}
   virtual void emitGetBit(allo::GetIntBitOp op) {}
   virtual void emitSetBit(allo::SetIntBitOp op) {}
   virtual void emitGetSlice(allo::GetIntSliceOp op) {}

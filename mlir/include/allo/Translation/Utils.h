@@ -49,15 +49,6 @@ public:
   // hls::half, accepts bare literals) so that output stays byte-identical.
   bool acFloatConstCtor = false;
 
-  // When set (SystemC synthesis flow), a >64-bit integer narrowed to a native
-  // int is emitted with an explicit `.to_int64()`/`.to_uint64()` instead of an
-  // implicit conversion. The ap_int shim's implicit narrowing is CSIM-ONLY:
-  // under __SYNTHESIS__ ap_int is a plain ac_int, which lacks that conversion,
-  // so `int32_t x = <ac_int<65>>` fails to synthesize (Catapult CRD-413). The
-  // explicit call compiles in both csim and synthesis. Left false for
-  // Vivado/Vitis (whose ap_int already narrows) so their output is unchanged.
-  bool explicitWideNarrow = false;
-
   // When set (SystemC clocked-thread flow), a wait() is emitted at the end of
   // each scf.while body. A `while not S.try_put(x): pass` busy-wait spins on a
   // non-blocking op; without a clock advance per iteration it retries in ZERO

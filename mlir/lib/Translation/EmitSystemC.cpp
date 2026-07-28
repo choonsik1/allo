@@ -172,7 +172,6 @@ public:
       : allo::CatapultModuleEmitter(state) {
     // SystemC/Catapult-native flow: f16 constants -> explicit half(...) ctor.
     state.acFloatConstCtor = true;
-    state.explicitWideNarrow = true;
     state.scfWhileWait = true; // clocked SC_THREADs: wait() per while iteration
   }
 
@@ -197,6 +196,9 @@ private:
   void emitChannelTryPut(allo::ChannelTryPutOp op) override;
   void emitStreamEmpty(allo::StreamEmptyOp op) override;
   void emitStreamFull(allo::StreamFullOp op) override;
+  // Narrow a >64-bit ac_int to a native int/index with an explicit
+  // .to_int64()/.to_uint64() (no implicit conversion under __SYNTHESIS__).
+  void emitNarrowCastSuffix(Value src, Value dst) override;
 
   // Sequential-stream body transform: a boundary memref arg becomes a Connections
   // stream port, so load a[i] -> port.Pop(), store b[i]=v -> port.Push(v).
@@ -1321,6 +1323,27 @@ void SystemCModuleEmitter::emitStreamFull(StreamFullOp op) {
         os << "[" << v << "]";
   os << ".Full();";
   emitInfoAndNewLine(op);
+}
+
+// Narrowing a >64-bit ac_int to a native int/index needs an EXPLICIT
+// .to_int64()/.to_uint64(). The ap_int shim's implicit narrowing is csim-only (a
+// plain ac_int under __SYNTHESIS__ lacks it -> Catapult CRD-413); the explicit
+// call compiles in both csim and synthesis. `index` (emitted as `int`) is a
+// native signed 64-bit type -- e.g. a bit-slice range endpoint computed wide
+// (ap_int<66>) then cast to index would otherwise fail to convert.
+void SystemCModuleEmitter::emitNarrowCastSuffix(Value src, Value dst) {
+  auto si = llvm::dyn_cast<IntegerType>(src.getType());
+  if (!si || si.getWidth() <= 64)
+    return;
+  Type dt = dst.getType();
+  if (auto di = llvm::dyn_cast<IntegerType>(dt)) {
+    if (di.getWidth() <= 64)
+      os << (di.getSignedness() == IntegerType::SignednessSemantics::Unsigned
+                 ? ".to_uint64()"
+                 : ".to_int64()");
+  } else if (llvm::isa<IndexType>(dt)) {
+    os << ".to_int64()";
+  }
 }
 
 void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
