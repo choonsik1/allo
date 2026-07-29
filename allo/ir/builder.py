@@ -2726,14 +2726,41 @@ class ASTTransformer(ASTBuilder):
                         ]
                     else:
                         indices = []  # scalar stream: no subscript -> no indices
-                    put_op = allo_d.StreamTryPutOp(
-                        IntegerType.get_signless(1),
-                        stream.result,
-                        indices,
-                        ASTTransformer.get_mlir_op_result(ctx, stmts[0]),
-                        ip=ctx.get_ip(),
-                    )
-                    if isinstance(node.func.value.dtype, UInt):
+                    # Dispatch by link kind, like the blocking put/get above.
+                    # Wire has no non-blocking form: a wire is always its current
+                    # value, so there is nothing to "try" -- reject it rather than
+                    # silently building a Stream op on a wire-typed value.
+                    _link_ty = stream.result.type
+                    _put_data = ASTTransformer.get_mlir_op_result(ctx, stmts[0])
+                    if allo_d.WireType.isinstance(_link_ty):
+                        raise RuntimeError(
+                            "Wire has no `try_put`: a wire is always its current "
+                            "value, so there is nothing to try. Use `put()`."
+                        )
+                    if allo_d.ChannelType.isinstance(_link_ty):
+                        put_op = allo_d.ChannelTryPutOp(
+                            IntegerType.get_signless(1),
+                            stream.result,
+                            indices,
+                            _put_data,
+                            ip=ctx.get_ip(),
+                        )
+                    else:
+                        put_op = allo_d.StreamTryPutOp(
+                            IntegerType.get_signless(1),
+                            stream.result,
+                            indices,
+                            _put_data,
+                            ip=ctx.get_ip(),
+                        )
+                    # try_put's inference (infer.py) sets node.func.value.dtype to
+                    # the LINK type (like get/try_get), so the UInt check is on the
+                    # ELEMENT (.dtype.dtype) -- not .dtype (which is put's pattern,
+                    # where infer sets the element directly). Getting this wrong left
+                    # UInt try_put without the `unsigned` attr, so a non-blocking
+                    # producer's Connections::Out port emitted signed (mismatching the
+                    # unsigned In/Combinational the other ops produce).
+                    if isinstance(node.func.value.dtype.dtype, UInt):
                         put_op.attributes["unsigned"] = UnitAttr.get()
                     return put_op
                 if node.func.attr == "try_get":
@@ -2764,13 +2791,30 @@ class ASTTransformer(ASTBuilder):
                         ]
                     else:
                         indices = []  # scalar stream: no subscript -> no indices
-                    get_op = allo_d.StreamTryGetOp(
-                        node.func.value.dtype.build(),
-                        IntegerType.get_signless(1),
-                        stream.result,
-                        indices,
-                        ip=ctx.get_ip(),
-                    )
+                    # Dispatch by link kind (mirror of try_put above). Wire has no
+                    # non-blocking form -- see the comment there.
+                    _link_ty = stream.result.type
+                    if allo_d.WireType.isinstance(_link_ty):
+                        raise RuntimeError(
+                            "Wire has no `try_get`: a wire is always its current "
+                            "value, so there is nothing to try. Use `get()`."
+                        )
+                    if allo_d.ChannelType.isinstance(_link_ty):
+                        get_op = allo_d.ChannelTryGetOp(
+                            node.func.value.dtype.build(),
+                            IntegerType.get_signless(1),
+                            stream.result,
+                            indices,
+                            ip=ctx.get_ip(),
+                        )
+                    else:
+                        get_op = allo_d.StreamTryGetOp(
+                            node.func.value.dtype.build(),
+                            IntegerType.get_signless(1),
+                            stream.result,
+                            indices,
+                            ip=ctx.get_ip(),
+                        )
                     if isinstance(node.func.value.dtype.dtype, UInt):
                         get_op.attributes["unsigned"] = UnitAttr.get()
                     return get_op
