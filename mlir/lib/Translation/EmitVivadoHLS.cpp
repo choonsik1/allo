@@ -814,11 +814,19 @@ void allo::hls::VhlsModuleEmitter::emitScfFor(scf::ForOp op) {
 
   emitLoopDirectives(op);
   emitBlock(*op.getBody());
-  // SystemC: advance one cycle per iteration when the body issues a non-blocking
-  // stream op, so retries actually let the peer/FIFO threads run (see the helper).
+  // SystemC: a csim SC_THREAD doesn't yield on its own, so a for-loop issuing a
+  // non-blocking stream op needs a wait() per iteration or the peer/FIFO threads
+  // never run between attempts and no data moves. Guard it to CSIM: under
+  // __SYNTHESIS__ the PushNB/PopNB handshake already supplies the cycle boundary, and
+  // a redundant wait() alongside several meta_for-unrolled handshakes in one body
+  // over-constrains Catapult's fixed iomode offsets (SCHD-67). (while-loop retry
+  // spins keep an UNCONDITIONAL wait() -- a spin with no boundary is a zero-time
+  // combinational loop the RTL scheduler can't handle either.)
   if (state.scfWhileWait && loopBodyIssuesNonBlockingStream(op.getRegion())) {
+    os << "#ifndef __SYNTHESIS__\n";
     indent();
     os << "wait();\n";
+    os << "#endif\n";
   }
   reduceIndent();
 
@@ -1076,11 +1084,19 @@ void allo::hls::VhlsModuleEmitter::emitAffineFor(AffineForOp op) {
 
   emitLoopDirectives(op);
   emitBlock(*op.getBody());
-  // SystemC: advance one cycle per iteration when the body issues a non-blocking
-  // stream op, so retries actually let the peer/FIFO threads run (see the helper).
+  // SystemC: a csim SC_THREAD doesn't yield on its own, so a for-loop issuing a
+  // non-blocking stream op needs a wait() per iteration or the peer/FIFO threads
+  // never run between attempts and no data moves. Guard it to CSIM: under
+  // __SYNTHESIS__ the PushNB/PopNB handshake already supplies the cycle boundary, and
+  // a redundant wait() alongside several meta_for-unrolled handshakes in one body
+  // over-constrains Catapult's fixed iomode offsets (SCHD-67). (while-loop retry
+  // spins keep an UNCONDITIONAL wait() -- a spin with no boundary is a zero-time
+  // combinational loop the RTL scheduler can't handle either.)
   if (state.scfWhileWait && loopBodyIssuesNonBlockingStream(op.getRegion())) {
+    os << "#ifndef __SYNTHESIS__\n";
     indent();
     os << "wait();\n";
+    os << "#endif\n";
   }
   reduceIndent();
 
