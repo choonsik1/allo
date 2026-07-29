@@ -189,7 +189,27 @@ def pack(data, x, y):
 
 
 if __name__ == "__main__":
-    sim = df.build(rvn_wire, target="simulator")
+    # SYSTEMC ONLY.  target="simulator" CANNOT build this design: the JIT simulator has
+    # no Wire support whatsoever (zero Wire*Op handlers, versus full Stream coverage), so
+    # it fails in ExecutionEngine with "missing LLVMTranslationDialectInterface ... for
+    # op: func.func".  SystemC lowers a Wire to a plain sc_signal, so csim runs it.
+    #
+    # Needs, in addition to the usual conda/LLVM_BUILD_DIR/PYTHONPATH:
+    #   export MGC_HOME=/opt/siemens/catapult/2024.2/Mgc_home
+    #   export PATH=$MGC_HOME/bin:$PATH
+    #   export SYSTEMC_HOME=$MGC_HOME/shared
+    #   export ALLO_CXX_EXTRA="-L$CONDA_PREFIX/lib -Wl,-rpath,$CONDA_PREFIX/lib"
+    # The last one is not optional here: libsystemc wants GLIBCXX_3.4.26, absent from
+    # this host's system libstdc++, so the link has to pick up conda's newer runtime.
+    #
+    # Everything generated (kernel.cpp, the compiled `sim` binary, ...) lands in PROJECT
+    # so the emitted SystemC can be inspected afterwards.
+    PROJECT = os.environ.get(
+        "ALLO_CSIM_OUT", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                      "csim_out", "wire"))
+    os.makedirs(PROJECT, exist_ok=True)
+    print(f"[csim] generating + building into {PROJECT}", flush=True)
+    sim = df.build(rvn_wire, target="systemc", mode="csim", project=PROJECT)
 
     # W1: flits addressed to THIS node eject over the wire, reach the PE, and come back
     # as payload+1. Proves the wire carries data and the PE consumed it.
@@ -218,4 +238,4 @@ if __name__ == "__main__":
     print(f"  PE saw nothing: {'yes' if not any(out2) else 'NO -- wire got a flit it should not have'}")
     print("W2", "PASS" if (0x777 in east and not any(out2)) else "FAIL")
 
-    print("\nper-PE cycles:", sim.get_cycles().per_pe)
+    # NOTE: no get_cycles() here -- that is a JIT-simulator feature; csim reports none.

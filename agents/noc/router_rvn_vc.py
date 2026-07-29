@@ -81,12 +81,17 @@ NVC = 2
 VCMASK = NVC - 1
 
 
-def build_router(nvc):
-    """Build a simulator for an nvc-virtual-channel router.
+def make_router(nvc):
+    """CONSTRUCT (but do not build) the region for an nvc-virtual-channel router.
 
     NVC/VCMASK are module globals because allo resolves the constants in a kernel body
     from the region function's __globals__ at build time; rebinding them here and then
-    defining + building the region in one go is what makes NVC a build parameter.
+    defining the region is what makes NVC a build parameter.
+
+    Split out from build_router so the SAME region can be re-targeted -- `simulator` for
+    the functional tests, `systemc` (mode="csim") for the Catapult flow.  Building both
+    from one call is impossible: df.build consumes the region and returns a module, so
+    there would be no handle left to re-target.
     """
     global NVC, VCMASK
     NVC = nvc
@@ -229,7 +234,13 @@ def build_router(nvc):
                             dout[o, kp[o]] = wv
                             kp[o] += 1
 
-    return df.build(router_rvn_v, target="simulator")
+    return router_rvn_v
+
+
+def build_router(nvc, target="simulator", **kw):
+    """Build an nvc-VC router. target="simulator" for the JIT tests; target="systemc"
+    with mode="csim", project=<dir> for the Catapult flow."""
+    return df.build(make_router(nvc), target=target, **kw)
 
 
 def pack(data, x, y, vc=0):
