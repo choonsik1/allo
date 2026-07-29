@@ -1262,14 +1262,23 @@ void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
     Value r = op.getResult(0), s = op.getResult(1);
     fixUnsignedType(r, op->hasAttr("unsigned"));
     std::string sn = std::string(getName(op->getOperand(0)).str());
+    // PopNB needs a payload-typed temp (non-const ref; see the cross-kernel path).
+    std::string payloadT = std::string(
+        getStreamPayloadTypeName(
+            llvm::cast<StreamType>(op->getOperand(0).getType()).getBaseType(),
+            linkPayloadUnsigned(op->getOperand(0)))
+            .str());
     indent();
-    emitValue(r);
+    emitValue(r); // assigns r's name; take it AFTER for the temp
     os << ";\n";
+    std::string nb = std::string(getName(r).str()) + "_nb";
+    indent();
+    os << payloadT << " " << nb << ";\n";
     indent();
     emitValue(s);
-    os << " = " << sn << "_deq.PopNB(";
+    os << " = " << sn << "_deq.PopNB(" << nb << "); ";
     emitValue(r);
-    os << "); " << sn << "_cnt -= ";
+    os << " = " << nb << "; " << sn << "_cnt -= ";
     emitValue(s);
     os << ";";
     emitInfoAndNewLine(op);
@@ -1279,9 +1288,21 @@ void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
   Value success = op.getResult(1);
   fixUnsignedType(result, op->hasAttr("unsigned"));
   auto stream = op->getOperand(0);
+  // PopNB takes Message& (a NON-const reference), so its argument must be EXACTLY
+  // the port's payload type (ac_int<W>, see getStreamPayloadTypeName) -- a native
+  // int32_t result won't bind to In<ac_int<32>> (CRD-304). Pop into a payload-typed
+  // temp, then convert to the result. (PushNB takes const Message&, so try_put needs
+  // no such temp.)
+  std::string payloadT = std::string(
+      getStreamPayloadTypeName(llvm::cast<StreamType>(stream.getType()).getBaseType(),
+                               linkPayloadUnsigned(stream))
+          .str());
   indent();
-  emitValue(result);
+  emitValue(result); // assigns the result's name; take it AFTER for the temp
   os << ";\n";
+  std::string nb = std::string(getName(result).str()) + "_nb";
+  indent();
+  os << payloadT << " " << nb << ";\n";
   indent();
   emitValue(success);
   os << " = ";
@@ -1292,9 +1313,9 @@ void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
       for (int64_t v : idx.asArrayRef())
         os << "[" << v << "]";
   }
-  os << ".PopNB(";
+  os << ".PopNB(" << nb << "); ";
   emitValue(result);
-  os << ");";
+  os << " = " << nb << ";";
   emitInfoAndNewLine(op);
 }
 
