@@ -764,6 +764,27 @@ bool ExprVisitor::visitOp(allo::CmpFixedOp op) {
 // ModuleEmitter Class Definition
 //===----------------------------------------------------------------------===//
 
+// SystemC clocked-thread flow: a loop whose body issues a non-blocking stream op
+// (try_put/try_get -> PushNB/PopNB) needs a wait() per iteration, or all iterations
+// run in ZERO simulated time and the peer/FIFO threads never get scheduled between
+// attempts, so NO data moves (blocking put/get wait() internally, so they're fine).
+// Detect such ops in THIS loop's body -- descend into non-loop regions (scf.if, ...)
+// but STOP at nested loops, which get their own wait(), so we don't double-count.
+static bool loopBodyIssuesNonBlockingStream(Region &body) {
+  for (Block &blk : body)
+    for (Operation &op : blk) {
+      if (llvm::isa<allo::StreamTryPutOp, allo::StreamTryGetOp,
+                    allo::ChannelTryPutOp, allo::ChannelTryGetOp>(&op))
+        return true;
+      if (llvm::isa<scf::ForOp, scf::WhileOp, AffineForOp>(&op))
+        continue; // nested loop -> its own wait(), don't descend
+      for (Region &r : op.getRegions())
+        if (loopBodyIssuesNonBlockingStream(r))
+          return true;
+    }
+  return false;
+}
+
 /// SCF statement emitters.
 void allo::hls::VhlsModuleEmitter::emitScfFor(scf::ForOp op) {
   indent();
@@ -793,6 +814,12 @@ void allo::hls::VhlsModuleEmitter::emitScfFor(scf::ForOp op) {
 
   emitLoopDirectives(op);
   emitBlock(*op.getBody());
+  // SystemC: advance one cycle per iteration when the body issues a non-blocking
+  // stream op, so retries actually let the peer/FIFO threads run (see the helper).
+  if (state.scfWhileWait && loopBodyIssuesNonBlockingStream(op.getRegion())) {
+    indent();
+    os << "wait();\n";
+  }
   reduceIndent();
 
   indent();
@@ -1049,6 +1076,12 @@ void allo::hls::VhlsModuleEmitter::emitAffineFor(AffineForOp op) {
 
   emitLoopDirectives(op);
   emitBlock(*op.getBody());
+  // SystemC: advance one cycle per iteration when the body issues a non-blocking
+  // stream op, so retries actually let the peer/FIFO threads run (see the helper).
+  if (state.scfWhileWait && loopBodyIssuesNonBlockingStream(op.getRegion())) {
+    indent();
+    os << "wait();\n";
+  }
   reduceIndent();
 
   indent();
