@@ -115,7 +115,31 @@ Nothing below is worth doing until one Allo design produces a cycle count.
 - **Exit criterion:** a cycle number that matches the csynth report. If this fails, stop
   and reassess — everything downstream assumes it works.
 
-### Stage 1 — decide the scope honestly
+### Stage 1 — DONE 2026-07-30. PASS.
+
+**LightningSim `node_0_0` = 1014 cycles = csynth `node_0_0` = 1014, exact**, on a PE body
+extracted from the cyclic EVA mesh. Details: `simulator_profiling/lightningsim_stage1/`.
+
+The per-kernel oracle idea is **validated**: the whole mesh segfaults (cyclic), but a PE
+cut out of it traces exactly. Three harness requirements and one upstream patch:
+
+- **No `hls::stream` in the top signature** — top-level stream ports make Vitis emit
+  `streamcpy_hls` glue calling `fpga_fifo_*_4`, which LightningSim does not provide.
+  Wrap with `pe_feed`/`pe_drain` in a dataflow `top`, streams internal.
+- **Drain counts must match production exactly** or `builder.finish()` raises
+  `incomplete edges remain`. This PE writes each output once *before* the loop and once
+  per iteration → 337, not 336.
+- **LightningSim 0.2.6 needs a one-line patch**: `trace_file.py:~418` asserts a FIFO
+  write's payload has an instruction source; for 5 FIFOs here it is `None`. Defaulting
+  the width lets it complete, but the default is a guess on `ap_uint<26>/<17>` streams —
+  the proper fix reads the declared width, which means building from source.
+
+**Finding worth the whole exercise:** the PE's main loop runs at **II ≈ 3** (1012 cycles
+/ 336 iterations) despite `#pragma HLS pipeline II=1`. Our cost model assumes
+`DEFAULT_II = 1`, measured on a trivial loop. A 3× miss on the dominant loop of a real
+PE — exactly what `simulator_cycle_model.md` proposes to fix by ingestion.
+
+### Stage 1 (original spec) — decide the scope honestly
 
 LightningSim is **Type A only**. Our target designs (meshes, non-blocking, wires) are
 Type B/C. So it can never be the general answer. Two viable roles:
