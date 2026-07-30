@@ -40,8 +40,30 @@ of what the FIFO buys, not just buffering. A `Wire` gives zero storage **and** z
 handshake, therefore **zero alignment**, and is only sound between kernels already
 cycle-locked by something else.
 
+**RESOLVED 2026-07-30 by adding a fourth variant.** The original three could not say
+WHICH loss broke `wire`, because it drops storage and handshake together. `pe_channel`
+drops **only storage** — and PASSES:
+
+| variant | storage | handshake | csim |
+|---|---|---|---|
+| `mono`    | —    | —   | PASS |
+| `stream`  | FIFO | yes | PASS |
+| `channel` | none | yes | **PASS** |
+| `wire`    | none | no  | **FAIL** |
+
+So the buffer was never what made `stream` correct — the **handshake** was. `Channel`
+gives the modularity fix that `Wire` does not: zero buffering at the boundary, correct
+behaviour, two independently-written modules.
+
 `router_rvn_wire.py` passing csim was **luck** — its router and PE stayed in step because
 other blocking ops paced both loops. Do not cite it as evidence that wires work.
+
+**But a Wire design DOES synthesise.** `pe_wire` csynths clean and produces RTL despite
+failing csim. Synthesis builds the logic and does not care that two SystemC threads never
+align in simulated time. So the accurate statement is not "a Wire boundary is unsound" but
+**"the SystemC thread model cannot represent it"** — in real RTL both modules advance on the
+same clock edge. What is missing is that Allo's SC_THREAD emission does not impose that
+lockstep. A design can be synthesisable and un-simulatable.
 
 ### The sound idiom: Wire as a sideband on an ordering link
 
@@ -82,7 +104,10 @@ identical behaviour) but is **NOT VALIDATED** — see §4.
 | `router_rvn_chan`, `router_rvn_fusedchan` | Channel | csim passed 2026-07-29 |
 | `router_rvn_adaptchan` | Channel + runtime sideband | csim T1–T6 pass |
 | `router_rvn_wire` | Wire | csim passed — **by luck, see §1** |
-| `pe_split` | Wire vs Stream, controlled | **the §1 result** |
+| `pe_split` | Wire / Stream / Channel, controlled | **the §1 result**; `channel` PASS, `wire` FAIL |
+| `pe_split` `pe_channel` | Channel | csim PASS, **csynth RTL**, **cosim BIT-EXACT** |
+| `pe_split` `pe_stream` | Stream | csim PASS, **csynth RTL** |
+| `pe_split` `pe_wire` | Wire | csim FAIL, **csynth RTL** (synthesisable, un-simulatable) |
 | `switch_comb` | Wire, CONNECT-HLS port | compiles, **hangs** (§4) |
 | `wire_sideband` | Wire sideband idiom | **not validated** (§4) |
 
@@ -113,16 +138,68 @@ identical behaviour) but is **NOT VALIDATED** — see §4.
    and unexplained. Since the WIRE variant is not the one failing first, this is probably
    not a Wire problem at all. Parked; would need its own bisect against the known-good
    two-kernel control rather than more guessing.
-7. **csynth still fails for every router.** Three distinct causes seen (memory/channel iomode
-   collision, per-channel offset collision, a codegen assertion) — do not treat as one
-   problem. NVIDIA's `WHVCRouter` does dozens of `PushNB`/`PopNB` per `SC_THREAD` iteration
-   and *does* synthesise, so the shape is not inherently unschedulable. A MatchLib-style
-   `run.tcl` was tried and did **not** help, so the difference is in the emitted code —
-   remaining suspect is `wait()` at the top of the loop vs the bottom.
+7. **csynth: SOLVED (commit 7380e00), not an emitter problem.** The fix is two Catapult tcl
+   directives — `-IO_MODE super` + `-SPECULATE true`, matchlib's own required settings.
+   Catapult's default `-IO_MODE fixed` pins each Connections `vld`/`dat` write to a fixed
+   cycle offset, so any kernel issuing >1 non-blocking handshake per `SC_THREAD` body (every
+   router) collides -> SCHD-67 / SCHD-30. `super` lets the scheduler place each handshake
+   within the loop window; `speculate` covers the conditional pushes. 22/32 dataflow designs
+   now synth, up from 2/32.
+
+   My earlier diagnosis had the MECHANISM right and the REMEDY wrong — I concluded it was a
+   structural conflict between Allo's compile-time-constant link indices and Catapult's
+   scheduler, and proposed an `SC_METHOD` emitter mode. It was a directive. I did try a
+   MatchLib-style tcl and reported it "did not help", but I had copied
+   `eva_router/go_hls.tcl`, which does not carry those two settings — they live in
+   matchlib's `run_hls_global_setup.tcl`, which I never opened.
+
+   Residual: the big routers are EXPENSIVE under `super` — `router_rvn_chan` ran 40 min at
+   49 GB RSS without finishing (the scheduler has a far larger placement space than under
+   `fixed`). Small designs finish in minutes. Budget accordingly on a shared machine.
 
 ---
 
-## 5. What I would do next
+## 5. MEASURED: what dropping the buffer actually saves
+
+First real numbers, from `rtl.rpt` register counts (`pe_stream` vs `pe_channel`, identical
+computation and harness, only the mul->acc boundary differing):
+
+| register width | `pe_stream` | `pe_channel` | delta |
+|---|---|---|---|
+| 1-bit (a) | 9 | 7 | -2 |
+| 1-bit (b) | 50 | 43 | -7 |
+| 3-bit | 4 | 4 | — |
+| 27-bit | 18 | 18 | — |
+| **32-bit (b)** | **23** | **19** | **-4** |
+
+**1325 -> 1188 register bits, ~10% fewer**, and the saving is where the theory says: four
+32-bit registers (128 of the 137 bits) in the DATAPATH — that is the FIFO — plus 9 one-bit
+control registers (head/tail/count). Compute registers (27-bit, 3-bit) untouched.
+
+Caveat: register counts, not full area/timing, on one small design. The routers would show
+a far larger absolute effect (the split router carries 25 crossbar FIFOs) but they are the
+40-minute jobs.
+
+## 5b. The full chain works, end to end
+
+`pe_channel`: **Allo -> SystemC -> csim -> Catapult csynth -> RTL -> Xcelium cosim**, with
+RTL output BIT-EXACT against the C model (`2 10 28 60 110 182 280 408`).
+
+Two manual steps remain after `go extract`, both mechanical:
+1. **SCVerify emits Questa-only makefiles.** Swap `ccs_questasim.mk` -> `ccs_ncsim.mk` in a
+   copy of `Verify_concat_sim_rtl_v_msim.mk`; set `NCSim_NC_ROOT=/opt/cadence/XCELIUM2403`
+   and `unset LD_PRELOAD`. Passing `SIMTOOL=ncsim` does NOT work — the msim makefile is
+   Questa-only by construction.
+2. **Generated `sysc_sim.h` uses `Connections::Out<>` without including
+   `mc_connections.h`.** Add the include. This recurs for EVERY Channel design and cannot be
+   fixed in the emitter — Catapult generates that file.
+
+**Workflow gotcha that cost a run:** run `csim` in the SAME project dir as the csyn build
+FIRST, so the testbench writes `input0.data`/`output0.data`. Without it the cosim drives the
+DUT with uninitialised memory and returns plausible-looking garbage — a running sum of a
+constant, not an obvious failure.
+
+## 6. What I would do next
 
 1. **Fix gap 4.1** (wire `wait()` predicate). Unblocks `switch_comb` and makes any wire
    result trustworthy rather than accidental.

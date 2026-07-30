@@ -1,7 +1,7 @@
 import os; os.environ.setdefault("OMP_NUM_THREADS", "16")
 import sys
 import allo
-from allo.ir.types import int32, int1, Stream, Wire
+from allo.ir.types import int32, int1, Stream, Wire, Channel, valid_ready
 import allo.dataflow as df
 import numpy as np
 
@@ -153,11 +153,53 @@ def pe_stream(AB: int32[2, N], C: int32[N]):
             c[i] = res.get()
 
 
-VARIANTS = {"mono": pe_mono, "wire": pe_wire, "stream": pe_stream}
-KERNELS = {"mono": 3, "wire": 4, "stream": 4}
+# ── VARIANT 4: the same split over a CHANNEL. Handshake, but no buffer. ──
+# The third point on the storage axis: Stream has a FIFO, Wire has neither buffer nor
+# handshake, Channel has the handshake WITHOUT the buffer. That middle point is the one
+# worth having -- it keeps the synchronisation that makes `stream` correct while dropping
+# the storage that makes it expensive, which is exactly what `wire` threw away too much of.
+@df.region()
+def pe_channel(AB: int32[2, N], C: int32[N]):
+    fa: Stream[int32, 2]
+    fb: Stream[int32, 2]
+    prod: Channel[int32, valid_ready]   # <- handshake, zero storage
+    res: Stream[int32, 2]
+
+    @df.kernel(mapping=[1], args=[AB])
+    def feed(ab: int32[2, N]):
+        for i in range(N):
+            fa.put(ab[0, i])
+            fb.put(ab[1, i])
+
+    @df.kernel(mapping=[1], args=[])
+    def mul():
+        for i in range(N):
+            x: int32 = fa.get()
+            y: int32 = fb.get()
+            p: int32 = x * y
+            prod.put(p)                 # blocking: the handshake DOES synchronise
+
+    @df.kernel(mapping=[1], args=[])
+    def acc():
+        s: int32 = 0
+        for i in range(N):
+            p: int32 = prod.get()       # blocks until mul pushed -- unlike a Wire
+            s += p
+            res.put(s)
+
+    @df.kernel(mapping=[1], args=[C])
+    def sink(c: int32[N]):
+        for i in range(N):
+            c[i] = res.get()
+
+
+VARIANTS = {"mono": pe_mono, "wire": pe_wire, "stream": pe_stream,
+            "channel": pe_channel}
+KERNELS = {"mono": 3, "wire": 4, "stream": 4, "channel": 4}
 BOUNDARY = {"mono": "none (mul+acc in one kernel)",
-            "wire": "Wire (combinational, 0 storage)",
-            "stream": "Stream[int32,2] (FIFO, 2 slots)"}
+            "wire": "Wire (0 storage, NO handshake)",
+            "stream": "Stream[int32,2] (FIFO, 2 slots)",
+            "channel": "Channel[valid_ready] (0 storage, handshake)"}
 
 
 def golden(a, b):
