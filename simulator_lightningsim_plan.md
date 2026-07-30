@@ -73,7 +73,36 @@ exactly why `tb_synth.cpp` was hand-written in `mmmr_test`.
 
 ## 3. The plan
 
-### Stage 0 — prove the path end-to-end on a Type A design (half a day)
+### Stage 0 — DONE 2026-07-30. PASS.
+
+**LightningSim `top` = 21 cycles = csynth `top` = 21, exact.** Sources, reproduction
+steps and full notes: `simulator_profiling/lightningsim_stage0/`.
+
+```
+[ 0-20] top                     <-- 21 cycles inclusive
+        [ 0- 0] entry_proc
+        [ 0- 4] producer_0
+        [ 1- 5] consumer_0
+        [ 6-20] store_res0.1    <-- 15 cycles our simulator charges ZERO
+```
+
+Three Allo-side blockers had to be cleared, all fixable in the emitter (Stage 2):
+
+1. `host.cpp` is an OpenCL host → wrote a native `tb.cpp` calling `top()` directly.
+2. Generated `kernel.h` uses `int32_t` **without including `<cstdint>`** — `kernel.cpp`
+   only survives because other headers precede it. Any native testbench including
+   `kernel.h` first fails to compile.
+3. `#pragma HLS pipeline II=1 rewind` → link error `undefined reference to
+   _ssdm_op_Return`; LightningSim's runtime lacks that intrinsic. Dropping `rewind` fixes
+   it, **but perturbs the design** (csynth `top` was 19–20 with it, 21 without). The
+   comparison above is self-consistent; a proper fix stubs the intrinsic instead.
+
+**Bonus result — the 0.4× makespan gap is now measured, not guessed.** Our simulator says
+makespan 7; both oracles say 21. The breakdown localises all of it: `store_res0.1` spans
+cycles 6–20 and our cost model charges the `load_buf`/`store_res` wrappers **zero**
+(7 + ~14 ≈ 21). That confirms the §1 hypothesis in `simulator_cycle_model.md`.
+
+### Stage 0 (original spec) — prove the path end-to-end on a Type A design
 
 Nothing below is worth doing until one Allo design produces a cycle count.
 
