@@ -187,8 +187,19 @@ set sfd [file dir [info script]]
 solution new -state initial
 solution options defaults
 solution options set /Input/CppStandard c++11
-solution options set /Input/CompilerFlags {{-D_GLIBCXX_USE_CXX11_ABI=0}}
+"""
 
+    # -D_GLIBCXX_USE_CXX11_ABI=0 matches Catapult's pre-CXX11 libsystemc for the
+    # g++ CSIM compile. OMIT it for csyn/ppa: synthesis doesn't need it (the EDG
+    # front end ignores libstdc++ ABI), and Catapult's SCVerify RTL cosim forwards
+    # this option to xmsc's g++ with the Tcl braces intact -> g++ sees `{-D...}` as
+    # an input filename -> "output files may not be specified when compiling
+    # several" -> the RTL compile dies. Gating it to csim lets Allo-generated
+    # designs cosim (csyn project + SCVerify) without hand-editing the tcl.
+    if mode == "csim":
+        out_str += "solution options set /Input/CompilerFlags {{-D_GLIBCXX_USE_CXX11_ABI=0}}\n"
+
+    out_str += """
 # Add source files
 solution file add "$sfd/kernel.cpp" -type C++
 """
@@ -208,6 +219,20 @@ directive set -CLOCKS {{clk {{-CLOCK_PERIOD {clock_period:.1f}}}}}
 # Set output language
 solution options set /Output/OutputVerilog true
 solution options set /Output/OutputVHDL false
+"""
+
+    # Connections (MatchLib) designs write several non-blocking handshakes per
+    # SC_THREAD body (every NoC router does). Catapult's DEFAULT -IO_MODE fixed
+    # pins each port's vld/dat to a fixed cycle offset, so N-per-body collide ->
+    # SCHD-67/SCHD-30 ("could not schedule even with unlimited resources"). This
+    # is exactly matchlib's own required setting (hls/run_hls_global_setup.tcl):
+    # -IO_MODE super lets the scheduler place each handshake within the loop
+    # window, and -SPECULATE true covers the conditional pushes. Verified: the
+    # whole Channel router (38 PushNB + 38 PopNB) csynths clean with these two.
+    if platform == "systemc":
+        out_str += """
+directive set -IO_MODE super
+directive set -SPECULATE true
 """
 
     # Library selection based on device
