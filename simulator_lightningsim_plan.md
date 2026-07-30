@@ -154,6 +154,27 @@ Type B/C. So it can never be the general answer. Two viable roles:
 
 Do **not** plan on (b) for meshes; that is what the segfault is telling us.
 
+### Path C — DONE 2026-07-30. WORKS, and it handles cycles.
+
+Import `lightningsim._core` (the compiled Rust engine) and build the simulation graph
+ourselves — no Vitis bitcode, no instrumentation, no testbench. Details and runnable
+probes: `simulator_profiling/lightningsim_pathc/`.
+
+Proven: the solver accepts hand-built graphs; it models **back-pressure** (depth 1 → 37
+cycles, depth 8 → 25, converging to unbounded); its **native FIFO-depth DSE** returns
+latency *and* BRAM per point; and — decisively — **it resolves a primed cycle and
+correctly flags an unprimed one as deadlock.**
+
+**That last result changes the picture.** LightningSim cannot *run* a cyclic design (its
+functional sim needs a completed sequential pass; Stage 1 = segfault), but the **engine**
+has no such limit. The Type A restriction lives in the front end, not the solver. So Path
+C reaches designs that invoking the tool never can.
+
+Caveats: event order must be causally consistent; a malformed graph fails at `finish()`
+with `incomplete edges remain`; `stage` numbers still come from the schedule (Path B's
+work regardless); `_core.pyi` is a private, unstable API on a compiled binary; and these
+were synthetic graphs of a few nodes, so nothing here proves it scales to a real mesh.
+
 ### Stage 2 — automate testbench emission
 
 The blocker in 2b is that Allo emits an OpenCL host, not a csim testbench.
