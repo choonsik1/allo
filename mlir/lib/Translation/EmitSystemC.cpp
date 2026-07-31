@@ -2183,66 +2183,40 @@ SC_MODULE(AlloMemW) {
 // Depth-N buffered stream channel (Stream[T, N>=1]) — a TWO-THREAD ring-buffer
 // FIFO that Catapult can synthesize AND schedule.
 //
-// Why two threads: a single SC_THREAD doing BOTH a non-blocking out.PushNB() and
-// in.PopNB() couples the two handshakes' sc_signal writes (in.rdy, out.vld/dat)
-// to the FIFO's internal state, and Catapult can't place them at the fixed cycle
-// offset its iomode requires -> the while loop won't close at II=1 (SCHD-30). A
-// shift-register, ring buffer, and even depth-1 all fail identically, because the
-// blocker is the *bidirectional* non-blocking handshake in one thread, not the
-// buffer layout. Splitting into an enqueue thread (touches only `in`) and a
-// dequeue thread (touches only `out`) gives each thread clean UNIDIRECTIONAL I/O
-// -- exactly the shape producer/consumer kernels schedule with.
-//
-// enq owns `tail`, deq owns `head`; each reads the other's pointer through a
-// registered sc_signal. The shared storage is an sc_signal register file (a plain
-// array shared across threads is rejected, HIER-41; sc_signal has a single writer
-// = enq). N+1 slots (one sacrificed) so head==tail unambiguously means EMPTY, with
-// no cross-thread last_action flag. (MatchLib's Connections::Fifo is the official
-// buffered channel but its SC_METHOD raw-signal reads can't bind to an internal
-// Combinational -- CIN-198 -- and its ctor trips a 2024.2 front-end assertion,
-// sif_ci_expr:2080; Connections::Buffer/Pipeline are forward-declared but never
-// implemented. This thread+PushNB/PopNB shell binds correctly and schedules.)
+// Single-thread ring FIFO. This was historically TWO threads (enq/deq) because a
+// single SC_THREAD doing BOTH in.PopNB() and out.PushNB() couples the two
+// handshakes' sc_signal writes, and Catapult's DEFAULT -IO_MODE fixed can't place
+// them at the fixed cycle offsets its iomode requires -> the loop won't close at
+// II=1 (SCHD-30). The systemc flow now sets -IO_MODE super (catapult.py), which
+// lets the scheduler place BOTH handshakes within the loop window -- the same fix
+// that makes multi-handshake router kernels schedule -- so the bidirectional FIFO
+// schedules in ONE thread. That collapses everything the split needed: the
+// cross-thread head/tail sc_signals, the shared sc_signal register file (the
+// HIER-41 dodge for a plain array shared across threads), and the sacrificed N+1
+// slot -> plain single-owner locals + a count. PushNB runs before PopNB so an
+// empty FIFO does not forward an arriving element the same cycle (preserves the
+// >=1-cycle buffer latency of the two-thread version).
 template <typename T, int N>
 SC_MODULE(AlloFifo) {
   sc_in_clk clk;
   sc_in<bool> rst;
   Connections::In<T> in;
   Connections::Out<T> out;
-  sc_signal<T> buf[N + 1];        // register file shared across threads (enq writes, deq reads)
-  sc_signal<int> head_s, tail_s;  // deq owns head, enq owns tail; each reads the other
   SC_HAS_PROCESS(AlloFifo);
-  AlloFifo(sc_module_name nm)
-      : sc_module(nm), in("in"), out("out"), head_s("head_s"), tail_s("tail_s") {
-    SC_THREAD(enq_thread); sensitive << clk.pos(); async_reset_signal_is(rst, false);
-    SC_THREAD(deq_thread); sensitive << clk.pos(); async_reset_signal_is(rst, false);
+  AlloFifo(sc_module_name nm) : sc_module(nm), in("in"), out("out") {
+    SC_THREAD(run); sensitive << clk.pos(); async_reset_signal_is(rst, false);
   }
-  static int ModIncr(int i) { return (i == N) ? 0 : i + 1; }  // modulo (N+1)
-  void enq_thread() {              // only touches `in` (unidirectional input)
+  void run() {
     in.Reset();
-    int t = 0;
-    tail_s.write(0);
-    for (int k = 0; k < N + 1; k++) buf[k].write(T());  // reset the register file
-    wait();
-    while (1) {
-      int h = head_s.read();
-      bool full = (ModIncr(t) == h);
-      if (!full) {
-        T v;
-        if (in.PopNB(v)) { buf[t].write(v); t = ModIncr(t); tail_s.write(t); }
-      }
-      wait();
-    }
-  }
-  void deq_thread() {              // only touches `out` (unidirectional output)
     out.Reset();
-    int h = 0;
-    head_s.write(0);
+    T buf[N];                         // single owner -> plain local, no HIER-41
+    int head = 0, tail = 0, cnt = 0;  // full N slots (cnt distinguishes full/empty)
     wait();
     while (1) {
-      int t = tail_s.read();
-      bool empty = (h == t);
-      if (!empty) {
-        if (out.PushNB(buf[h].read())) { h = ModIncr(h); head_s.write(h); }
+      if (cnt > 0 && out.PushNB(buf[head])) { head = (head + 1) % N; cnt = cnt - 1; }
+      if (cnt < N) {
+        T v;
+        if (in.PopNB(v)) { buf[tail] = v; tail = (tail + 1) % N; cnt = cnt + 1; }
       }
       wait();
     }
