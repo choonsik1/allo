@@ -47,6 +47,13 @@ async def run(dut, ready_pattern, label):
     dut.valid_i.value = 1
     dut.fdata_i.value = 1
 
+    # vc_buffer ties its inner fifo's ocup_o off, so occupancy is DERIVED from in-flight
+    # accounting (accepted-in minus accepted-out). The fifo bench cross-checks that same
+    # accounting against the DUT's real ocup_o and they agree, so this is trustworthy.
+    write_cycle = {}
+    latencies = []
+    ocup_samples = []
+
     while len(got) < N_FLITS:
         rdy = ready_pattern(cycles)
         dut.ready_i.value = rdy
@@ -56,16 +63,19 @@ async def run(dut, ready_pattern, label):
         out_fire = int(dut.valid_o.value) and rdy
         odata = int(dut.fdata_o.value) if out_fire else None
         ovc = int(dut.vc_id_o.value) if out_fire else None
+        ocup_samples.append(sent - len(got))
 
         await RisingEdge(dut.clk)
         cycles += 1
         if out_fire:
             got.append(odata)
+            latencies.append(cycles - write_cycle[odata])
             assert ovc == VC_ID, f"vc_id corrupted: {ovc} != {VC_ID}"
         if in_fire:
             if first_xfer is None:
                 first_xfer = cycles
             sent += 1
+            write_cycle[sent] = cycles
 
         dut.valid_i.value = 1 if sent < N_FLITS else 0
         dut.fdata_i.value = (sent + 1) if sent < N_FLITS else 0
@@ -76,9 +86,13 @@ async def run(dut, ready_pattern, label):
     assert got == expected, f"{label} DATA MISMATCH: {got[:8]}... != {expected[:8]}..."
 
     window = cycles - (first_xfer - 1)
+    lat0 = latencies[0]
     dut._log.info("RESULT vc_buffer/%s cycles=%d per_flit=%.3f", label, window, window / N_FLITS)
     print(f"##RESULT## design=ravenoc_vc_buffer mode={label} flits={N_FLITS} "
-          f"cycles={window} per_flit={window/N_FLITS:.3f}")
+          f"cycles={window} per_flit={window/N_FLITS:.3f} lat0={lat0} "
+          f"lat_min={min(latencies)} lat_max={max(latencies)} "
+          f"lat_mean={sum(latencies)/len(latencies):.2f} "
+          f"ocup_max={max(ocup_samples)} ocup_mean={sum(ocup_samples)/len(ocup_samples):.2f}")
 
 
 @cocotb.test()

@@ -25,13 +25,22 @@ IP usage, `ravenoc_wrapper` must not be part of filelist."
 
 ## Results
 
-| design | mode | units | cycles | per unit |
-|---|---|---|---|---|
-| `fifo` | max throughput | 64 flits | 65 | **1.016 cyc/flit** |
-| `vc_buffer` | greedy | 64 flits | 65 | **1.016 cyc/flit** |
-| `vc_buffer` | backpressure (1-in-3) | 64 flits | 193 | **3.016 cyc/flit** |
-| `rr_arbiter` | saturated (4 reqs) | 64 grants | 65 | **0.985 grants/cyc**, dist `[16,16,16,16]` |
-| `rr_arbiter` | single requester | 31 grants | 32 | 0.969 |
+| design | mode | cycles | throughput | latency (cyc) | occupancy |
+|---|---|---|---|---|---|
+| `fifo` | max throughput | 65 | 1.016 cyc/flit | **1** (min=max=1) | max **1** of 2, mean 0.98 |
+| `vc_buffer` | greedy | 65 | 1.016 cyc/flit | **1** (min=max=1) | max **1** of 2, mean 0.98 |
+| `vc_buffer` | backpressure (1-in-3) | 193 | 3.016 cyc/flit | **3** first, max 5, mean 4.97 | max **2** of 2, mean 1.65 |
+| `rr_arbiter` | saturated (4 reqs) | 65 | 0.985 grants/cyc | first grant @2; **steady wait 4** (min=max=4.00) | n/a (no storage) |
+| `rr_arbiter` | single requester | 32 | 0.969 grants/cyc | — | n/a |
+
+Latency is measured **per flit by tagging** — each flit carries a unique value, so the in→out delay
+is tracked individually rather than inferred from aggregate timing. "Latency" in the headline sense
+is the *zero-load* figure (the first flit, before queueing builds); mean includes queueing and is
+workload-dependent.
+
+Occupancy in the `fifo` bench is read from the DUT's own `ocup_o` **and** cross-checked every cycle
+against the bench's in-flight accounting (`accepted_in - accepted_out`); they agree exactly. That
+validates the derived figure used for `vc_buffer`, which ties its inner FIFO's `ocup_o` off.
 
 The measurement window is `[first accepted transfer .. last accepted transfer]`, in clock edges.
 It deliberately **excludes reset**, because the Allo side's 17-cycle Catapult reset is an artifact
@@ -46,9 +55,28 @@ of the flow and has nothing to do with the link type under test.
    the buffer adds no latency of its own; the consumer is the sole limit. This is the mode where
    a zero-storage `Channel` should diverge from a depth-2 `Stream`, so it is the discriminating
    measurement of the whole comparison.
-3. **The arbiter is genuinely round-robin** — `[16,16,16,16]` over 64 grants. A naive priority
-   encoder would hit the same 0.985 throughput while producing `[64,0,0,0]`; only the fairness
-   assertion catches that. Any Allo rebuild must reproduce the distribution, not just the rate.
+3. **The arbiter is genuinely round-robin** — `[16,16,16,16]` over 64 grants, and steady-state wait
+   is exactly 4 cycles (min = max = mean = 4.00) with 4 saturated inputs. A naive priority encoder
+   would hit the same 0.985 throughput while producing `[64,0,0,0]`; only the fairness and
+   starvation checks catch that. Any Allo rebuild must reproduce the *distribution and the bound*,
+   not just the rate.
+4. **At max throughput the buffer is nearly unused** — occupancy never exceeds **1 of 2 slots**, in
+   both `fifo` and `vc_buffer`, with a flat 1-cycle latency. So for a greedy consumer a depth-1
+   buffer — or a zero-storage `Channel` — should perform *identically*. Under 1-in-3 backpressure
+   occupancy hits **2 of 2**, i.e. the buffer is fully used and genuinely working.
+
+   That pair is the sharpest prediction this baseline makes: **an Allo `Channel` should match
+   `Stream` in the greedy case and lose in the backpressure case.** If the greedy comparison shows
+   `Channel` slower, the cost is Allo's protocol implementation, not the absence of storage.
+
+### One assertion I got wrong, and why it is worth recording
+
+The first run failed on `max wait 5 exceeds 4`. That was my bound, not an arbiter bug. Throughput
+is 0.985 rather than 1.0 because there is exactly **one grant-less cycle**: the arbiter emits no
+grant in the cycle after reset, before its priority pointer is valid. That single bubble stretches
+one gap to `N_IN + 1`. The fix was to assert on the **steady state** (excluding the first two
+rotations) and report the startup bubble separately — `wait_startup_max=5`, `wait_steady_max=4` —
+rather than either loosening the bound or hiding the artifact.
 
 ## Methodology caveat (do not misread the numbers)
 

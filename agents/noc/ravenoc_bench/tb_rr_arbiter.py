@@ -59,6 +59,14 @@ async def rr_arbiter_saturated(dut):
 
     counts = [0] * N_IN
     cycles, grants = 0, 0
+    # Occupancy is meaningless here -- an arbiter has no storage. The latency that matters
+    # is the ARBITRATION WAIT: how long a continuously-requesting input goes ungranted.
+    # Under saturated round-robin that should be bounded by N_IN, and the bound is the
+    # real property (a starving arbiter can still hit 1.0 grants/cycle).
+    last_grant = [None] * N_IN
+    waits = []
+    first_grant_cycle = None
+
     while grants < N_GRANTS:
         await ReadOnly()
         idx = onehot_index(int(dut.grant_o.value))
@@ -67,6 +75,11 @@ async def rr_arbiter_saturated(dut):
         if idx is not None:
             counts[idx] += 1
             grants += 1
+            if first_grant_cycle is None:
+                first_grant_cycle = cycles
+            if last_grant[idx] is not None:
+                waits.append((grants, cycles - last_grant[idx]))
+            last_grant[idx] = cycles
         assert cycles < 20 * N_GRANTS + 100, "arbiter issued no grants -- stuck?"
 
     per_cycle = grants / cycles
@@ -76,8 +89,25 @@ async def rr_arbiter_saturated(dut):
     # (+/- 1 for the tail of the final rotation).
     lo, hi = min(counts), max(counts)
     assert hi - lo <= 1, f"NOT round-robin -- grant distribution {counts} is unfair"
+
+    # STARVATION BOUND -- measured in STEADY STATE, not from the first cycle.
+    # There is exactly one grant-less cycle in the run (throughput 0.985, not 1.0): the
+    # arbiter emits no grant in the cycle right after reset, before its priority pointer
+    # is valid. That bubble stretches ONE gap to N_IN+1, which is a startup artifact and
+    # not starvation. Asserting max(wait) <= N_IN over the whole run therefore fails for
+    # the wrong reason -- so exclude the first rotation and check the steady state, while
+    # reporting the startup bubble separately rather than hiding it.
+    steady = [w for (g, w) in waits if g > 2 * N_IN]
+    startup = [w for (g, w) in waits if g <= 2 * N_IN]
+    assert max(steady) <= N_IN, (
+        f"starvation in steady state -- max wait {max(steady)} exceeds {N_IN}")
+    all_w = [w for (_, w) in waits]
     print(f"##RESULT## design=ravenoc_rr_arbiter grants={grants} cycles={cycles} "
-          f"per_cycle={per_cycle:.3f} dist={counts}")
+          f"per_cycle={per_cycle:.3f} dist={counts} lat0={first_grant_cycle} "
+          f"wait_steady_min={min(steady)} wait_steady_max={max(steady)} "
+          f"wait_steady_mean={sum(steady)/len(steady):.2f} "
+          f"wait_startup_max={max(startup) if startup else 0} "
+          f"wait_overall_max={max(all_w)}")
 
 
 @cocotb.test()

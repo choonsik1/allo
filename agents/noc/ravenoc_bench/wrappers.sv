@@ -31,14 +31,18 @@ module fifo_w #(
   output       [WIDTH-1:0]  data_o,
   output                    error_o,
   output                    full_o,
-  output                    empty_o
+  output                    empty_o,
+  // Exposed for the occupancy measurement -- fifo.sv computes it for free from the
+  // pointer difference (that is what the extra wrap bit buys), and it tells us whether
+  // depth 2 is even the right depth under a given backpressure pattern.
+  output [$clog2(SLOTS>1?SLOTS:2):0] ocup_o
 );
   fifo #(.SLOTS(SLOTS), .WIDTH(WIDTH)) u_dut (
     .clk(clk), .arst(arst),
     .write_i(write_i), .read_i(read_i),
     .data_i(data_i), .data_o(data_o),
     .error_o(error_o), .full_o(full_o), .empty_o(empty_o),
-    .ocup_o()
+    .ocup_o(ocup_o)
   );
 endmodule
 

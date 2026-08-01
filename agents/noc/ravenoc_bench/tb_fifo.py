@@ -60,6 +60,12 @@ async def fifo_max_throughput(dut):
     dut.read_i.value = 1
     dut.data_i.value = 1
 
+    # Each flit carries a unique value (1..N), so latency is measured PER FLIT by tagging
+    # rather than inferred from aggregate timing.
+    write_cycle = {}
+    latencies = []
+    ocup_samples = []
+
     while len(got) < N_FLITS:
         await ReadOnly()
         full = int(dut.full_o.value)
@@ -68,15 +74,24 @@ async def fifo_max_throughput(dut):
         read = int(dut.read_i.value) and not empty
         # data_o is combinational off the read pointer, so it is valid whenever !empty
         data = int(dut.data_o.value) if read else None
+        ocup_dut = int(dut.ocup_o.value)
+        # Cross-check the DUT's own occupancy against what the bench believes is in
+        # flight. If these ever disagree, one of the two models is wrong.
+        assert ocup_dut == sent - len(got), (
+            f"occupancy mismatch at cycle {cycles}: DUT says {ocup_dut}, "
+            f"bench accounting says {sent - len(got)}")
+        ocup_samples.append(ocup_dut)
 
         await RisingEdge(dut.clk)
         cycles += 1
         if read:
             got.append(data)
+            latencies.append(cycles - write_cycle[data])
         if wrote:
             if first_write_cycle is None:
                 first_write_cycle = cycles
             sent += 1
+            write_cycle[sent] = cycles
 
         dut.write_i.value = 1 if sent < N_FLITS else 0
         dut.data_i.value = (sent + 1) if sent < N_FLITS else 0
@@ -88,7 +103,14 @@ async def fifo_max_throughput(dut):
     assert got == expected, f"DATA MISMATCH: got {got[:8]}... expected {expected[:8]}..."
 
     window = cycles - (first_write_cycle - 1)
+    # Zero-load latency = the FIRST flit's in->out delay, before any queueing builds up.
+    # That is the structural number; the mean includes queueing and is workload-dependent.
+    lat0 = latencies[0]
     dut._log.info("RESULT fifo N_FLITS=%d cycles=%d window=%d cycles_per_flit=%.3f",
                   N_FLITS, cycles, window, window / N_FLITS)
     print(f"##RESULT## design=ravenoc_fifo flits={N_FLITS} cycles={window} "
-          f"per_flit={window/N_FLITS:.3f}")
+          f"per_flit={window/N_FLITS:.3f} lat0={lat0} "
+          f"lat_min={min(latencies)} lat_max={max(latencies)} "
+          f"lat_mean={sum(latencies)/len(latencies):.2f} "
+          f"ocup_max={max(ocup_samples)} ocup_mean={sum(ocup_samples)/len(ocup_samples):.2f} "
+          f"depth={2}")
