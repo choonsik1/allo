@@ -697,23 +697,61 @@ void SystemCModuleEmitter::emitValue(Value val, unsigned rank, bool isPtr,
   }
 }
 
-// bitcast (e.g. fp16 <-> uint16 packing) via std::memcpy. The base's union
-// converter has a deleted default ctor when a member is non-trivial, which
-// ac_ieee_float<binary16> ('half') is.
+// bitcast (e.g. fp16 <-> uint16 packing). A std::memcpy over a non-trivial IEEE
+// float -- ac_ieee_float<binaryNN>, e.g. 'half' -- takes its address as a void*,
+// which Catapult's synthesis front end rejects (CIN-71: "Invalid pointer cast from
+// 'half *' to 'void *'"), aborting `go compile`. g++ csim accepts it, so it only
+// surfaces at synthesis. When a fp16/fp32 is involved we therefore reinterpret via
+// the float type's own bit accessors -- data_ac_int()/set_data() -- which synthesize
+// (the same idiom the memory-port _fbits/_mem_decode helpers use). The generic
+// int<->int (and double) path keeps the memcpy, which is fine for trivial PODs.
 void SystemCModuleEmitter::emitBitcast(arith::BitcastOp op) {
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   Value operand = op.getOperand();
   fixUnsignedType(operand, op->hasAttr("unsigned"));
+  Type resTy = result.getType(), opTy = operand.getType();
+  // operand was emitted earlier, so its name is stable now; the RESULT name is only
+  // assigned during emitValue(result) below, so capture `rn` AFTER that call.
+  std::string on = std::string(getName(operand).str());
 
-  // Declare the result, then a same-width source temp, then memcpy the bits.
+  // fp16/fp32 bit width (0 for double / non-float: not handled by the accessors).
+  auto floatBits = [](Type t) -> unsigned {
+    if (llvm::isa<Float16Type>(t))
+      return 16;
+    if (llvm::isa<Float32Type>(t))
+      return 32;
+    return 0;
+  };
+  unsigned resFB = floatBits(resTy), opFB = floatBits(opTy);
+
+  // raw int bits -> fp16/fp32: set_data() loads the bit pattern (a value-cast would
+  // reinterpret the number). ac_int<W,true>(operand) accepts a native or ac_int src.
+  if (resFB && !llvm::isa<FloatType>(opTy)) {
+    indent();
+    emitValue(result);
+    std::string rn = std::string(getName(result).str());
+    os << "; " << rn << ".set_data(ac_int<" << resFB << ", true>(" << on << "));";
+    emitInfoAndNewLine(op);
+    return;
+  }
+  // fp16/fp32 -> raw int bits: _fbits() reads data_ac_int().to_uint() (synthesis-safe),
+  // then narrow to the destination integer type.
+  if (opFB && !llvm::isa<FloatType>(resTy)) {
+    indent();
+    emitValue(result);
+    os << " = (" << getSCTypeName(resTy) << ")_fbits(" << on << ");";
+    emitInfoAndNewLine(op);
+    return;
+  }
+
+  // int<->int (or anything involving double): same-width memcpy over trivial PODs.
   indent();
   emitValue(result);
-  os << ";\n";
   std::string rn = std::string(getName(result).str());
+  os << ";\n";
   indent();
-  os << getSCTypeName(operand.getType()) << " _bc_" << rn << " = "
-     << std::string(getName(operand).str()) << ";\n";
+  os << getSCTypeName(opTy) << " _bc_" << rn << " = " << on << ";\n";
   indent();
   os << "std::memcpy(&" << rn << ", &_bc_" << rn << ", sizeof(" << rn << "));";
   emitInfoAndNewLine(op);
