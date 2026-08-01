@@ -460,6 +460,7 @@ class HLSModule:
                     "csim",
                     "csyn",
                     "ppa",
+                    "cosim",
                 }, "Invalid mode for catapult"
 
                 if self.mode == "csim":
@@ -1018,6 +1019,217 @@ class HLSModule:
                     out_arg[:] = result
                 return
 
+            if self.mode == "cosim":
+                # Bit-exact RTL cosim: run the emitted SystemC testbench once in
+                # software (the golden, in $project) and once against Catapult-
+                # synthesized RTL via SCVerify/Xcelium (in the build subdir cosb), then
+                # diff the two. Only the systemc flow emits a self-contained sc_main
+                # testbench + SCVerify-wrappable DUT, so cosim is systemc-only. The
+                # golden's output<k>.data (in $project) is renamed golden_output<k>.data
+                # so it does not collide with the RTL run's output<k>.data (in cosb).
+                # Catapult MUST synthesize from a subdir, not $project -- see step 2.
+                # See notes: catapult-connections-cwd-quirk, systemc-nonblocking-no-wait.
+                import glob as _glob
+                import shutil as _shutil
+
+                if self.platform != "systemc":
+                    raise NotImplementedError(
+                        "cosim mode is only supported by the SystemC backend "
+                        '(target="systemc").'
+                    )
+
+                func = find_func_in_module(self.module, self.top_func_name)
+                inputs, _outputs = get_func_inputs_outputs(func)
+                assert len(args) == len(inputs) + len(_outputs), (
+                    f"Number of arguments mismatch, got {len(args)}, "
+                    f"expected {len(inputs) + len(_outputs)}"
+                )
+
+                # kernel.h next to the self-contained kernel.cpp (mirror csim).
+                header, _ = separate_header(
+                    self.hls_code, self.top_func_name, extern_c=False
+                )
+                with open(
+                    os.path.join(self.project, "kernel.h"), "w", encoding="utf-8"
+                ) as outfile:
+                    outfile.write(header)
+
+                # A systemc region is a void function whose args are all "inputs" by
+                # signature; split by actual direction (arg_dirs) as csim does.
+                dirs = analyze_arg_load_store(self.module)[self.top_func_name]
+                _ii = 0
+                for (in_dtype, in_shape), arg, d in zip(inputs, args, dirs):
+                    if d in ("in", "both"):
+                        write_tensor_to_file(
+                            arg, in_shape, f"{self.project}/input{_ii}.data"
+                        )
+                        _ii += 1
+
+                # ---- 1. golden: compile+run the SystemC testbench in software ----
+                _find_catapult_binary()  # resolves MGC_HOME as a side effect
+                mgc_home = os.environ.get("MGC_HOME", "")
+                if not mgc_home:
+                    raise RuntimeError(
+                        "Catapult not found. Set MGC_HOME or install to "
+                        "/opt/siemens/catapult/."
+                    )
+                ac_include = os.path.join(mgc_home, "shared/include")
+                systemc_home = os.environ.get("SYSTEMC_HOME", "")
+                if not systemc_home:
+                    raise RuntimeError("Set SYSTEMC_HOME for systemc cosim.")
+                lib_dir = os.path.join(systemc_home, "lib-linux64")
+                if not os.path.isdir(lib_dir):
+                    lib_dir = os.path.join(systemc_home, "lib")
+                cxx_extra = os.environ.get("ALLO_CXX_EXTRA", "")
+                gcmd = (
+                    f"cd {self.project}; g++ -std=c++17 "
+                    f"-I{ac_include} -I{systemc_home}/include "
+                    f"{cxx_extra} kernel.cpp "
+                    f"-L{lib_dir} -Wl,-rpath,{lib_dir} -lsystemc -o sim"
+                )
+                print(
+                    f"[{time.strftime('%H:%M:%S', time.gmtime())}] "
+                    "cosim: building software golden ..."
+                )
+                if subprocess.Popen(gcmd, shell=True).wait() != 0:
+                    raise RuntimeError("cosim: golden g++ compile failed.")
+                if subprocess.Popen(f"cd {self.project}; ./sim", shell=True).wait() != 0:
+                    raise RuntimeError("cosim: golden simulation failed.")
+                # Set the golden aside; the RTL run overwrites output<k>.data.
+                for f in _glob.glob(f"{self.project}/output*.data"):
+                    _shutil.move(
+                        f, os.path.join(self.project, "golden_" + os.path.basename(f))
+                    )
+
+                # ---- 2. synthesize with SCVerify (run.tcl already requires it) ----
+                # IMPORTANT: run Catapult in a BUILD SUBDIR, not in self.project where
+                # kernel.cpp lives. Empirically, when Catapult's cwd is the source dir
+                # the Connections In/Out ports degrade to raw sc_signals (CIN-124 on
+                # in.rdy) -> iomode=fixed -> SCHD-30 in the AlloFifo partition; running
+                # from a separate build dir (run.tcl adds "$sfd/kernel.cpp", so sources
+                # stay in the parent) keeps the handshake intact and it schedules.
+                syn = os.path.join(self.project, "cosb")
+                os.makedirs(syn, exist_ok=True)
+                catapult_cmd = _find_catapult_binary()
+                print(
+                    f"[{time.strftime('%H:%M:%S', time.gmtime())}] "
+                    "cosim: synthesizing RTL (Catapult + SCVerify) ..."
+                )
+                synth_to = int(os.environ.get("ALLO_COSIM_SYNTH_TIMEOUT", "900"))
+                try:
+                    r = subprocess.run(
+                        f"cd {syn}; {catapult_cmd} -shell -f {self.project}/run.tcl",
+                        shell=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=synth_to,
+                    )
+                except subprocess.TimeoutExpired as e:
+                    raise RuntimeError("cosim: Catapult synthesis timed out.") from e
+                with open(f"{self.project}/synth.log", "w", encoding="utf-8") as lf:
+                    lf.write((r.stdout or "") + (r.stderr or ""))
+                if r.returncode != 0:
+                    raise RuntimeError(
+                        "cosim: Catapult synthesis failed (see "
+                        f"{self.project}/synth.log)."
+                    )
+
+                # ---- 3. patch the SCVerify SC shim: ac_int ports need ac_int.h ----
+                for sh in _glob.glob(f"{syn}/**/sysc_sim.h", recursive=True):
+                    s = open(sh, encoding="utf-8").read()
+                    if "ac_int.h" not in s:
+                        with open(sh, "w", encoding="utf-8") as f:
+                            f.write(
+                                s.replace(
+                                    "#include <systemc.h>",
+                                    "#include <systemc.h>\n#include <ac_int.h>",
+                                )
+                            )
+
+                # ---- 4. run the RTL cosim (Xcelium/ncsim) ----
+                # SCVerify runs the sim with cwd = the build dir (syn), so stage the
+                # inputs there and read the RTL outputs back from there.
+                for f in _glob.glob(f"{self.project}/input*.data"):
+                    _shutil.copy(f, os.path.join(syn, os.path.basename(f)))
+                mk = _glob.glob(
+                    f"{syn}/**/Verify_concat_sim_rtl_v_ncsim.mk",
+                    recursive=True,
+                )
+                if not mk:
+                    raise RuntimeError(
+                        "cosim: SCVerify did not emit the ncsim makefile "
+                        "(synthesis may have stopped before `go extract`; see "
+                        f"{self.project}/synth.log)."
+                    )
+                v1 = os.path.dirname(os.path.dirname(mk[0]))
+                nc_root = os.environ.get("NC_ROOT", "/opt/cadence/XCELIUM2403")
+                if not os.path.isdir(nc_root):
+                    raise RuntimeError(
+                        f"cosim: Xcelium not found at {nc_root}. Set NC_ROOT."
+                    )
+                env = dict(os.environ)
+                env["NC_ROOT"] = nc_root
+                env["NCSim_NC_ROOT"] = nc_root
+                print(
+                    f"[{time.strftime('%H:%M:%S', time.gmtime())}] "
+                    "cosim: running RTL simulation (Xcelium) ..."
+                )
+                cosim_to = int(os.environ.get("ALLO_COSIM_SIM_TIMEOUT", "900"))
+                try:
+                    r2 = subprocess.run(
+                        [
+                            f"{mgc_home}/bin/make",
+                            "-f",
+                            "./scverify/Verify_concat_sim_rtl_v_ncsim.mk",
+                            f"NC_ROOT={nc_root}",
+                            f"NCSim_NC_ROOT={nc_root}",
+                            "SIMTOOL=ncsim",
+                            "sim",
+                        ],
+                        cwd=v1,
+                        capture_output=True,
+                        text=True,
+                        timeout=cosim_to,
+                        env=env,
+                    )
+                except subprocess.TimeoutExpired as e:
+                    raise RuntimeError("cosim: RTL simulation timed out.") from e
+                with open(f"{self.project}/cosim.log", "w", encoding="utf-8") as lf:
+                    lf.write((r2.stdout or "") + (r2.stderr or ""))
+
+                # ---- 5. compare RTL output vs golden, populate output args ----
+                _oo = 0
+                mismatches = []
+                for (out_dtype, out_shape), out_arg, d in zip(inputs, args, dirs):
+                    if d not in ("out", "both"):
+                        continue
+                    rtl_f = f"{syn}/output{_oo}.data"
+                    gold_f = f"{self.project}/golden_output{_oo}.data"
+                    if not os.path.exists(rtl_f):
+                        raise RuntimeError(
+                            f"cosim: RTL produced no output{_oo}.data (see "
+                            f"{self.project}/cosim.log)."
+                        )
+                    rtl = read_tensor_from_file(out_dtype, out_shape, rtl_f)
+                    out_arg[:] = rtl
+                    if os.path.exists(gold_f):
+                        gold = read_tensor_from_file(out_dtype, out_shape, gold_f)
+                        if not np.array_equal(rtl, gold):
+                            mismatches.append(_oo)
+                    _oo += 1
+
+                stamp = time.strftime("%H:%M:%S", time.gmtime())
+                if mismatches:
+                    raise RuntimeError(
+                        f"[{stamp}] cosim MISMATCH: RTL != software golden on output "
+                        f"index(es) {mismatches} (project {self.project})."
+                    )
+                print(
+                    f"[{stamp}] cosim MATCH: RTL is bit-exact with the software "
+                    f"golden ({_oo} output array(s))."
+                )
+                return
+
             if self.mode in {"csyn", "ppa"}:
                 catapult_cmd = _find_catapult_binary()
 
@@ -1059,6 +1271,7 @@ class HLSModule:
                     return stats
                 return
             raise RuntimeError(
-                f"Catapult backend currently only supports 'csyn', 'csim', and 'ppa' mode, got '{self.mode}'"
+                "Catapult backend currently only supports 'csim', 'csyn', 'cosim', "
+                f"and 'ppa' mode, got '{self.mode}'"
             )
         raise RuntimeError("Not implemented")

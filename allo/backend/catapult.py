@@ -199,6 +199,19 @@ solution options set /Input/CppStandard c++11
     if mode == "csim":
         out_str += "solution options set /Input/CompilerFlags {{-D_GLIBCXX_USE_CXX11_ABI=0}}\n"
 
+    # SCVerify RTL cosim: register the flow and pin it to Xcelium/ncsim BEFORE any
+    # source is added, so `go extract` emits Verify_concat_sim_rtl_v_ncsim.mk -- the
+    # makefile that reruns the emitted SystemC testbench against synthesized RTL for a
+    # golden-vs-RTL bit-exact check. (USE_MSIM/USE_VCS off: this flow runs on Xcelium.)
+    # Note: cosim deliberately does NOT set the -D..CXX11_ABI csim flag above; Catapult
+    # forwards it to xmsc's RTL g++ with the Tcl braces intact and breaks that compile.
+    if mode == "cosim":
+        out_str += """flow package require /SCVerify
+flow package option set /SCVerify/USE_NCSIM true
+flow package option set /SCVerify/USE_MSIM false
+flow package option set /SCVerify/USE_VCS false
+"""
+
     out_str += """
 # Add source files
 solution file add "$sfd/kernel.cpp" -type C++
@@ -272,8 +285,9 @@ solution app linkage
 solution app execution
 """
 
-    # Continue synthesis if not just csim
-    if mode in {"csyn", "ppa"}:
+    # Continue synthesis if not just csim. cosim needs full synthesis + `go extract`
+    # (that is what generates the SCVerify RTL-cosim makefile), so it runs here too.
+    if mode in {"csyn", "ppa", "cosim"}:
         out_str += """
 solution library add ccs_sample_mem
 go assembly
