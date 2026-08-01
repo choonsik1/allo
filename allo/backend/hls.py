@@ -1233,7 +1233,18 @@ class HLSModule:
             if self.mode in {"csyn", "ppa"}:
                 catapult_cmd = _find_catapult_binary()
 
-                cmd = f"cd {self.project}; {catapult_cmd} -shell -f run.tcl"
+                # For systemc, synthesize from a BUILD SUBDIR, not self.project where
+                # kernel.cpp lives: when Catapult's cwd contains the source, matchlib
+                # Connections In/Out ports degrade to raw sc_signals (CIN-124 on in.rdy)
+                # -> iomode=fixed -> SCHD-30. Sources stay in the parent via
+                # run.tcl's "$sfd/kernel.cpp". Reports then live under the subdir.
+                if self.platform == "systemc":
+                    rpt_dir = os.path.join(self.project, "build")
+                    os.makedirs(rpt_dir, exist_ok=True)
+                    cmd = f"cd {rpt_dir}; {catapult_cmd} -shell -f {self.project}/run.tcl"
+                else:
+                    rpt_dir = self.project
+                    cmd = f"cd {self.project}; {catapult_cmd} -shell -f run.tcl"
                 assert len(args) == 0, f"{self.mode} mode does not need to pass in arguments"
                 print(
                     f"[{time.strftime('%H:%M:%S', time.gmtime())}] Begin synthesizing project with Catapult HLS ({self.mode} mode)..."
@@ -1255,7 +1266,7 @@ class HLSModule:
                     print(
                         f"[{time.strftime('%H:%M:%S', time.gmtime())}] Extracting PPA metrics..."
                     )
-                    stats = parse_catapult_report(self.project, self.top_func_name)
+                    stats = parse_catapult_report(rpt_dir, self.top_func_name)
                     print("| Metric              | Value                |")
                     print("|---------------------|----------------------|")
                     for k, v in stats.items():
@@ -1263,7 +1274,7 @@ class HLSModule:
 
                     # Hierarchical breakdown: per-PE and interconnect
                     hier = parse_catapult_hierarchical_report(
-                        self.project, self.top_func_name
+                        rpt_dir, self.top_func_name
                     )
                     print()
                     print(hier["summary"])
