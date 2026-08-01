@@ -1,0 +1,7 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1785602510" />
+    <testcase name="rr_arbiter_saturated" classname="tb_rr_arbiter" file="/home/zsm9/allo_sup/agents/noc/ravenoc_bench/tb_rr_arbiter.py" lineno="51" time="0.013571739196777344" sim_time_ns="136.001" ratio_time="10020.896955660179" />
+    <testcase name="rr_arbiter_single" classname="tb_rr_arbiter" file="/home/zsm9/allo_sup/agents/noc/ravenoc_bench/tb_rr_arbiter.py" lineno="83" time="0.005730867385864258" sim_time_ns="72.001" ratio_time="12563.717697882432" />
+  </testsuite>
+</testsuites>
