@@ -26,12 +26,22 @@ print(f"config: M=N=1  NSTEP=LANELEN={e.LANELEN}")
 
 PRJ = os.path.join(HERE, "generated")
 os.system(f"rm -rf {PRJ}")
-mod = df.build(e.get_eva_top(float16), target="systemc", mode="csim", project=PRJ)
-print("=== EVA SystemC emit OK ->", PRJ)
+
+# Scheduled build: apply the EVA schedule (pipeline the node kernel at II=1 +
+# register-file partition), then emit through SystemC. The SystemC emitter
+# subclasses the Catapult emitter, which turns the s.pipeline `pipeline_ii`
+# loop attribute into `#pragma hls_pipeline_init_interval`. (Catapult ignores
+# array_partition, so partition_rf mainly matters for the Vitis path.)
+s = e.get_scheduled_eva(float16, pipeline_node=True, partition_rf=True)
+mod = s.build(target="systemc", mode="csim", project=PRJ)
+print("=== EVA SystemC emit OK (scheduled: pipeline II=1 + partition_rf) ->", PRJ)
 
 kp = os.path.join(PRJ, "kernel.cpp")
 if os.path.exists(kp):
     src = open(kp).read()
     print(f"kernel.cpp lines={src.count(chr(10))}  "
           f"SC_MODULEs={src.count('SC_MODULE(')}  AlloFifo={src.count('AlloFifo<')}")
+    print(f"pipeline pragmas: hls_pipeline_init_interval="
+          f"{src.count('hls_pipeline_init_interval')}  "
+          f"hls_unroll={src.count('hls_unroll')}")
     print("Compile + run:  cd generated && ./csim.sh")
