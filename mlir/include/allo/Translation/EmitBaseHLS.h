@@ -124,6 +124,10 @@ protected:
   /// MLIR component and HLS C++ pragma emitters.
   virtual void emitBlock(Block &block) {}
   virtual void emitLoopDirectives(Operation *op) {}
+  // Loop directives that must be emitted BEFORE the loop header (default: none).
+  // Catapult's #pragma hls_pipeline_init_interval / hls_unroll bind to the loop
+  // that FOLLOWS them, unlike Vivado's in-body pragmas -- see the Catapult override.
+  virtual void emitLoopDirectivesPreheader(Operation *op) {}
   virtual void emitArrayDirectives(Value memref) {}
   virtual void emitFunctionDirectives(func::FuncOp func, ArrayRef<Value> portList) {}
 

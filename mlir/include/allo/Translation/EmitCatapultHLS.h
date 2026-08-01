@@ -36,6 +36,7 @@ public:
   void emitArrayDecl(Value array, bool isFunc = false,
                      std::string name = "") override;
   void emitLoopDirectives(Operation *op) override;
+  void emitLoopDirectivesPreheader(Operation *op) override;
   void emitStreamConstruct(allo::StreamConstructOp op) override;
   void emitStreamTryGet(allo::StreamTryGetOp op) override;
   void emitStreamTryPut(allo::StreamTryPutOp op) override;

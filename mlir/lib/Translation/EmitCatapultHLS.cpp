@@ -220,42 +220,41 @@ void CatapultModuleEmitter::emitArrayDecl(Value array, bool isFunc,
     emitValue(array, /*rank=*/0, /*isPtr=*/true, name);
 }
 
-void CatapultModuleEmitter::emitLoopDirectives(Operation *op) {
+// Catapult loop pragmas must PRECEDE the loop header -- hls_pipeline_init_interval
+// / hls_unroll bind to the construct that FOLLOWS them (Catapult's own matchlib
+// examples place them before `while(1)`/`for`). Emitting them in the loop body (the
+// Vivado convention the base for-emitter uses) makes Catapult drop them with
+// CIN-319 "Cannot bind pragma to any valid construct" -- so pipelining silently
+// never happened. The in-body hook is therefore a no-op; the pragmas are emitted
+// from emitLoopDirectivesPreheader, which the base for-emitter calls just before
+// the loop header.
+void CatapultModuleEmitter::emitLoopDirectives(Operation *op) {}
+
+void CatapultModuleEmitter::emitLoopDirectivesPreheader(Operation *op) {
+  // Called at the loop's own indent level, immediately before the loop header.
   if (auto ii = getLoopDirective(op, "pipeline_ii")) {
-    reduceIndent();
     indent();
     os << "#pragma hls_pipeline_init_interval "
-       << llvm::cast<IntegerAttr>(ii).getValue();
-    os << "\n";
-    addIndent();
+       << llvm::cast<IntegerAttr>(ii).getValue() << "\n";
   }
 
   if (auto factor = getLoopDirective(op, "unroll")) {
-    reduceIndent();
     indent();
     auto val = llvm::cast<IntegerAttr>(factor).getValue();
     if (val == 0)
-      os << "#pragma hls_unroll"
-         << "\n";
+      os << "#pragma hls_unroll\n";
     else
       os << "#pragma hls_unroll " << val << "\n";
-    addIndent();
   }
 
   if (auto parallel = getLoopDirective(op, "parallel")) {
-    reduceIndent();
     indent();
-    // parallel implies full unroll
-    os << "#pragma hls_unroll"
-       << "\n";
-    addIndent();
+    os << "#pragma hls_unroll\n"; // parallel implies full unroll
   }
 
   if (auto dataflow = getLoopDirective(op, "dataflow")) {
-    reduceIndent();
     indent();
     os << "#pragma hls_design dataflow\n";
-    addIndent();
   }
 }
 
