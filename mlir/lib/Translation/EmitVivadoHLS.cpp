@@ -774,7 +774,11 @@ static bool loopBodyIssuesNonBlockingStream(Region &body) {
   for (Block &blk : body)
     for (Operation &op : blk) {
       if (llvm::isa<allo::StreamTryPutOp, allo::StreamTryGetOp,
-                    allo::ChannelTryPutOp, allo::ChannelTryGetOp>(&op))
+                    allo::ChannelTryPutOp, allo::ChannelTryGetOp,
+                    allo::StreamEmptyOp, allo::StreamFullOp>(&op))
+        // empty()/full() polling loops must also yield per iteration (systemc-gated
+        // by scfWhileWait): otherwise the poll spins in zero sim time and the
+        // producer/FIFO never advances, so the status wire never changes.
         return true;
       if (llvm::isa<scf::ForOp, scf::WhileOp, AffineForOp>(&op))
         continue; // nested loop -> its own wait(), don't descend

@@ -902,6 +902,9 @@ void SystemCModuleEmitter::emitAffineStore(affine::AffineStoreOp op) {
 // emitFunction split: kernel module vs top wiring module
 //===----------------------------------------------------------------------===//
 
+// fwd decl (defined near emitStreamEmpty): does func query empty()/full() on arg?
+static bool streamArgQueried(func::FuncOp func, unsigned argIdx, bool wantEmpty);
+
 void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   auto name = func.getName();
   os << "SC_MODULE(" << name << ") {\n";
@@ -957,6 +960,20 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         streamPorts.push_back(pn);
         os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
         os << getStreamPayloadTypeName(st.getBaseType(), linkPayloadUnsigned(v)) << " > " << pn << ";\n";
+        // Occupancy sideband inputs: added ONLY where this kernel actually queries
+        // empty()/full() (gate on usage, not direction -- a producer may query
+        // full() on its Out-stream), and only for buffered streams (depth>=1) that
+        // have an AlloFifo to source them. sc_in<bool> needs no Reset().
+        if (st.getDepth() != 0) {
+          if (streamArgQueried(func, i, /*wantEmpty=*/true)) {
+            indent();
+            os << "sc_in<bool> " << pn << "_empty;\n";
+          }
+          if (streamArgQueried(func, i, /*wantEmpty=*/false)) {
+            indent();
+            os << "sc_in<bool> " << pn << "_full;\n";
+          }
+        }
       }
     } else if (auto ct = llvm::dyn_cast<ChannelType>(v.getType())) {
       // channel arg -> Connections::In/Out<T> port (combinational, no buffer)
@@ -1393,12 +1410,31 @@ void SystemCModuleEmitter::emitStreamTryPut(StreamTryPutOp op) {
   emitInfoAndNewLine(op);
 }
 
-// empty()/full() map to the port introspection MatchLib Connections ports do
-// provide: In<T>.Empty() (consumer port) and Out<T>.Full() (producer port).
-//   <result> = <stream>[idx].Empty();   /   .Full();
-// These are cycle-accurate in SIM; HLS synthesis rejects them only under the
-// strict CONNECTIONS_ASSERT_ON_QUERY flag (off by default), so they are
-// csim-faithful (like try_get/try_put, prefer a one-shot check, not a spin).
+// Does `func` call Stream.empty() (wantEmpty) or .full() on stream arg `argIdx`?
+// Used to add the occupancy sideband port only where it is actually queried, so
+// unqueried streams keep their old interface. Cross-kernel stream args are scalar
+// StreamType BlockArguments (region-level Stream[T,d][P,Q] is distributed to
+// per-instance scalar ports via mapping), so the operand is the arg directly.
+static bool streamArgQueried(func::FuncOp func, unsigned argIdx, bool wantEmpty) {
+  bool found = false;
+  func.walk([&](Operation *op) {
+    bool isE = llvm::isa<allo::StreamEmptyOp>(op);
+    bool isF = llvm::isa<allo::StreamFullOp>(op);
+    if ((wantEmpty && !isE) || (!wantEmpty && !isF))
+      return;
+    if (auto ba = llvm::dyn_cast<BlockArgument>(op->getOperand(0)))
+      if (ba.getArgNumber() == argIdx &&
+          ba.getOwner()->getParentOp() == func.getOperation())
+        found = true;
+  });
+  return found;
+}
+
+// empty()/full() on a CROSS-kernel buffered stream read the AlloFifo occupancy
+// SIDEBAND (<stream>_empty / _full sc_in wires), NOT In<T>.Empty()/Out<T>.Full():
+// on a regular Connections In/Out port those return a sim-only latched-data flag
+// our channel never sets, so they never reflect FIFO state (data never moves). A
+// LOCAL self-FIFO instead reads its synchronous <stream>_cnt (see below).
 void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
   if (isLocalStream(op->getOperand(0))) {
     // self-FIFO empty(): read the synchronous occupancy counter, not the clocked
@@ -1419,11 +1455,12 @@ void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
   emitValue(result);
   os << " = ";
   emitValue(stream, 0, false);
+  os << "_empty";
   if (llvm::isa<ShapedType>(stream.getType()))
     if (auto idx = op->getAttrOfType<DenseI64ArrayAttr>("indices"))
       for (int64_t v : idx.asArrayRef())
         os << "[" << v << "]";
-  os << ".Empty();";
+  os << ".read();";
   emitInfoAndNewLine(op);
 }
 void SystemCModuleEmitter::emitStreamFull(StreamFullOp op) {
@@ -1446,11 +1483,12 @@ void SystemCModuleEmitter::emitStreamFull(StreamFullOp op) {
   emitValue(result);
   os << " = ";
   emitValue(stream, 0, false);
+  os << "_full";
   if (llvm::isa<ShapedType>(stream.getType()))
     if (auto idx = op->getAttrOfType<DenseI64ArrayAttr>("indices"))
       for (int64_t v : idx.asArrayRef())
         os << "[" << v << "]";
-  os << ".Full();";
+  os << ".read();";
   emitInfoAndNewLine(op);
 }
 
@@ -1587,6 +1625,12 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       indent();
       os << "AlloFifo< " << T << ", " << st.getDepth() << " > " << nm
          << "_fifo;\n";
+      // occupancy sidebands (see AlloFifo): plain status wires so a cross-kernel
+      // Stream.empty()/full() reads real FIFO state (Connections In/Out cannot).
+      indent();
+      os << "sc_signal<bool> " << nm << "_empty_sig;\n";
+      indent();
+      os << "sc_signal<bool> " << nm << "_full_sig;\n";
     }
   }
   // Channel members: a handshake Channel is always a combinational link.
@@ -1761,6 +1805,21 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
         indent();
         os << instNames[it.index()] << "." << getName(carg) << "(" << chan
            << ");\n";
+        // Bind the occupancy sidebands the callee declared (usage-gated, mirrors
+        // the port-decl condition), to this stream's top-level status signals.
+        if (sty.getDepth() != 0) {
+          std::string sbase = std::string(getName(ov).str());
+          if (streamArgQueried(callee, opnd.index(), /*wantEmpty=*/true)) {
+            indent();
+            os << instNames[it.index()] << "." << getName(carg) << "_empty("
+               << sbase << "_empty_sig);\n";
+          }
+          if (streamArgQueried(callee, opnd.index(), /*wantEmpty=*/false)) {
+            indent();
+            os << instNames[it.index()] << "." << getName(carg) << "_full("
+               << sbase << "_full_sig);\n";
+          }
+        }
       } else if (llvm::isa<ChannelType>(ov.getType())) {
         // channel operand -> bare Combinational (combinational, no _in/_out)
         std::string chan = std::string(getName(ov).str());
@@ -1811,6 +1870,8 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     indent(); os << nm << "_fifo.rst(rst);\n";
     indent(); os << nm << "_fifo.in(" << nm << "_in);\n";
     indent(); os << nm << "_fifo.out(" << nm << "_out);\n";
+    indent(); os << nm << "_fifo.empty_o(" << nm << "_empty_sig);\n";
+    indent(); os << nm << "_fifo.full_o(" << nm << "_full_sig);\n";
   }
   // Wire each internal memory: clk/rst + req channel (+ rsp channel for reads).
   for (auto &mi : memInsts) {
@@ -2240,15 +2301,30 @@ SC_MODULE(AlloFifo) {
   sc_in<bool> rst;
   Connections::In<T> in;
   Connections::Out<T> out;
+  // Occupancy sidebands: regular Connections In/Out ports cannot report Empty/Full
+  // in HLS (In::Empty() reads a sim-only latched-data flag our channel never sets),
+  // so a Stream.empty()/full() query reads these plain status wires instead. `count`
+  // mirrors the thread-local `cnt`; empty_o/full_o are driven COMBINATIONALLY from it
+  // (registered-pointers + combinational-empty, matching RTL FIFO semantics -- a
+  // registered flag would be a cycle stale and shift arbitration traces).
+  sc_signal<int> count;
+  sc_out<bool> empty_o;
+  sc_out<bool> full_o;
   SC_HAS_PROCESS(AlloFifo);
   AlloFifo(sc_module_name nm) : sc_module(nm), in("in"), out("out") {
     SC_THREAD(run); sensitive << clk.pos(); async_reset_signal_is(rst, false);
+    SC_METHOD(set_flags); sensitive << count;
+  }
+  void set_flags() {
+    empty_o.write(count.read() == 0);
+    full_o.write(count.read() == N);
   }
   void run() {
     in.Reset();
     out.Reset();
     T buf[N];                         // single owner -> plain local, no HIER-41
     int head = 0, tail = 0, cnt = 0;  // full N slots (cnt distinguishes full/empty)
+    count.write(0);
     wait();
     while (1) {
       if (cnt > 0 && out.PushNB(buf[head])) { head = (head + 1) % N; cnt = cnt - 1; }
@@ -2256,6 +2332,7 @@ SC_MODULE(AlloFifo) {
         T v;
         if (in.PopNB(v)) { buf[tail] = v; tail = (tail + 1) % N; cnt = cnt + 1; }
       }
+      count.write(cnt);               // mirror cnt out for the combinational flags
       wait();
     }
   }
