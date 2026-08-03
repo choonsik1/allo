@@ -1097,8 +1097,27 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
           return;
       constGlobals.push_back(g);
     });
-    for (auto &g : constGlobals)
+    for (auto &g : constGlobals) {
+      // Emit as `static const`. These are read-only baked-in constants (e.g.
+      // `W: T[M,N] = np_W` weights). Plain locals live on the SC_THREAD
+      // coroutine stack, which is small (~64KB); a large weight array overflows
+      // it and segfaults at run time (test_mlp: W0[256][128] = 128KB crashes
+      // linear1_0::run in the initializer). `static` moves it to static
+      // storage; `const` is correct (never written) and lets multiple kernel
+      // instances share one copy. It also synthesizes as a ROM under Catapult.
+      // (Reuses emitGlobal's static/const attr hooks; attrs restored after.)
+      bool hadStatic = g->hasAttr("static");
+      bool hadConst = g->hasAttr("constant");
+      if (!hadStatic)
+        g->setAttr("static", UnitAttr::get(g->getContext()));
+      if (!hadConst)
+        g->setAttr("constant", UnitAttr::get(g->getContext()));
       emitGlobal(g);
+      if (!hadStatic)
+        g->removeAttr("static");
+      if (!hadConst)
+        g->removeAttr("constant");
+    }
   }
   // Single-shot: run the body EXACTLY ONCE, then idle. Free-running (while(1)
   // around the body) is safe for stream kernels (they re-block on an empty input
