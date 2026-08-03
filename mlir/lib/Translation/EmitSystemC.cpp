@@ -105,6 +105,33 @@ static SmallString<32> getStreamPayloadTypeName(Type valType, bool isUnsigned) {
   return getSCTypeName(valType);
 }
 
+// A Channel's PROTOCOL decides its physical realization -- the two are genuinely
+// different hardware, not a cosmetic label:
+//   valid_ready -> Connections::Combinational<T>   (full handshake WITH back-pressure)
+//   valid_only  -> a raw 2-signal bundle: sc_signal<T> <n>_dat + sc_signal<bool> <n>_vld
+//
+// A valid_only link has NO ready line, so the producer can never be refused: it drives
+// the data and pulses valid for exactly ONE cycle. The consumer samples whatever is on
+// the wire in the cycle it happens to look; if it is not looking, the datum is missed.
+// That is the protocol, not a defect -- it is the cheaper link (no ready path, no
+// Connections transactor) that a DSE cost model wants to weigh against a full handshake,
+// and it is the standard "valid-only synchronous pipeline" already validated by hand
+// against Catapult's libsystemc.
+//
+// Consequence for the USER: valid_only is only correct when the consumer is guaranteed
+// to be looking -- i.e. lock-step kernels, or a design that tolerates dropped samples.
+// It sits between Channel[valid_ready] (safe at any relative timing) and Wire (no
+// synchronisation at all): a race SKIPS a datum here instead of reading garbage.
+//
+// Only SCALAR channels take this path; a shaped/array channel falls back to the
+// Combinational form (its per-index constructs are scalars, so arrays still work).
+static bool isValidOnlyChannel(Value v) {
+  auto ct = llvm::dyn_cast<ChannelType>(v.getType());
+  if (!ct)
+    return false;
+  return ct.getProtocol() == ChannelProtocol::ValidOnly;
+}
+
 // Address width for a memory of `total` elements: ceil(log2(total)), min 1.
 static unsigned scAddrW(int64_t total) {
   unsigned w = 1;
@@ -923,6 +950,10 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   // Ports + members from arguments.
   SmallVector<std::string, 4> streamPorts;
   SmallVector<std::string, 4> wireOutPorts; // sc_out wire ports: need reset action
+  // valid_only channel ports: (portName, payloadType, dir). Each gets a pair of
+  // modulario-annotated accessor methods, mirroring how Connections implements
+  // Push/PushNB/Pop/PopNB -- see emitValidOnlyAccessors.
+  SmallVector<std::tuple<std::string, std::string, char>, 4> vonlyPorts;
   // Self-FIFO base name + depth: this kernel maintains a synchronous occupancy
   // counter per self-FIFO so empty()/full() read the LOGICAL fill (put -> ++,
   // get -> --) instead of the clocked AlloFifo's handshake, which lags by a cycle
@@ -976,12 +1007,29 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
         }
       }
     } else if (auto ct = llvm::dyn_cast<ChannelType>(v.getType())) {
-      // channel arg -> Connections::In/Out<T> port (combinational, no buffer)
       char d = streamDir(func, i);
       std::string pn = std::string(addName(v, /*isPtr=*/false).str());
-      streamPorts.push_back(pn);
-      os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
-      os << getStreamPayloadTypeName(ct.getBaseType(), linkPayloadUnsigned(v)) << " > " << pn << ";\n";
+      std::string T = std::string(
+          getStreamPayloadTypeName(ct.getBaseType(), linkPayloadUnsigned(v)).str());
+      if (isValidOnlyChannel(v)) {
+        // valid_only -> raw data + valid ports, NO ready and NO Connections
+        // transactor. Not added to streamPorts: sc_in/sc_out have no .Reset().
+        // A driven sc_out must still be written in the reset action (CIN-233), so
+        // an OUT bundle's two ports are tracked in wireOutPorts like a Wire's.
+        if (d == 'o') {
+          wireOutPorts.push_back(pn + "_dat");
+          wireOutPorts.push_back(pn + "_vld");
+        }
+        os << (d == 'o' ? "sc_out< " : "sc_in< ") << T << " > " << pn << "_dat;\n";
+        indent();
+        os << (d == 'o' ? "sc_out<bool> " : "sc_in<bool> ") << pn << "_vld;\n";
+        vonlyPorts.push_back({pn, T, d});
+      } else {
+        // valid_ready -> Connections::In/Out<T> port (combinational, no buffer)
+        streamPorts.push_back(pn);
+        os << (d == 'o' ? "Connections::Out< " : "Connections::In< ");
+        os << T << " > " << pn << ";\n";
+      }
     } else if (auto wt = llvm::dyn_cast<WireType>(v.getType())) {
       // wire arg -> raw sc_in/sc_out<T> port (combinational, no handshake).
       // NOT added to streamPorts: sc ports have no Connections .Reset(). A driven
@@ -1057,6 +1105,57 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   indent(); os << "async_reset_signal_is(rst, false);\n";
   reduceIndent();
   indent(); os << "}\n";
+
+  // valid_only accessors. These MIRROR the Connections reference implementation
+  // (connections-guide.pdf Listing 3, and the 106 `modular IO` sites in
+  // connections.h) with the ready line deleted:
+  //
+  //   Connections Push : do { val=1; msg=m; wait(); } while (!rdy);  val=0;
+  //   valid_only put   :      vld=1; dat=m; wait();                  vld=0;
+  //   Connections Pop  : do { rdy=1; wait(); } while (!val); rdy=0; return msg;
+  //   valid_only get   : do {        wait(); } while (!vld);         return dat;
+  //
+  // Two details are load-bearing and were WRONG in a first attempt:
+  //  * the wait() comes BEFORE the valid test, and the payload is sampled AFTER
+  //    the edge at which valid was seen true -- that edge IS the transaction
+  //    ("a transaction is valid when at the clock edge both valid and ready are
+  //    true"; with no ready, valid alone decides). Testing before waiting and
+  //    adding a trailing wait samples a cycle early and costs an extra state.
+  //  * `#pragma design modulario` is what makes Catapult treat these as a
+  //    cycle-accurate LI interface instead of ordinary signal accesses it may
+  //    schedule freely. Every Connections port method carries it; ours must too.
+  for (auto &vp : vonlyPorts) {
+    const std::string &pn = std::get<0>(vp);
+    const std::string &T = std::get<1>(vp);
+    char d = std::get<2>(vp);
+    if (d == 'o') {
+      indent(); os << "#pragma design modulario <out>\n";
+      indent(); os << "void " << pn << "_put(const " << T << " &m) {\n";
+      indent(); os << "  " << pn << "_vld.write(true); " << pn << "_dat.write(m);\n";
+      indent(); os << "  wait();\n";
+      indent(); os << "  " << pn << "_vld.write(false);\n";
+      indent(); os << "}\n";
+      // A valid_only put can never be refused (no ready line), so the
+      // non-blocking form is the blocking form that always reports success.
+      indent(); os << "#pragma design modulario <out>\n";
+      indent(); os << "bool " << pn << "_try_put(const " << T << " &m) {\n";
+      indent(); os << "  " << pn << "_put(m); return true;\n";
+      indent(); os << "}\n";
+    } else {
+      indent(); os << "#pragma design modulario <in>\n";
+      indent(); os << T << " " << pn << "_get() {\n";
+      indent(); os << "  do { wait(); } while (" << pn << "_vld.read() != true);\n";
+      indent(); os << "  return " << pn << "_dat.read();\n";
+      indent(); os << "}\n";
+      // Mirrors PopNB: one edge is consumed whether or not a datum was there.
+      indent(); os << "#pragma design modulario <in>\n";
+      indent(); os << "bool " << pn << "_try_get(" << T << " &m) {\n";
+      indent(); os << "  wait();\n";
+      indent(); os << "  m = " << pn << "_dat.read();\n";
+      indent(); os << "  return " << pn << "_vld.read();\n";
+      indent(); os << "}\n";
+    }
+  }
 
   // run(): reset ports, wait, then free-running loop over the REUSED body.
   indent(); os << "void run() {\n";
@@ -1164,6 +1263,17 @@ void SystemCModuleEmitter::emitWirePut(WirePutOp op) {
 void SystemCModuleEmitter::emitChannelGet(ChannelGetOp op) {
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
+  if (isValidOnlyChannel(op->getOperand(0))) {
+    // valid_only blocking get: there is no ready line to assert, so "blocking"
+    // means spin until the producer's one-cycle valid pulse is visible, then
+    // sample the data wire. The wait() is what makes the spin advance time.
+    std::string pn = std::string(getName(op->getOperand(0)).str());
+    indent();
+    emitValue(result);
+    os << " = " << pn << "_get();";
+    emitInfoAndNewLine(op);
+    return;
+  }
   indent();
   emitValue(result);
   os << " = ";
@@ -1174,6 +1284,20 @@ void SystemCModuleEmitter::emitChannelGet(ChannelGetOp op) {
 
 // Connections channel put: <channel>.Push(<value>);  (scalar handshake link)
 void SystemCModuleEmitter::emitChannelPut(ChannelPutOp op) {
+  if (isValidOnlyChannel(op->getOperand(0))) {
+    // valid_only put: drive the data, pulse valid for exactly ONE cycle, then
+    // drop it. No ready line exists, so the put can never be refused and never
+    // blocks -- it costs one cycle unconditionally. Dropping valid after the
+    // cycle is what keeps two consecutive puts distinguishable; leaving it high
+    // would make one datum look like many.
+    std::string pn = std::string(getName(op->getOperand(0)).str());
+    indent();
+    os << pn << "_put(";
+    emitValue(op->getOperand(1));
+    os << ");";
+    emitInfoAndNewLine(op);
+    return;
+  }
   indent();
   emitValue(op->getOperand(0), 0, false);
   os << ".Push(";
@@ -1192,9 +1316,43 @@ void SystemCModuleEmitter::emitChannelTryGet(ChannelTryGetOp op) {
   Value success = op.getResult(1);
   fixUnsignedType(result, op->hasAttr("unsigned"));
   auto channel = op->getOperand(0);
+  if (isValidOnlyChannel(channel)) {
+    // valid_only try_get: sample this cycle's wires. `success` is simply whether
+    // the producer's valid happens to be asserted right now -- there is no ready
+    // to assert back, so looking costs nothing and consumes nothing.
+    std::string pn = std::string(getName(channel).str());
+    indent();
+    emitValue(result);
+    os << ";\n";
+    indent();
+    emitValue(success);
+    os << " = " << pn << "_try_get(";
+    emitValue(result);
+    os << ");";
+    emitInfoAndNewLine(op);
+    return;
+  }
+  // PopNB takes Message& (a NON-const reference), so its argument must be EXACTLY the
+  // port's payload type. At NATIVE widths (1/8/16/32/64) emitValue declares the result as
+  // a plain C type (bool, uint32_t, ...), which will not bind to Combinational<ac_int<W>>:
+  //     error: cannot bind non-const lvalue reference of type 'ac_int<32,false>&'
+  //            to an rvalue of type 'ac_int<32,false>'
+  // Non-native widths happened to work because they already print as ac_int, which is why
+  // this went unnoticed -- and why designs were forced onto odd flit widths (a 26-bit flit
+  // instead of 32) to dodge it. Same bug and same fix as emitStreamTryGet (CRD-304): pop
+  // into a payload-typed temp, then convert to the result. PushNB takes const Message&,
+  // so try_put needs no such temp.
+  std::string payloadT = std::string(
+      getStreamPayloadTypeName(
+          llvm::cast<ChannelType>(channel.getType()).getBaseType(),
+          linkPayloadUnsigned(channel))
+          .str());
   indent();
-  emitValue(result);
+  emitValue(result); // assigns the result's name; take it AFTER for the temp
   os << ";\n";
+  std::string nb = std::string(getName(result).str()) + "_nb";
+  indent();
+  os << payloadT << " " << nb << ";\n";
   indent();
   emitValue(success);
   os << " = ";
@@ -1205,9 +1363,9 @@ void SystemCModuleEmitter::emitChannelTryGet(ChannelTryGetOp op) {
       for (int64_t v : idx.asArrayRef())
         os << "[" << v << "]";
   }
-  os << ".PopNB(";
+  os << ".PopNB(" << nb << "); ";
   emitValue(result);
-  os << ");";
+  os << " = " << nb << ";";
   emitInfoAndNewLine(op);
 }
 
@@ -1216,6 +1374,22 @@ void SystemCModuleEmitter::emitChannelTryPut(ChannelTryPutOp op) {
   Value success = op.getResult();
   auto channel = op->getOperand(0);
   auto value = op->getOperand(1);
+  if (isValidOnlyChannel(channel)) {
+    // valid_only try_put: ALWAYS succeeds. Without a ready line the consumer has
+    // no way to refuse, so a non-blocking put is indistinguishable from a blocking
+    // one -- both drive data + a one-cycle valid pulse. `success` is a constant
+    // true, which is the honest answer: the producer genuinely cannot be stalled.
+    // (Whether anyone RECEIVED the datum is a different question this protocol
+    // cannot answer -- that is exactly what the missing ready line buys you.)
+    std::string pn = std::string(getName(channel).str());
+    indent();
+    emitValue(success);
+    os << " = " << pn << "_try_put(";
+    emitValue(value);
+    os << ");";
+    emitInfoAndNewLine(op);
+    return;
+  }
   indent();
   emitValue(success);
   os << " = ";
@@ -1695,13 +1869,19 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       os << "sc_signal<bool> " << nm << "_full_sig;\n";
     }
   }
-  // Channel members: a handshake Channel is always a combinational link.
+  // Channel members: a Channel is always a combinational link, but its PROTOCOL
+  // picks the realization -- valid_ready gets a Connections transactor, valid_only
+  // gets a bare data+valid signal pair with no ready path at all.
   for (auto cc : chanOps) {
     auto ct = llvm::dyn_cast<ChannelType>(cc.getResult().getType());
     std::string T = std::string(getStreamPayloadTypeName(ct.getBaseType(), linkPayloadUnsigned(cc.getResult())).str());
     std::string nm = std::string(addName(cc.getResult(), /*isPtr=*/false).str());
     indent();
-    os << "Connections::Combinational< " << T << " > " << nm << ";\n";
+    if (isValidOnlyChannel(cc.getResult()))
+      os << "sc_signal< " << T << " > " << nm << "_dat;\n"
+         << "  sc_signal<bool> " << nm << "_vld;\n";
+    else
+      os << "Connections::Combinational< " << T << " > " << nm << ";\n";
   }
   // Wire members: a raw combinational wire is an sc_signal<T>.
   for (auto wc : wireOps) {
@@ -1797,7 +1977,11 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
   }
   for (auto cc : chanOps) {
     std::string nm = std::string(getName(cc.getResult()).str());
-    os << sep << nm << "(\"" << nm << "\")";
+    if (isValidOnlyChannel(cc.getResult()))
+      os << sep << nm << "_dat(\"" << nm << "_dat\"), " << nm << "_vld(\"" << nm
+         << "_vld\")";
+    else
+      os << sep << nm << "(\"" << nm << "\")";
     sep = ", ";
   }
   for (auto wc : wireOps) {
@@ -1883,11 +2067,20 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
           }
         }
       } else if (llvm::isa<ChannelType>(ov.getType())) {
-        // channel operand -> bare Combinational (combinational, no _in/_out)
         std::string chan = std::string(getName(ov).str());
         indent();
-        os << instNames[it.index()] << "." << getName(carg) << "(" << chan
-           << ");\n";
+        if (isValidOnlyChannel(ov)) {
+          // valid_only: two raw signals to bind instead of one transactor.
+          os << instNames[it.index()] << "." << getName(carg) << "_dat(" << chan
+             << "_dat);\n";
+          indent();
+          os << instNames[it.index()] << "." << getName(carg) << "_vld(" << chan
+             << "_vld);\n";
+        } else {
+          // valid_ready: bare Combinational (combinational, no _in/_out)
+          os << instNames[it.index()] << "." << getName(carg) << "(" << chan
+             << ");\n";
+        }
       } else if (llvm::isa<WireType>(ov.getType())) {
         // wire operand -> sc_signal (raw combinational)
         std::string sig = std::string(getName(ov).str());
