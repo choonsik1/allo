@@ -78,9 +78,16 @@ class TypeInferer(ASTVisitor):
                 # e.g., a: UInt(16)[4]
                 dtype = TypeInferer.visit_call_type(ctx, node.value)
             elif isinstance(node.value, ast.Subscript):
-                # e.g., pipe: Stream[Ty, 4][4]
+                # An array of links, e.g. pipe: Stream[Ty, 4][4] / Wire[Ty][2, 3] /
+                # Channel[Ty, valid_only][2, 3].  All three link kinds are arrayable:
+                # build_AnnAssign already expands any of them per-index (builder.py,
+                # "array of wires/channels"), and the interface lifting in dataflow.py
+                # treats them uniformly via _LINK_CONSTRUCT_OPS.
                 base_type, base_shape, _ = TypeInferer.visit_type_hint(ctx, node.value)
-                assert isinstance(base_type, Stream) and len(base_shape) == 0
+                assert (
+                    isinstance(base_type, (Stream, Wire, Channel))
+                    and len(base_shape) == 0
+                )
                 elts = (
                     node.slice.elts
                     if isinstance(node.slice, ast.Tuple)
@@ -89,7 +96,7 @@ class TypeInferer(ASTVisitor):
                 shape = tuple(ASTResolver.resolve(x, ctx.global_vars) for x in elts)
                 assert all(
                     isinstance(x, (int)) for x in shape
-                ), "stream array shape should be a compile time constant"
+                ), "link array shape should be a compile time constant"
                 return base_type, shape, None
             else:
                 dtype = ASTResolver.resolve(node.value, ctx.global_vars)
