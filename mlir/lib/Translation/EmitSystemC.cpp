@@ -1276,6 +1276,7 @@ void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
     return;
   }
   auto stream = op->getOperand(0);
+  auto data = op->getOperand(1);
   int rank = 0;
   if (llvm::isa<StreamType>(stream.getType())) {
     unsigned dimIdx = 0;
@@ -1288,6 +1289,48 @@ void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
         addIndent();
       }
       rank = dimIdx;
+
+      // Whole-block put of a random-access memory-port arg (`put(argA)`): the
+      // data's name is a req/rsp pair, not an indexable local array. Read each
+      // element via the mem-port protocol (mirrors emitMemPortLoad) and Push it,
+      // rather than emitting an invalid `<arg>[iv0][iv1]`.
+      if (char d = memPortArgDir(data); d == 'i' || d == 'b') {
+        auto mt = llvm::cast<MemRefType>(data.getType());
+        int64_t total = 1;
+        for (auto dim : mt.getShape())
+          total *= dim;
+        std::string reqT =
+            "ac_int<" +
+            std::to_string(1 + scAddrW(total) + scDataW(mt.getElementType())) +
+            ", false>";
+        auto dn = getName(data);
+        SmallVector<int64_t> stride(rank);
+        int64_t s = 1;
+        for (int k = rank - 1; k >= 0; --k) {
+          stride[k] = s;
+          s *= mt.getShape()[k];
+        }
+        indent();
+        os << dn << "_req.Push( (" << reqT << ")(";
+        for (int k = 0; k < rank; ++k) {
+          if (k)
+            os << " + ";
+          os << "(iv" << k << ")";
+          if (stride[k] != 1)
+            os << " * " << stride[k];
+        }
+        os << ") << 1 );\n"; // opcode bit0 = 0 (LOAD)
+        indent();
+        emitValue(stream, 0, false);
+        os << ".Push( " << dn << "_rsp.Pop() );\n";
+        for (int i = 0; i < rank; ++i) {
+          reduceIndent();
+          indent();
+          os << "}\n";
+        }
+        emitInfoAndNewLine(op);
+        return;
+      }
     }
     indent();
     emitValue(stream, 0, false);

@@ -361,9 +361,16 @@ def analyze_arg_load_store_in_func(func, mapping={}):
                 use.owner, (memref_d.LoadOp, affine_d.AffineLoadOp, allo_d.StreamGetOp)
             ):
                 io_type |= 2
+            elif isinstance(use.owner, allo_d.StreamPutOp):
+                # stream_put(stream, indices, data): operand 0 is the stream (written
+                # -> out), but the DATA operand is READ (put copies it into the
+                # stream). A whole-block memref passed as `data` must be marked IN,
+                # not OUT -- otherwise it becomes a store-only mem-port whose read is
+                # left undeclared ('v0 was not declared', test_multiple_blocks).
+                io_type |= 1 if use.operand_number == 0 else 2
             elif isinstance(
                 use.owner,
-                (memref_d.StoreOp, affine_d.AffineStoreOp, allo_d.StreamPutOp),
+                (memref_d.StoreOp, affine_d.AffineStoreOp),
             ):
                 io_type |= 1
             elif isinstance(use.owner, func_d.CallOp):
