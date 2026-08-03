@@ -176,6 +176,34 @@ def copy_ext_libs(ext_libs, project):
         os.system(f"cp {impl_path} {project}/{cpp_file}")
 
 
+def store_output(out_arg, value):
+    """Write a result back into a caller-supplied output argument, in place.
+
+    Returns True if the value was stored, False if `out_arg` is immutable.
+
+    Why this exists: the read-back sites used to do `out_arg[:] = value`
+    unconditionally. That is correct for an ndarray but raises
+    `TypeError: 'numpy.int32' object does not support item assignment` when the
+    design's output is a SCALAR -- numpy scalars are immutable, so there is no way
+    to propagate a value back through one. That turned every scalar-output design
+    (empty_full, try_put_try_get, scalar_*) into a harness error even though the
+    design itself synthesized and ran fine.
+
+    A 0-d ndarray IS mutable, but only via `arr[...]`, not `arr[:]` -- hence the
+    ndim check rather than a bare slice assignment.
+    """
+    if np.isscalar(out_arg) or isinstance(out_arg, np.generic):
+        # Immutable: nothing to write into. Callers that only need to COMPARE
+        # (e.g. cosim RTL-vs-golden) are unaffected; callers that need the value
+        # should have been passed a 0-d array.
+        return False
+    if getattr(out_arg, "ndim", None) == 0:
+        out_arg[...] = value
+        return True
+    out_arg[:] = value
+    return True
+
+
 def separate_header(hls_code, top=None, extern_c=True):
     func_decl = False
     sig_str = "#ifndef KERNEL_H\n"
@@ -1001,8 +1029,9 @@ class HLSModule:
                                 raise RuntimeError(
                                     f"Output file {fpath} not found. Simulation might have failed."
                                 )
-                            out_arg[:] = read_tensor_from_file(
-                                out_dtype, out_shape, fpath
+                            store_output(
+                                out_arg,
+                                read_tensor_from_file(out_dtype, out_shape, fpath),
                             )
                             _oo += 1
                     return
@@ -1016,7 +1045,7 @@ class HLSModule:
                     result = read_tensor_from_file(
                         out_dtype, out_shape, f"{self.project}/output{i}.data"
                     )
-                    out_arg[:] = result
+                    store_output(out_arg, result)
                 return
 
             if self.mode == "cosim":
@@ -1211,7 +1240,7 @@ class HLSModule:
                             f"{self.project}/cosim.log)."
                         )
                     rtl = read_tensor_from_file(out_dtype, out_shape, rtl_f)
-                    out_arg[:] = rtl
+                    store_output(out_arg, rtl)
                     if os.path.exists(gold_f):
                         gold = read_tensor_from_file(out_dtype, out_shape, gold_f)
                         if not np.array_equal(rtl, gold):
