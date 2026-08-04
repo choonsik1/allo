@@ -1666,6 +1666,27 @@ static bool streamArgQueried(func::FuncOp func, unsigned argIdx, bool wantEmpty)
   return found;
 }
 
+// Does ANY kernel that receives this cross-kernel stream call empty()/full() on
+// it? If not, the buffered stream needs no occupancy sideband -- it can use a
+// plain Connections::Fifo instead of AlloFifoC (saves the status method + ports).
+static bool streamValueQueried(Value sv) {
+  for (OpOperand &use : sv.getUses()) {
+    auto call = llvm::dyn_cast<func::CallOp>(use.getOwner());
+    if (!call)
+      continue; // only kernel-call uses map a stream to a consumer arg
+    auto mod = call->getParentOfType<ModuleOp>();
+    auto callee = mod ? mod.lookupSymbol<func::FuncOp>(call.getCallee()) : nullptr;
+    if (!callee)
+      continue;
+    unsigned idx = use.getOperandNumber(); // call operand i == callee arg i
+    if (idx < callee.getNumArguments() &&
+        (streamArgQueried(callee, idx, /*wantEmpty=*/true) ||
+         streamArgQueried(callee, idx, /*wantEmpty=*/false)))
+      return true;
+  }
+  return false;
+}
+
 // empty()/full() on a CROSS-kernel buffered stream read the AlloFifo occupancy
 // SIDEBAND (<stream>_empty / _full sc_in wires), NOT In<T>.Empty()/Out<T>.Full():
 // on a regular Connections In/Out port those return a sim-only latched-data flag
@@ -1859,14 +1880,19 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       indent();
       os << "Connections::Combinational< " << T << " > " << nm << "_out;\n";
       indent();
-      os << "AlloFifoC< " << T << ", " << st.getDepth() << " > " << nm
-         << "_fifo;\n";
-      // occupancy sidebands (see AlloFifoC): plain status wires so a cross-kernel
-      // Stream.empty()/full() reads real FIFO state (Connections In/Out cannot).
-      indent();
-      os << "sc_signal<bool> " << nm << "_empty_sig;\n";
-      indent();
-      os << "sc_signal<bool> " << nm << "_full_sig;\n";
+      if (streamValueQueried(sc.getResult())) {
+        // some consumer polls empty()/full(): AlloFifoC exposes the sideband.
+        os << "AlloFifoC< " << T << ", " << st.getDepth() << " > " << nm
+           << "_fifo;\n";
+        indent();
+        os << "sc_signal<bool> " << nm << "_empty_sig;\n";
+        indent();
+        os << "sc_signal<bool> " << nm << "_full_sig;\n";
+      } else {
+        // nobody queries occupancy: plain vendor FIFO, no status ports/wires.
+        os << "Connections::Fifo< " << T << ", " << st.getDepth() << " > " << nm
+           << "_fifo;\n";
+      }
     }
   }
   // Channel members: a Channel is always a combinational link, but its PROTOCOL
@@ -2127,8 +2153,11 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     // consumer wire -> deq (Out). (AlloFifo's legacy ports were in/out.)
     indent(); os << nm << "_fifo.enq(" << nm << "_in);\n";
     indent(); os << nm << "_fifo.deq(" << nm << "_out);\n";
-    indent(); os << nm << "_fifo.empty_o(" << nm << "_empty_sig);\n";
-    indent(); os << nm << "_fifo.full_o(" << nm << "_full_sig);\n";
+    // Only AlloFifoC (queried streams) has the occupancy ports to bind.
+    if (streamValueQueried(sc.getResult())) {
+      indent(); os << nm << "_fifo.empty_o(" << nm << "_empty_sig);\n";
+      indent(); os << nm << "_fifo.full_o(" << nm << "_full_sig);\n";
+    }
   }
   // Wire each internal memory: clk/rst + req channel (+ rsp channel for reads).
   for (auto &mi : memInsts) {
