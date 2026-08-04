@@ -1859,9 +1859,9 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
       indent();
       os << "Connections::Combinational< " << T << " > " << nm << "_out;\n";
       indent();
-      os << "AlloFifo< " << T << ", " << st.getDepth() << " > " << nm
+      os << "AlloFifoC< " << T << ", " << st.getDepth() << " > " << nm
          << "_fifo;\n";
-      // occupancy sidebands (see AlloFifo): plain status wires so a cross-kernel
+      // occupancy sidebands (see AlloFifoC): plain status wires so a cross-kernel
       // Stream.empty()/full() reads real FIFO state (Connections In/Out cannot).
       indent();
       os << "sc_signal<bool> " << nm << "_empty_sig;\n";
@@ -2123,8 +2123,10 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
     std::string nm = std::string(getName(sc.getResult()).str());
     indent(); os << nm << "_fifo.clk(clk);\n";
     indent(); os << nm << "_fifo.rst(rst);\n";
-    indent(); os << nm << "_fifo.in(" << nm << "_in);\n";
-    indent(); os << nm << "_fifo.out(" << nm << "_out);\n";
+    // AlloFifoC = Connections::Fifo subclass: producer wire -> enq (In),
+    // consumer wire -> deq (Out). (AlloFifo's legacy ports were in/out.)
+    indent(); os << nm << "_fifo.enq(" << nm << "_in);\n";
+    indent(); os << nm << "_fifo.deq(" << nm << "_out);\n";
     indent(); os << nm << "_fifo.empty_o(" << nm << "_empty_sig);\n";
     indent(); os << nm << "_fifo.full_o(" << nm << "_full_sig);\n";
   }
@@ -2286,6 +2288,7 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {
 //===----------------------------------------------------------------------===//
 #include <systemc.h>
 #include <mc_connections.h>   // MatchLib Connections (LI valid/ready channels)
+#include <connections/connections_fifo.h>  // vendor FWFT Connections::Fifo (buffered streams)
 #include <ac_int.h>
 #include <ac_fixed.h>
 #include <ac_channel.h>     // local self-FIFO streams (one-kernel put+get+status)
@@ -2590,6 +2593,36 @@ SC_MODULE(AlloFifo) {
       count.write(cnt);               // mirror cnt out for the combinational flags
       wait();
     }
+  }
+};
+
+// AlloFifoC -- the ACTIVE buffered-stream FIFO. Subclasses the vendor's
+// first-word-fall-through Connections::Fifo (enq/deq In/Out ports) and adds
+// coherent occupancy flags from the port signals (deq.vld == !empty,
+// enq.rdy == !full, the vendor Fifo_with_idle pattern). Because Connections::Fifo
+// is FWFT (the head word is presented combinationally and a slot is only freed
+// AFTER the consumer's Pop handshake completes), empty_o agrees with what the
+// consumer can read THIS cycle -- fixing the last-item drop that AlloFifo's eager
+// PushNB + early decrement caused for empty()/full()-polling consumers. It is
+// also smaller/faster (~49% area, higher Fmax) since it uses nbits<N> pointers
+// and a 1-bit full instead of a 32-bit count. AlloFifo above is kept as an
+// unused reference/backup.
+template <typename T, int N>
+struct AlloFifoC : public Connections::Fifo<T, N> {
+  SC_HAS_PROCESS(AlloFifoC);
+  typedef Connections::Fifo<T, N> Base;
+  using Base::enq;   // In<T>  -- the top binds this via .enq(<stream>_in)
+  using Base::deq;   // Out<T> -- the top binds this via .deq(<stream>_out)
+  using Base::sensitive;
+  sc_out<bool> empty_o;
+  sc_out<bool> full_o;
+  AlloFifoC(sc_module_name nm) : Base(nm), empty_o("empty_o"), full_o("full_o") {
+    SC_METHOD(gen_status);
+    sensitive << enq._RDYNAME_ << deq._VLDNAME_;
+  }
+  void gen_status() {
+    empty_o.write(!deq._VLDNAME_.read()); // deq.vld == !empty (FWFT-coherent)
+    full_o.write(!enq._RDYNAME_.read());  // enq.rdy == !full
   }
 };
 
