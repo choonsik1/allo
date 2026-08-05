@@ -167,8 +167,31 @@ def codegen_tcl(top, configs):
     Generates a hierarchical synthesis flow that preserves module boundaries
     so that per-PE and per-interconnect area/power can be extracted from reports.
     """
-    frequency = configs.get("frequency", 100)
-    clock_period = 1000 / frequency
+    # Clock period in ns. `clock_period` takes precedence over `frequency` when given.
+    #
+    # WHY BOTH: the FPGA-oriented configs think in MHz, but an ASIC flow thinks in ns,
+    # and the period is not merely a constraint here -- Catapult BAKES IT INTO THE
+    # SCHEDULE (how many ops it packs per cycle), so it is the main knob for trading
+    # timing against area. Deriving it from MHz forced the user to convert (2.0 ns =
+    # frequency 500) and silently rounded to one decimal, which made periods like
+    # 3.33 ns unreachable. `frequency` stays supported unchanged.
+    if configs.get("clock_period") is not None:
+        clock_period = float(configs["clock_period"])
+    else:
+        frequency = configs.get("frequency", 100)
+        clock_period = 1000 / frequency
+    # Render with 1 decimal when that is EXACT, else 3. Periods that were already exact
+    # at 1 decimal (2.0, 4.0, 10.0 ...) regenerate a byte-identical run.tcl.
+    # DELIBERATE SMALL CHANGE: a period that is not exact at 1 decimal now keeps its
+    # digits -- frequency=300 emits 3.333 where it used to emit 3.3. The old value was
+    # 1% TIGHTER than the requested frequency actually implies, i.e. it silently
+    # over-constrained the schedule. Anyone re-running such a project may see a slightly
+    # different (correct) schedule.
+    clock_period_str = (
+        f"{clock_period:.1f}"
+        if abs(clock_period - round(clock_period, 1)) < 1e-9
+        else f"{clock_period:.3f}"
+    )
     mode = configs.get("mode", "csyn")
     platform = configs.get("platform", "catapult")
     device = configs.get("device", "nangate-45nm_beh")
@@ -222,12 +245,38 @@ solution file add "$sfd/kernel.cpp" -type C++
     if mode == "csim" and platform != "systemc":
         out_str += 'solution file add "$sfd/host.cpp" -type C++ -exclude true\n'
 
+    # synth_top: synthesize a SUBMODULE instead of the whole region.
+    #
+    # A @df.region() usually contains the design kernels AND testbench kernels -- the
+    # injector/collector that own the host arrays -- plus the AlloMem memories backing
+    # those arrays. Defaulting DESIGN_HIERARCHY to the region top means Catapult
+    # synthesizes all of it, so any reported AREA includes the harness. Measured on a
+    # 4-port wormhole router that was 5,806 um2 of 22,260 -- 26% -- which makes any
+    # comparison against a reference whose top is the design alone badly misleading.
+    #
+    # Each kernel is emitted as its own SC_MODULE named <kernel>_0, with Connections::In/
+    # Out ports bound to the region's channels, so it is a legal synthesis top by itself.
+    #
+    #     df.build(region, target="systemc", mode="csyn", synth_top="router_0")
+    #
+    # The testbench is NOT removed -- csim still drives the full region. Only what
+    # Catapult treats as the top changes, so verification and measurement may differ:
+    #   csim/cosim -> full region (drv/col supply and check the stimulus)
+    #   area/Fmax  -> synth_top=<kernel>_0
+    # NOTE cosim does NOT work against a submodule top: SCVerify wraps the design top and
+    # the input<k>.data -> AlloMem stimulus path disappears. Run those separately.
+    #
+    # There is deliberately NO heuristic for "which kernels are the testbench". Excluding
+    # kernels that take args would work for the common harness shape but is wrong in
+    # general -- a real design's top kernel can legitimately own arrays.
+    design_top = configs.get("synth_top") or top
+
     out_str += f"""
 # Set top-level design function
-directive set -DESIGN_HIERARCHY {top}
+directive set -DESIGN_HIERARCHY {design_top}
 
 # Set clock constraints
-directive set -CLOCKS {{clk {{-CLOCK_PERIOD {clock_period:.1f}}}}}
+directive set -CLOCKS {{clk {{-CLOCK_PERIOD {clock_period_str}}}}}
 
 # Set output language
 solution options set /Output/OutputVerilog true
