@@ -132,6 +132,18 @@ static bool isValidOnlyChannel(Value v) {
   return ct.getProtocol() == ChannelProtocol::ValidOnly;
 }
 
+// Reset style. Default = async (async_reset_signal_is), matching prior behavior.
+// ALLO_SYNC_RESET set -> synchronous reset (reset_signal_is): lets the tool use
+// plain / sync-reset flops on datapath registers instead of forcing an async-reset
+// flop (DFFR) on every register + an async reset tree -- smaller area and cleaner
+// DFT/timing on the ASIC path. Reset is held for several cycles by the tb, so the
+// one-edge-later semantics of a sync reset are safe. Applies to emitted SC_THREADs
+// and (via a string swap at emit) the device_header module templates.
+static const char *alloResetFn() {
+  static const bool sync = std::getenv("ALLO_SYNC_RESET") != nullptr;
+  return sync ? "reset_signal_is" : "async_reset_signal_is";
+}
+
 // Address width for a memory of `total` elements: ceil(log2(total)), min 1.
 static unsigned scAddrW(int64_t total) {
   unsigned w = 1;
@@ -1102,7 +1114,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
   addIndent();
   indent(); os << "SC_THREAD(run);\n";
   indent(); os << "sensitive << clk.pos();\n";
-  indent(); os << "async_reset_signal_is(rst, false);\n";
+  indent(); os << alloResetFn() << "(rst, false);\n";
   reduceIndent();
   indent(); os << "}\n";
 
@@ -2656,7 +2668,15 @@ struct AlloFifoC : public Connections::Fifo<T, N> {
 };
 
 )XXX";
-  os << device_header;
+  if (std::getenv("ALLO_SYNC_RESET")) {
+    // swap the async reset in the module templates (AlloMem/AlloMemW/AlloFifo) to sync
+    std::string dh(device_header);
+    for (size_t p; (p = dh.find("async_reset_signal_is")) != std::string::npos;)
+      dh.replace(p, /*len("async_reset_signal_is")=*/21, "reset_signal_is");
+    os << dh;
+  } else {
+    os << device_header;
+  }
 
   // Helper functions (pure compute — no `top`/`df.kernel`/`dataflow` attr) are
   // emitted first as plain C++ free functions (reusing the base emitter's
