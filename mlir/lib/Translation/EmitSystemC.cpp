@@ -2,15 +2,14 @@
  * Copyright Allo authors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
- * Minimal SystemC backend
- * Based on EmitCatapultHLS.cpp; subclasses the Vivado emitter so all loop/arith/
- * memref emission is REUSED. Only the module/thread STRUCTURE + sc_fifo channel
- * construction are SystemC-specific. put/get already emit .write()/.read() in the
- * base, which is exactly sc_fifo's API, so they are reused unchanged.
+ * SystemC / Catapult-HLS backend. Based on EmitCatapultHLS.cpp; subclasses the Vivado
+ * emitter so loop/arith/memref emission is reused. Only the module/thread structure and
+ * the MatchLib Connections links are SystemC-specific.
  *
- *   Stream[T,depth] -> sc_fifo<T>(depth) ; put->write ; get->read
+ *   Stream[T,depth] -> Connections::Fifo (AlloFifoC) ; put/get -> Push/Pop
+ *   Channel / Wire  -> Connections::Combinational / sc_signal
  *   @df.kernel      -> SC_MODULE + SC_THREAD(run)
- *   @df.region/top  -> wiring SC_MODULE (sc_fifo members + submodule instances + port binds)
+ *   @df.region/top  -> wiring SC_MODULE (channel members + kernel instances + port binds)
  */
 
 #include "allo/Translation/EmitSystemC.h"
@@ -32,14 +31,20 @@
 using namespace mlir;
 using namespace allo;
 
+// TODO: REVISIT — audit comments against the code before trusting them. Several
+// "not supported / not yet / errored" claims here were STALE (as of 2026-08: empty()/full()
+// "not synthesizable", the wide-word ">64 accidentally worked", and memory-port store
+// "'o'/'b' not yet" were all false). When you touch a path, update its comment.
+
 //===----------------------------------------------------------------------===//
-// Type name for SC interface (ports / channels). Mirrors the Vhls emitter's
-// getTypeName so port/channel types MATCH the reused
-// body: i8/16/32/64 -> (u)intN_t, other widths -> ap_(u)int<N> (aliased to
-// ac_int in the emitted header), f16 -> half, f32 -> float, fixed -> ap_(u)fixed.
-// 
+// Helper functions (file-local): type names, signedness, channel protocol, reset,
+// memory-port sizing.
 //===----------------------------------------------------------------------===//
 
+// C++ type name for an SC interface (port / channel). Mirrors the Vhls emitter's
+// getTypeName so port types match the reused body: i8/16/32/64 -> (u)intN_t, other
+// widths -> ap_(u)int<N> (aliased to ac_int in the header), f16 -> half, f32 -> float,
+// fixed -> ap_(u)fixed.
 static SmallString<32> getSCTypeName(Type valType) {
   // For integers WIDER than 64 bits, use the ap_int shim (an ac_int subclass,
   // defined in the preamble) rather than a plain ac_int: ac_int omits the
@@ -105,26 +110,14 @@ static SmallString<32> getStreamPayloadTypeName(Type valType, bool isUnsigned) {
   return getSCTypeName(valType);
 }
 
-// A Channel's PROTOCOL decides its physical realization -- the two are genuinely
-// different hardware, not a cosmetic label:
-//   valid_ready -> Connections::Combinational<T>   (full handshake WITH back-pressure)
-//   valid_only  -> a raw 2-signal bundle: sc_signal<T> <n>_dat + sc_signal<bool> <n>_vld
-//
-// A valid_only link has NO ready line, so the producer can never be refused: it drives
-// the data and pulses valid for exactly ONE cycle. The consumer samples whatever is on
-// the wire in the cycle it happens to look; if it is not looking, the datum is missed.
-// That is the protocol, not a defect -- it is the cheaper link (no ready path, no
-// Connections transactor) that a DSE cost model wants to weigh against a full handshake,
-// and it is the standard "valid-only synchronous pipeline" already validated by hand
-// against Catapult's libsystemc.
-//
-// Consequence for the USER: valid_only is only correct when the consumer is guaranteed
-// to be looking -- i.e. lock-step kernels, or a design that tolerates dropped samples.
-// It sits between Channel[valid_ready] (safe at any relative timing) and Wire (no
-// synchronisation at all): a race SKIPS a datum here instead of reading garbage.
-//
-// Only SCALAR channels take this path; a shaped/array channel falls back to the
-// Combinational form (its per-index constructs are scalars, so arrays still work).
+// A Channel's PROTOCOL picks genuinely different hardware, not a cosmetic label:
+//   valid_ready -> Connections::Combinational<T>              (full handshake, back-pressure)
+//   valid_only  -> raw sc_signal<T> _dat + sc_signal<bool> _vld  (no ready line)
+// valid_only never refuses the producer (one-cycle valid pulse); if the consumer is not
+// looking that cycle the datum is dropped -- by design, the cheaper link (no ready path or
+// transactor, which a DSE cost model may prefer). So it is correct ONLY for lock-step or
+// drop-tolerant consumers; it sits between valid_ready (safe at any timing) and Wire (no
+// sync at all) -- a race SKIPS a datum rather than reading garbage.
 static bool isValidOnlyChannel(Value v) {
   auto ct = llvm::dyn_cast<ChannelType>(v.getType());
   if (!ct)
@@ -147,7 +140,7 @@ static const char *alloResetFn() {
 // Address width for a memory of `total` elements: ceil(log2(total)), min 1.
 static unsigned scAddrW(int64_t total) {
   unsigned w = 1;
-  while ((int64_t(1) << w) < total) // 2´w
+  while ((int64_t(1) << w) < total) // 2^w
     w++;
   return w;
 }
@@ -235,7 +228,7 @@ static void flattenHierarchy(ModuleOp module) {
 }
 
 //===----------------------------------------------------------------------===//
-// SystemC emitter — subclass of the Vhls emitter (reuse body emission).
+// SystemC emitter — subclass of CatapultModuleEmitter (reuses Vhls body emission).
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -270,7 +263,8 @@ private:
   void emitWireGet(allo::WireGetOp op) override;
   void emitWirePut(allo::WirePutOp op) override;
   // Non-blocking: try_get/try_put -> Connections .PopNB()/.PushNB() (fire-on-valid).
-  // empty()/full() have no synthesizable Connections equivalent -> errored.
+  // empty()/full() read a synchronous sideband signal, NOT In::Empty()/Out::Full() (which
+  // track the port handshake, not the FIFO's logical occupancy) -- see emitStreamEmpty.
   void emitStreamTryGet(allo::StreamTryGetOp op) override;
   void emitStreamTryPut(allo::StreamTryPutOp op) override;
   void emitChannelTryGet(allo::ChannelTryGetOp op) override;
@@ -283,6 +277,11 @@ private:
   // max/min with both operands cast to the result type (a float literal mixed
   // with an ac_ieee_float operand otherwise fails template deduction).
   void emitMaxMin(Operation *op, const char *syntax) override;
+
+  // Loop-shape transform: the kernel's outermost `for t` becomes a free-running while(1)
+  // under __SYNTHESIS__ so Catapult pipelines the body (see emitAffineFor).
+  bool isSteadyStateLoop(affine::AffineForOp op);
+  void emitAffineFor(affine::AffineForOp op) override;
 
   // Sequential-stream body transform: a boundary memref arg becomes a Connections
   // stream port, so load a[i] -> port.Pop(), store b[i]=v -> port.Push(v).
@@ -318,7 +317,7 @@ private:
   char streamArgDir(Value v);
   // If `v` is a df.kernel memref arg that is directional but NOT sequentially
   // streamable (random/strided/2-D), it becomes a random-access MEMORY PORT.
-  // Returns its dir ('i' read-only supported now; 'o'/'b' not yet), else 0.
+  // Returns its dir ('i' load, 'o' store, 'b' read+modify+write), else 0.
   char memPortArgDir(Value v);
   // Row-major flatten of direct (memref-dialect) index Values -> one C++ expr.
   void emitFlatIndexMemref(ValueRange indices, ArrayRef<int64_t> shape);
@@ -328,7 +327,8 @@ private:
                        llvm::function_ref<void()> emitIdx);
   void emitMemPortStore(Value memref, Value value,
                         llvm::function_ref<void()> emitIdx);
-  // True iff memref `v` is safe to stream: 1-D + only identity a[iv] load/stores.
+  // Streamable = 1-D array accessed strictly in order (a[i] by the loop index) -> a FIFO;
+  // anything else (2-D / strided / random / reused) needs a random-access memory port.
   bool isSeqStreamable(Value v);
 
   // Emit a single affine expr (dims/symbols resolved via `operands`, split at
@@ -379,6 +379,9 @@ private:
   // shared by several grid replicas is REPLICATED: each client gets its own
   // memory + channels. Reads preload every replica from the same input file;
   // writes (disjoint pid-indexed elements) are summed across replicas at readout.
+  // TODO: REVISIT — the write-merge SUMS elements across replicas and ASSUMES each replica
+  // writes disjoint pid-indexed elements (rest zero); nothing enforces it, so two replicas
+  // writing the same element would silently corrupt the readout. Add a check/assert.
   struct MemInst {
     std::string chan;   // unique base name (mp<call>_<arg>) for channels + memory
     std::string inst;   // kernel instance name (u<call>)
@@ -391,10 +394,10 @@ private:
   };
   SmallVector<MemInst> memInsts;
 
-  // A stream used by exactly ONE kernel (a self-FIFO: one kernel does
-  // put+get+empty+full) can't map to a directional Connections port pair, so it
-  // is realized as a local ac_channel member and its ops route to the inherited
-  // Catapult (ac_channel) implementations.
+  // A stream used by exactly ONE kernel (a self-FIFO: one kernel does put+get+empty+full)
+  // can't map to a directional Connections port pair, so it is realized as a bounded MatchLib
+  // AlloFifo wired as a self-loop at the top (the kernel gets both an Out enq end and an In
+  // deq end), with a synchronous _cnt counter for correct empty()/full().
   llvm::DenseSet<Value> localStreamArgs;       // the kernel block-arg Values
   llvm::DenseSet<Value> localStreamConstructs; // the top-level construct results
   bool isLocalStream(Value v) { return localStreamArgs.count(v) > 0; }
@@ -424,7 +427,7 @@ private:
 } // namespace
 
 // stypes is a string with one char per arg: '_' = not a stream, 'i' = in, 'o' = out.
-char SystemCModuleEmitter::streamDir(func::FuncOp func, unsigned i) {
+char SystemCModuleEmitter::streamDir(func::FuncOp func, unsigned i) {  // new (SystemC-only)
   auto attr = func->getAttrOfType<StringAttr>("stypes");
   if (!attr)
     return 0;
@@ -436,7 +439,7 @@ char SystemCModuleEmitter::streamDir(func::FuncOp func, unsigned i) {
 }
 
 // arg_dirs is a string with one char per arg: 'i'=in, 'o'=out, 'b'=both, else '_'.
-char SystemCModuleEmitter::argDir(func::FuncOp func, unsigned i) {
+char SystemCModuleEmitter::argDir(func::FuncOp func, unsigned i) {  // new (SystemC-only)
   auto attr = func->getAttrOfType<StringAttr>("arg_dirs");
   if (!attr)
     return 0;
@@ -452,7 +455,7 @@ char SystemCModuleEmitter::argDir(func::FuncOp func, unsigned i) {
 // every access is an identity a[iv] (each element once, in order). Anything else
 // (2-D, strided, reversed, gathered, re-read, or a non-load/store use) is NOT
 // sequential and must use a memory port instead.
-bool SystemCModuleEmitter::isSeqStreamable(Value v) {
+bool SystemCModuleEmitter::isSeqStreamable(Value v) {  // new (SystemC-only)
   auto mt = llvm::dyn_cast<MemRefType>(v.getType());
   if (!mt || mt.getRank() != 1)
     return false;
@@ -483,7 +486,7 @@ bool SystemCModuleEmitter::isSeqStreamable(Value v) {
 
 // A df.kernel memref arg with a pure in/out direction is stream-ified into a
 // Connections port; return that direction ('i'/'o'), else 0 (emit normally).
-char SystemCModuleEmitter::streamArgDir(Value v) {
+char SystemCModuleEmitter::streamArgDir(Value v) {  // new (SystemC-only)
   auto barg = llvm::dyn_cast<BlockArgument>(v);
   if (!barg || !llvm::isa<MemRefType>(v.getType()))
     return 0;
@@ -496,10 +499,10 @@ char SystemCModuleEmitter::streamArgDir(Value v) {
   return ((d == 'i' || d == 'o') && isSeqStreamable(v) && !forceMemPort(v)) ? d : 0;
 }
 
-// A df.kernel memref arg that is directional but NOT sequentially streamable is
-// a random-access memory port. Only INPUT (read-only, LOAD) is wired for now;
-// 'o'/'b' (store side) return their dir so the caller can error cleanly.
-char SystemCModuleEmitter::memPortArgDir(Value v) {
+// A df.kernel memref arg that is directional but NOT sequentially streamable is a
+// random-access memory port. Returns its dir: 'i' load (AlloMem req+rsp), 'o' store
+// (AlloMemW req-only), 'b' read+modify+write (AlloMem req+rsp); else 0.
+char SystemCModuleEmitter::memPortArgDir(Value v) {  // new (SystemC-only)
   auto barg = llvm::dyn_cast<BlockArgument>(v);
   if (!barg || !llvm::isa<MemRefType>(v.getType()))
     return 0;
@@ -514,10 +517,99 @@ char SystemCModuleEmitter::memPortArgDir(Value v) {
   return isSeqStreamable(v) ? 0 : d; // streamable -> handled by the stream path
 }
 
+// A dataflow kernel's outermost bounded loop IS its steady-state loop: `for t in
+// range(NUM_IT)` runs one router/crossbar step per iteration. Emitted as a finite loop
+// followed by the terminal `while(1) wait();`, Catapult classifies EVERYTHING before
+// that while as RESET ACTION -- it never pipelines the body and the real steady-state
+// loop is a 1-cycle empty spin. Measured: whvcrouter 5 c-steps/iteration, arbxbar 17,
+// against MatchLib's II=1 `while(1){wait(); body;}`. Emitting this loop AS `while(1)`
+// under __SYNTHESIS__ gives Catapult MatchLib's shape.
+//
+// State declarations already sit ABOVE this loop, so nothing moves. (An earlier attempt
+// wrapped while(1) around the declarations too -- that made every pass a cold restart
+// and cost `buf` its resource path: "Unknown path '/router_0/run/buf:rsc'".)
+bool SystemCModuleEmitter::isSteadyStateLoop(affine::AffineForOp op) {  // new (SystemC-only)
+  auto func = op->getParentOfType<func::FuncOp>();
+  // A KERNEL carries df.kernel; "dataflow" is on the region top (see line ~2314).
+  if (!func || (!func->hasAttr("df.kernel") && !func->hasAttr("dataflow")))
+    return false;
+  // Outermost loop of the kernel body.
+  if (op->getParentOp() != func.getOperation())
+    return false;
+  // Induction variable must be DEAD -- a body that reads `t` would change meaning.
+  if (!op.getInductionVar().use_empty())
+    return false;
+  // Constant trip count only; anything else keeps the ordinary path.
+  if (!op.hasConstantBounds())
+    return false;
+  // A kernel storing to a random-access MEMORY PORT must run ONCE: a free-running
+  // body would re-accumulate `C[i] += ...` on every pass. Only PORT arrays count --
+  // they arrive as function arguments (region boundary arrays routed to AlloMem).
+  // Stores to kernel-LOCAL arrays are the design's own state (buf/occ/cred/...); those
+  // are registers and are SUPPOSED to persist across steps, exactly as MatchLib's are.
+  // (Checking for any store at all disables the transform on every stateful kernel.)
+  bool storesToPort = false;
+  func.walk([&](Operation *o) {
+    Value target;
+    if (auto st = dyn_cast<memref::StoreOp>(o))
+      target = st.getMemRef();
+    else if (auto st = dyn_cast<affine::AffineStoreOp>(o))
+      target = st.getMemRef();
+    else
+      return;
+    // Chase through view-like ops to the root definition.
+    while (auto *def = target.getDefiningOp()) {
+      if (def->getNumOperands() == 0)
+        break;
+      if (!isa<memref::SubViewOp, memref::CastOp, memref::ReinterpretCastOp>(def))
+        break;
+      target = def->getOperand(0);
+    }
+    if (isa<BlockArgument>(target))
+      storesToPort = true;   // a func argument == a memory port
+  });
+  return !storesToPort;
+}
+
+void SystemCModuleEmitter::emitAffineFor(affine::AffineForOp op) {  // override (base emitter)
+  if (!isSteadyStateLoop(op)) {
+    CatapultModuleEmitter::emitAffineFor(op);
+    return;
+  }
+  emitLoopDirectivesPreheader(op);
+  // Header twice, body ONCE: both branches open exactly one brace.
+  os << "#ifdef __SYNTHESIS__\n";
+  indent();
+  os << "while (1) {  // steady-state loop (was `for t`): 1 iteration = 1 step\n";
+  os << "#else\n";
+  indent();
+  os << "l_steady: for (";   // emitValue emits the type on first use
+  emitValue(op.getInductionVar(), 0, false, "t");
+  os << " = " << op.getConstantLowerBound() << "; ";
+  emitValue(op.getInductionVar(), 0, false, "t");
+  os << " < " << op.getConstantUpperBound() << "; ";
+  emitValue(op.getInductionVar(), 0, false, "t");
+  os << " += " << op.getStep() << ") {\n";
+  os << "#endif\n";
+  addIndent();
+  emitLoopDirectives(op);
+  emitBlock(*op.getBody());
+  // csim only: an SC_THREAD does not yield on its own, so a body issuing non-blocking
+  // stream ops needs a per-iteration wait() or peer threads never run. Under synthesis
+  // the PushNB/PopNB handshake supplies the cycle boundary.
+  os << "#ifndef __SYNTHESIS__\n";
+  indent();
+  os << "wait();\n";
+  os << "#endif\n";
+  reduceIndent();
+  indent();
+  os << "}\n";
+}
+
 // Local reimplementation of the base's file-local affine-expr emitter: walk the
 // expr, resolving dim/symbol positions to their operand SSA names via emitValue.
 void SystemCModuleEmitter::emitAffineExprSC(AffineExpr e, ValueRange operands,
-                                            unsigned numDims) {
+                                            unsigned numDims) {  // new (SystemC-only)
   switch (e.getKind()) {
   case AffineExprKind::Constant:
     os << llvm::cast<AffineConstantExpr>(e).getValue();
@@ -560,7 +652,7 @@ void SystemCModuleEmitter::emitAffineExprSC(AffineExpr e, ValueRange operands,
 // Row-major flatten of a (multi-dim) affine index -> one C++ expression.
 void SystemCModuleEmitter::emitFlatIndexCore(AffineMap map,
                                              ArrayRef<int64_t> shape,
-                                             ValueRange operands) {
+                                             ValueRange operands) {  // new (SystemC-only)
   unsigned n = map.getNumResults();
   SmallVector<int64_t> stride(n);
   int64_t s = 1;
@@ -580,13 +672,13 @@ void SystemCModuleEmitter::emitFlatIndexCore(AffineMap map,
   }
   os << ")";
 }
-void SystemCModuleEmitter::emitFlatIndex(affine::AffineLoadOp op) {
+void SystemCModuleEmitter::emitFlatIndex(affine::AffineLoadOp op) {  // new (SystemC-only)
   auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
   SmallVector<Value> operands(op.getMapOperands().begin(),
                               op.getMapOperands().end());
   emitFlatIndexCore(op.getAffineMap(), mt.getShape(), operands);
 }
-void SystemCModuleEmitter::emitFlatIndex(affine::AffineStoreOp op) {
+void SystemCModuleEmitter::emitFlatIndex(affine::AffineStoreOp op) {  // new (SystemC-only)
   auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
   SmallVector<Value> operands(op.getMapOperands().begin(),
                               op.getMapOperands().end());
@@ -594,8 +686,11 @@ void SystemCModuleEmitter::emitFlatIndex(affine::AffineStoreOp op) {
 }
 
 // Row-major flatten of direct index Values (memref dialect): Σ idx[k]*stride[k].
+// TODO: REVISIT — near-exact duplicate of emitFlatIndexCore (only the per-term emission
+// differs: raw getName here vs emitAffineExprSC there). Fold both into one stride+sum helper
+// with a per-term callback, as emitMemPortLoad/Store already do for the index.
 void SystemCModuleEmitter::emitFlatIndexMemref(ValueRange indices,
-                                               ArrayRef<int64_t> shape) {
+                                               ArrayRef<int64_t> shape) {  // new (SystemC-only)
   unsigned n = indices.size();
   SmallVector<int64_t> stride(n);
   int64_t s = 1;
@@ -618,7 +713,7 @@ void SystemCModuleEmitter::emitFlatIndexMemref(ValueRange indices,
 // addr); result = rsp.Pop();  (flat index emitted by `emitIdx`).
 void SystemCModuleEmitter::emitMemPortLoad(Value memref, Value result,
                                            bool isUnsigned,
-                                           llvm::function_ref<void()> emitIdx) {
+                                           llvm::function_ref<void()> emitIdx) {  // new (SystemC-only)
   fixUnsignedType(result, isUnsigned);
   auto mt = llvm::cast<MemRefType>(memref.getType());
   int64_t total = 1;
@@ -644,7 +739,7 @@ void SystemCModuleEmitter::emitMemPortLoad(Value memref, Value result,
 // STORE to a random-access memory port: mem[idx] = value -> a packed req (no
 // response; AlloMem/AlloMemW applies it).  (flat index emitted by `emitIdx`.)
 void SystemCModuleEmitter::emitMemPortStore(Value memref, Value value,
-                                            llvm::function_ref<void()> emitIdx) {
+                                            llvm::function_ref<void()> emitIdx) {  // new (SystemC-only)
   auto mt = llvm::cast<MemRefType>(memref.getType());
   int64_t total = 1;
   for (auto d : mt.getShape())
@@ -671,7 +766,7 @@ void SystemCModuleEmitter::emitMemPortStore(Value memref, Value value,
 }
 
 // memref.load: mem-port arg -> req/rsp; local %alloc array -> base emitter.
-void SystemCModuleEmitter::emitLoad(memref::LoadOp op) {
+void SystemCModuleEmitter::emitLoad(memref::LoadOp op) {  // override (base emitter)
   if (char d = memPortArgDir(op.getMemRef()); d == 'i' || d == 'b') {
     auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
     emitMemPortLoad(op.getMemRef(), op.getResult(), op->hasAttr("unsigned"),
@@ -683,7 +778,7 @@ void SystemCModuleEmitter::emitLoad(memref::LoadOp op) {
 }
 
 // memref.store: mem-port arg -> req; local %alloc array -> base emitter.
-void SystemCModuleEmitter::emitStore(memref::StoreOp op) {
+void SystemCModuleEmitter::emitStore(memref::StoreOp op) {  // override (base emitter)
   if (char d = memPortArgDir(op.getMemRef()); d == 'o' || d == 'b') {
     auto mt = llvm::cast<MemRefType>(op.getMemRef().getType());
     emitMemPortStore(op.getMemRef(), op.getValueToStore(),
@@ -696,7 +791,7 @@ void SystemCModuleEmitter::emitStore(memref::StoreOp op) {
 
 // For a region boundary arg, look up the kernel arg it feeds and return that
 // kernel arg's memory-port direction (0 if it is a normal stream boundary).
-char SystemCModuleEmitter::regArgMemPort(func::FuncOp top, Value regArg) {
+char SystemCModuleEmitter::regArgMemPort(func::FuncOp top, Value regArg) {  // new (SystemC-only)
   auto parent = top->getParentOfType<ModuleOp>();
   for (auto &op : top.front())
     if (auto call = llvm::dyn_cast<func::CallOp>(&op))
@@ -710,11 +805,13 @@ char SystemCModuleEmitter::regArgMemPort(func::FuncOp top, Value regArg) {
   return 0;
 }
 
-// Same shape as the base emitValue, but routes the type name through
-// getSCTypeName (-> Catapult ac_int/ac_fixed) instead of the base's file-local
-// getTypeName (-> Xilinx ap_int/ap_fixed).
+// NEAR-COPY of VhlsModuleEmitter::emitValue (the Vivado base): identical structure, the
+// ONLY change is routing the type name through getSCTypeName (-> Catapult ac_int/ac_fixed)
+// instead of the base's file-local getTypeName (-> Xilinx ap_int/ap_fixed). Overridden
+// (not extended) only because getTypeName isn't virtual, so the one line can't be swapped
+// in place -- the same copy-to-swap-one-string pattern as Catapult vs Vivado getTypeName.
 void SystemCModuleEmitter::emitValue(Value val, unsigned rank, bool isPtr,
-                                     std::string name) {
+                                     std::string name) {  // override (base emitter)
   assert(!(rank && isPtr) && "should be either an array or a pointer.");
 
   // Value has been declared before or is a constant number.
@@ -744,7 +841,7 @@ void SystemCModuleEmitter::emitValue(Value val, unsigned rank, bool isPtr,
 // the float type's own bit accessors -- data_ac_int()/set_data() -- which synthesize
 // (the same idiom the memory-port _fbits/_mem_decode helpers use). The generic
 // int<->int (and double) path keeps the memcpy, which is fine for trivial PODs.
-void SystemCModuleEmitter::emitBitcast(arith::BitcastOp op) {
+void SystemCModuleEmitter::emitBitcast(arith::BitcastOp op) {  // override (base emitter)
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   Value operand = op.getOperand();
@@ -798,7 +895,7 @@ void SystemCModuleEmitter::emitBitcast(arith::BitcastOp op) {
 
 // --- native ac_int bit ops (replace the Vitis ap_int proxy forms) ---
 
-void SystemCModuleEmitter::emitGetBit(allo::GetIntBitOp op) {
+void SystemCModuleEmitter::emitGetBit(allo::GetIntBitOp op) {  // override (base emitter)
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   Value num = op.getNum();
@@ -820,7 +917,7 @@ void SystemCModuleEmitter::emitGetBit(allo::GetIntBitOp op) {
   emitInfoAndNewLine(op);
 }
 
-void SystemCModuleEmitter::emitSetBit(allo::SetIntBitOp op) {
+void SystemCModuleEmitter::emitSetBit(allo::SetIntBitOp op) {  // override (base emitter)
   Value result = op.getResult();
   Value num = op.getNum();
   unsigned nw = num.getType().getIntOrFloatBitWidth();
@@ -843,7 +940,7 @@ void SystemCModuleEmitter::emitSetBit(allo::SetIntBitOp op) {
   emitInfoAndNewLine(op);
 }
 
-void SystemCModuleEmitter::emitGetSlice(allo::GetIntSliceOp op) {
+void SystemCModuleEmitter::emitGetSlice(allo::GetIntSliceOp op) {  // override (base emitter)
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   Value num = op.getNum();
@@ -864,7 +961,7 @@ void SystemCModuleEmitter::emitGetSlice(allo::GetIntSliceOp op) {
   emitInfoAndNewLine(op);
 }
 
-void SystemCModuleEmitter::emitSetSlice(allo::SetIntSliceOp op) {
+void SystemCModuleEmitter::emitSetSlice(allo::SetIntSliceOp op) {  // override (base emitter)
   Value result = op.getResult();
   Value num = op.getNum();
   unsigned nw = num.getType().getIntOrFloatBitWidth();
@@ -893,7 +990,7 @@ void SystemCModuleEmitter::emitSetSlice(allo::SetIntSliceOp op) {
 }
 
 // Sequential-stream read:  <result> = <port>.Pop();   (index ignored — in order)
-void SystemCModuleEmitter::emitAffineLoad(affine::AffineLoadOp op) {
+void SystemCModuleEmitter::emitAffineLoad(affine::AffineLoadOp op) {  // override (base emitter)
   // Random-access INPUT ('i') or read+write ('b') memory port: LOAD via req/resp.
   if (char d = memPortArgDir(op.getMemRef()); d == 'i' || d == 'b') {
     emitMemPortLoad(op.getMemRef(), op.getResult(), op->hasAttr("unsigned"),
@@ -916,7 +1013,7 @@ void SystemCModuleEmitter::emitAffineLoad(affine::AffineLoadOp op) {
 }
 
 // Sequential-stream write:  <port>.Push(<value>);   (index ignored — in order)
-void SystemCModuleEmitter::emitAffineStore(affine::AffineStoreOp op) {
+void SystemCModuleEmitter::emitAffineStore(affine::AffineStoreOp op) {  // override (base emitter)
   // Random-access OUTPUT ('o') or read+write ('b') memory port: STORE via a
   // packed req (no response; the AlloMem/AlloMemW applies it).
   if (char d = memPortArgDir(op.getMemRef()); d == 'o' || d == 'b') {
@@ -944,7 +1041,7 @@ void SystemCModuleEmitter::emitAffineStore(affine::AffineStoreOp op) {
 // fwd decl (defined near emitStreamEmpty): does func query empty()/full() on arg?
 static bool streamArgQueried(func::FuncOp func, unsigned argIdx, bool wantEmpty);
 
-void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
+void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {  // new (SystemC-only)
   auto name = func.getName();
   os << "SC_MODULE(" << name << ") {\n";
   addIndent();
@@ -1250,7 +1347,7 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {
 }
 
 // Wire get: <result> = <wire>.read();  (raw combinational, no handshake)
-void SystemCModuleEmitter::emitWireGet(WireGetOp op) {
+void SystemCModuleEmitter::emitWireGet(WireGetOp op) {  // override (base emitter)
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   indent();
@@ -1262,7 +1359,7 @@ void SystemCModuleEmitter::emitWireGet(WireGetOp op) {
 }
 
 // Wire put: <wire>.write(<value>);  (raw combinational, no handshake)
-void SystemCModuleEmitter::emitWirePut(WirePutOp op) {
+void SystemCModuleEmitter::emitWirePut(WirePutOp op) {  // override (base emitter)
   indent();
   emitValue(op->getOperand(0), 0, false);
   os << ".write(";
@@ -1272,7 +1369,7 @@ void SystemCModuleEmitter::emitWirePut(WirePutOp op) {
 }
 
 // Connections channel get: <result> = <channel>.Pop();  (scalar handshake link)
-void SystemCModuleEmitter::emitChannelGet(ChannelGetOp op) {
+void SystemCModuleEmitter::emitChannelGet(ChannelGetOp op) {  // override (base emitter)
   Value result = op.getResult();
   fixUnsignedType(result, op->hasAttr("unsigned"));
   if (isValidOnlyChannel(op->getOperand(0))) {
@@ -1295,7 +1392,7 @@ void SystemCModuleEmitter::emitChannelGet(ChannelGetOp op) {
 }
 
 // Connections channel put: <channel>.Push(<value>);  (scalar handshake link)
-void SystemCModuleEmitter::emitChannelPut(ChannelPutOp op) {
+void SystemCModuleEmitter::emitChannelPut(ChannelPutOp op) {  // override (base emitter)
   if (isValidOnlyChannel(op->getOperand(0))) {
     // valid_only put: drive the data, pulse valid for exactly ONE cycle, then
     // drop it. No ready line exists, so the put can never be refused and never
@@ -1323,7 +1420,7 @@ void SystemCModuleEmitter::emitChannelPut(ChannelPutOp op) {
 // Connections::Combinational just as a stream does, so PopNB applies unchanged.
 // (A Wire has no non-blocking form and never reaches here: the frontend rejects
 // wire.try_get(), since a wire is always its current value.)
-void SystemCModuleEmitter::emitChannelTryGet(ChannelTryGetOp op) {
+void SystemCModuleEmitter::emitChannelTryGet(ChannelTryGetOp op) {  // override (base emitter)
   Value result = op.getResult(0);
   Value success = op.getResult(1);
   fixUnsignedType(result, op->hasAttr("unsigned"));
@@ -1382,7 +1479,7 @@ void SystemCModuleEmitter::emitChannelTryGet(ChannelTryGetOp op) {
 }
 
 // Non-blocking channel put: <success> = <channel>.PushNB(<value>);
-void SystemCModuleEmitter::emitChannelTryPut(ChannelTryPutOp op) {
+void SystemCModuleEmitter::emitChannelTryPut(ChannelTryPutOp op) {  // override (base emitter)
   Value success = op.getResult();
   auto channel = op->getOperand(0);
   auto value = op->getOperand(1);
@@ -1420,7 +1517,7 @@ void SystemCModuleEmitter::emitChannelTryPut(ChannelTryPutOp op) {
 
 // Connections get: <result> = <stream>[indices].Pop();
 // (Base scalar path, with .read() -> .Pop(); block-streams deferred.)
-void SystemCModuleEmitter::emitStreamGet(StreamGetOp op) {
+void SystemCModuleEmitter::emitStreamGet(StreamGetOp op) {  // override (base emitter)
   if (isLocalStream(op->getOperand(0))) {
     // self-FIFO consumer end: <result> = <stream>_deq.Pop(); occupancy--.
     Value result = op.getResult();
@@ -1469,7 +1566,7 @@ void SystemCModuleEmitter::emitStreamGet(StreamGetOp op) {
 
 // Connections put: <stream>[indices].Push(<value>);
 // (Base scalar path, with .write(v) -> .Push(v); block-streams deferred.)
-void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
+void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {  // override (base emitter)
   if (isLocalStream(op->getOperand(0))) {
     // self-FIFO producer end: <stream>_enq.Push(<value>); occupancy++.
     std::string sn = std::string(getName(op->getOperand(0)).str());
@@ -1558,7 +1655,7 @@ void SystemCModuleEmitter::emitStreamPut(StreamPutOp op) {
 
 // Non-blocking get: <result>; <success> = <stream>[idx].PopNB(<result>);
 // (Base try_get path, with .read_nb -> .PopNB.)
-void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
+void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {  // override (base emitter)
   if (isLocalStream(op->getOperand(0))) {
     // self-FIFO consumer end: <result>; <success> = <stream>_deq.PopNB(<result>);
     // occupancy -= success so empty()/full() track the logical fill.
@@ -1623,7 +1720,7 @@ void SystemCModuleEmitter::emitStreamTryGet(StreamTryGetOp op) {
 }
 
 // Non-blocking put: <success> = <stream>[idx].PushNB(<value>);
-void SystemCModuleEmitter::emitStreamTryPut(StreamTryPutOp op) {
+void SystemCModuleEmitter::emitStreamTryPut(StreamTryPutOp op) {  // override (base emitter)
   if (isLocalStream(op->getOperand(0))) {
     // self-FIFO producer end: <success> = <stream>_enq.PushNB(<value>);
     // occupancy += success (bool -> 0/1) so empty()/full() track the logical fill.
@@ -1704,7 +1801,7 @@ static bool streamValueQueried(Value sv) {
 // on a regular Connections In/Out port those return a sim-only latched-data flag
 // our channel never sets, so they never reflect FIFO state (data never moves). A
 // LOCAL self-FIFO instead reads its synchronous <stream>_cnt (see below).
-void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
+void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {  // override (base emitter)
   if (isLocalStream(op->getOperand(0))) {
     // self-FIFO empty(): read the synchronous occupancy counter, not the clocked
     // AlloFifo handshake (which lags a cycle and reads stale in RTL cosim).
@@ -1732,7 +1829,7 @@ void SystemCModuleEmitter::emitStreamEmpty(StreamEmptyOp op) {
   os << ".read();";
   emitInfoAndNewLine(op);
 }
-void SystemCModuleEmitter::emitStreamFull(StreamFullOp op) {
+void SystemCModuleEmitter::emitStreamFull(StreamFullOp op) {  // override (base emitter)
   if (isLocalStream(op->getOperand(0))) {
     // self-FIFO full(): counter == depth (synchronous; see emitStreamEmpty).
     Value result = op.getResult();
@@ -1767,7 +1864,7 @@ void SystemCModuleEmitter::emitStreamFull(StreamFullOp op) {
 // call compiles in both csim and synthesis. `index` (emitted as `int`) is a
 // native signed 64-bit type -- e.g. a bit-slice range endpoint computed wide
 // (ap_int<66>) then cast to index would otherwise fail to convert.
-void SystemCModuleEmitter::emitNarrowCastSuffix(Value src, Value dst) {
+void SystemCModuleEmitter::emitNarrowCastSuffix(Value src, Value dst) {  // override (base emitter)
   auto si = llvm::dyn_cast<IntegerType>(src.getType());
   if (!si || si.getWidth() <= 64)
     return;
@@ -1787,7 +1884,7 @@ void SystemCModuleEmitter::emitNarrowCastSuffix(Value src, Value dst) {
 // vs ac_ieee_float mismatch fails template deduction (Catapult CRD-304). Cast
 // both operands to the result type so deduction succeeds; the cast is a no-op for
 // an operand already of that type and invokes the element ctor for a literal.
-void SystemCModuleEmitter::emitMaxMin(Operation *op, const char *syntax) {
+void SystemCModuleEmitter::emitMaxMin(Operation *op, const char *syntax) {  // override (base emitter)
   auto rank = emitNestedLoopHead(op->getResult(0));
   indent();
   Value result = op->getResult(0);
@@ -1803,7 +1900,7 @@ void SystemCModuleEmitter::emitMaxMin(Operation *op, const char *syntax) {
   emitNestedLoopTail(rank);
 }
 
-void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
+void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {  // new (SystemC-only)
   auto parent = func->getParentOfType<ModuleOp>();
   os << "SC_MODULE(" << func.getName() << ") {\n";
   addIndent();
@@ -2210,7 +2307,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {
 // emitModule — header + dispatch each func to kernel/top emission.
 //===----------------------------------------------------------------------===//
 
-void SystemCModuleEmitter::emitModule(ModuleOp module) {
+void SystemCModuleEmitter::emitModule(ModuleOp module) {  // override (base emitter)
   // The SystemC backend is a DATAFLOW backend: it emits SC_MODULEs + a self-
   // contained sc_main testbench for @df.region / @df.kernel designs. A plain
   // (customize) kernel has no dataflow region, so it would emit only as a bodiless
@@ -2448,9 +2545,12 @@ static long __allo_done = 0;
 using std::max;
 using std::min;
 // The reused Vivado-emitter body prints Vitis ap_(u)int types; alias them to
-// Catapult's ac_int so the same body compiles. (TODO: emit ac_int/ac_fixed
-// natively via a type-name override, like getCatapultTypeName in the Catapult
-// emitter, and drop this shim.)
+// Catapult's ac_int so the same body compiles.
+// TODO: REVISIT — this ap_int/ap_rng shim exists ONLY to keep the reused Vivado body
+// compiling; ap_int is just ac_int + two Vitis affordances (x(hi,lo) via ap_rng, >64-bit
+// operator long long() narrowing). Emitting ac_int natively everywhere (a type-name
+// override like getCatapultTypeName, plus the bit-op overrides already doing slc/set_slc)
+// would let this shim + ap_rng be deleted. See EmitSystemC.md.
 // ap_(u)int is a thin ac_int subclass adding the two Vitis affordances the reused
 // body relies on and ac_int lacks:
 //  (1) the x(hi,lo) BIT-RANGE operator (packed streams unpack via v(31,16) etc) —
@@ -2470,6 +2570,9 @@ using std::min;
 // design synthesizes; a design that actually bit-slices (packed streams) fails at
 // its `(hi,lo)` site instead — a clear, local error, and those need native ac_int
 // .slc emission anyway. csim keeps the full-featured shim so behavior is unchanged.
+// TODO: REVISIT — packed/wide bit-slicing fails at csynth here (CIN-15 forces this bare
+// alias); emit those slices as native ac_int .slc<>()/.set_slc() (cf. emitGetSlice/
+// emitSetSlice) so packed streams synthesize. Empirically checked 2026-08 (see EmitSystemC.md).
 #ifdef __SYNTHESIS__
 template <int W> using ap_int = ac_int<W, true>;
 template <int W> using ap_uint = ac_int<W, false>;
@@ -2488,24 +2591,38 @@ template <class AC> struct ap_rng {
     return *this;
   }
 };
+// `using ac_int<W,S>::ac_int;` inherits ac_int's ctors, but C++ never inherits the
+// copy-shaped ctor (parameter = the base type), so building the wrapper from an ac_int
+// expression -- what every arith/logic op yields -- needs this explicit converting ctor.
+// Without it construction fails "non-scalar conversion" at EVERY width (verified 16/22/34/
+// 64/68); standard widths 8/16/32/64 dodge it only because they emit as native (u)intN_t,
+// not this shim. (>64 additionally has no native-int narrowing -- see getSCTypeName.)
 template <int W, bool Big = (W > 64)> struct ap_sel {
   struct s : ac_int<W, true> {
     using ac_int<W, true>::ac_int;
+    s() = default;
+    s(const ac_int<W, true> &v) : ac_int<W, true>(v) {}
     ap_rng<ac_int<W, true>> operator()(int hi, int lo) { return {*this, hi, lo}; }
   };
   struct u : ac_int<W, false> {
     using ac_int<W, false>::ac_int;
+    u() = default;
+    u(const ac_int<W, false> &v) : ac_int<W, false>(v) {}
     ap_rng<ac_int<W, false>> operator()(int hi, int lo) { return {*this, hi, lo}; }
   };
 };
 template <int W> struct ap_sel<W, true> {
   struct s : ac_int<W, true> {
     using ac_int<W, true>::ac_int;
+    s() = default;
+    s(const ac_int<W, true> &v) : ac_int<W, true>(v) {}
     ap_rng<ac_int<W, true>> operator()(int hi, int lo) { return {*this, hi, lo}; }
     operator long long() const { return this->to_int64(); }
   };
   struct u : ac_int<W, false> {
     using ac_int<W, false>::ac_int;
+    u() = default;
+    u(const ac_int<W, false> &v) : ac_int<W, false>(v) {}
     ap_rng<ac_int<W, false>> operator()(int hi, int lo) { return {*this, hi, lo}; }
     operator unsigned long long() const { return this->to_uint64(); }
   };
