@@ -89,11 +89,15 @@ def test_stream_ip_codegen():
         # call itself must appear.
         assert "hls::stream< int32_t >&" in code
         assert "vadd_stream(" in code
-        # The IP source must be copied into the project, textually included in
-        # kernel.cpp, and registered with the HLS tool.
+        # The IP source must be copied into the project and textually included
+        # in kernel.cpp.
         assert (Path(tmpdir) / "vadd_stream.cpp").exists()
         assert '#include "vadd_stream.cpp"' in (Path(tmpdir) / "kernel.cpp").read_text()
-        assert "add_files vadd_stream.cpp" in (Path(tmpdir) / "run.tcl").read_text()
+        # It must NOT also be add_files'd: the #include already puts the IP in
+        # kernel.cpp's translation unit, so registering it as a separate design
+        # file compiles the body twice and csynth fails in llvm-link on the
+        # duplicate symbol. See the comment in backend/hls.py.
+        assert "add_files vadd_stream.cpp" not in (Path(tmpdir) / "run.tcl").read_text()
 
 
 def test_stream_ip_sequential_cpu_paths_rejected():

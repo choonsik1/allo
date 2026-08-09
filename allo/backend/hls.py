@@ -626,20 +626,18 @@ class HLSModule:
                         os.path.join(project, "kernel.cpp"), "w", encoding="utf-8"
                     ) as kernel:
                         kernel.write(new_kernel)
-                    # Update tcl file
-                    new_tcl = ""
-                    with open(
-                        os.path.join(project, "run.tcl"), "r", encoding="utf-8"
-                    ) as tcl_file:
-                        for line in tcl_file:
-                            new_tcl += line
-                            if "# Add design and testbench files" in line:
-                                cpp_file = lib.impl.split("/")[-1]
-                                new_tcl += f"add_files {cpp_file}\n"
-                    with open(
-                        os.path.join(project, "run.tcl"), "w", encoding="utf-8"
-                    ) as tcl_file:
-                        tcl_file.write(new_tcl)
+                    # Deliberately NOT `add_files`-ing the IP source here.
+                    #
+                    # The loop above already splices `#include "<ip>.cpp"` into
+                    # kernel.cpp, so the IP's definition is part of kernel.cpp's
+                    # translation unit. Adding it as a design file as well
+                    # compiles it a second time, and csynth then dies in
+                    # llvm-link on the duplicate symbol:
+                    #
+                    #     Error in llvm-link
+                    #
+                    # This went unnoticed because no test ran csynth with an
+                    # ext_lib -- the existing ones only *generate* the project.
 
     def __repr__(self):
         if self.mode is None:
