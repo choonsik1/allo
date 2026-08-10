@@ -1,30 +1,28 @@
-# The SystemC / Catapult-HLS backend
+# The Allo SystemC / Catapult-HLS Emitter (`EmitSystemC.cpp`)
 
-`target="systemc"` turns an Allo `@df.region` dataflow design into synthesizable **SystemC**
-that Siemens **Catapult HLS** compiles to RTL. This document explains how that backend works.
-It is written for someone new to the Allo compiler (and to HLS emitters in general), so it
-starts with background and builds up to the mechanisms and the files involved.
+This document describes the SystemC emitter targeting Catapult HLS. `target="systemc"` turns an Allo `@df.region` dataflow design into synthesizable **SystemC**
+that Siemens **Catapult HLS** compiles to RTL.
 
-*If you only want the file list, jump to [Files](#files). If you want the emitter internals
-with line references, see the companion `mlir/lib/Translation/EmitSystemC.md`.*
+
+*See `mlir/lib/Translation/EmitSystemC.md` for more details.*
 
 ---
 
-## Background you need first
+## Background information
 
 **Allo** lets you write hardware as a Python **dataflow region** — a `@df.region` whose body
-constructs `Stream`/`Channel`/`Wire` links and calls `@df.kernel`s that talk over them. The
+constructs `Stream`/`Channel`/`Wire` links and calls `@df.kernel`s that talk over those links. The
 Allo frontend lowers that to **MLIR** (the compiler IR): each kernel becomes a `func.func`
 tagged `df.kernel`, the region top a `func.func` tagged `top`, and the links become Allo
 dialect ops (`allo.stream_construct`, `allo.channel_get`, …).
 
-**An HLS emitter** is the compiler stage that walks that MLIR and *prints C++* — no RTL yet.
-The C++ is then handed to a High-Level-Synthesis tool (Vitis, or here **Catapult**) which
-schedules it into Verilog. Allo has three emitters, and they form a **subclass chain**:
+**An HLS emitter** is the compiler stage that walks that MLIR and *prints C++ (or specifically SystemC)* — no RTL yet.
+The C++ (or SystemC) is then handed to a High-Level-Synthesis tool (Vitis, or here **Catapult**) which
+produces Verilog. For implementing the SystemC emitter, three emitters forming a **subclass chain** are used:
 
 ```
 VhlsModuleEmitter  (Vivado/Vitis: ap_int, #pragma HLS ...)          EmitVivadoHLS.cpp  (~3400 lines)
-   └── CatapultModuleEmitter  (swaps to ac_int, #pragma hls_...)    EmitCatapultHLS.cpp (~640 lines, thin)
+   └── CatapultModuleEmitter  (swaps to ac_int, #pragma hls_...)    EmitCatapultHLS.cpp (~640 lines)
           └── SystemCModuleEmitter  (SC_MODULE + Connections links) EmitSystemC.cpp     (~3000 lines)
 ```
 
@@ -34,7 +32,7 @@ of Vivado that swaps the vendor types (`ap_int` → `ac_int`) and pragmas (`#pra
 *structure* (functions → `SC_MODULE`s) and the *links* (arrays/`hls::stream` → MatchLib
 Connections), while still reusing the base for arithmetic, control flow, and most of the body.
 
-**The three build modes** — the same emitted C++, exercised three ways:
+**The three build modes** — the same emitted SystemC code, exercised three ways:
 
 | mode | what runs | `__SYNTHESIS__` | what it proves |
 |---|---|---|---|
@@ -42,22 +40,22 @@ Connections), while still reusing the base for arithmetic, control flow, and mos
 | `csyn` | Catapult synthesizes the SystemC → Verilog | defined | it synthesizes; area / Fmax |
 | `cosim` | the synthesized RTL runs in Xcelium vs the csim "golden" | defined | RTL is bit-exact with csim |
 
-**Key fact to keep in mind:** csim and synthesis compile *different code*. The emitter is full
-of `#ifdef __SYNTHESIS__` splits (the loop shape, the `ap_int` shim, `wait()` placement). So a
+**Key fact to keep in mind:** csim and synthesis compile *different code*. The emitter is using multiple (currently 5)
+`#ifdef __SYNTHESIS__` splits. So a
 green csim does **not** prove the RTL is right — run `cosim`.
 
 ---
 
-## The design decisions
+## Design choices
 
-**Decision 1 — subclass, don't rewrite.** `SystemCModuleEmitter` inherits from
+**1. Subclass, don't rewrite.** `SystemCModuleEmitter` inherits from
 `CatapultModuleEmitter` so it gets `ac_int`/`ac_fixed` codegen and Catapult loop pragmas for
 free, and only overrides the ~26 handlers that must produce SystemC. (If it inherited from
 Vivado directly it would emit Xilinx `#pragma HLS ...`, which Catapult ignores.) Every method
 definition in `EmitSystemC.cpp` is tagged `// override (base emitter)` or `// new (SystemC-only)`
 so you can tell reused-and-tweaked behavior from SystemC-specific behavior at a glance.
 
-**Decision 2 — three link primitives, three hardware realizations.** Allo's links are not a
+**2. Three link primitives, three hardware realizations.** Allo's links are not a
 cosmetic label; each maps to genuinely different RTL:
 
 | Allo link | RTL | handshake | buffered | use when |
@@ -65,36 +63,38 @@ cosmetic label; each maps to genuinely different RTL:
 | `Wire` | `sc_signal<T>` | none (combinational) | no | producer/consumer are cycle-locked |
 | `Channel` (valid_ready) | `Connections::Combinational<T>` | full valid/ready | no | flow-controlled point link |
 | `Channel` (valid_only) | raw `_dat` + `_vld` signals | valid only (no ready) | no | cheap one-way link; a race may drop a datum |
-| `Stream[T, depth]` | `Connections::Fifo` (`AlloFifoC`) | credit/handshake | yes | real elastic buffering between kernels |
+| `Stream[T, depth]` | `Connections::Fifo` (or `AlloFifoC`, its subclass, when `empty()`/`full()` are queried) | credit/handshake | yes | real elastic buffering between kernels |
 
-`Known limitation:` a `Wire` gives **zero storage and zero alignment** — it silently reads
-garbage unless the two kernels are cycle-locked; `valid_only` **drops** a datum if the consumer
+`Known limitation:` a `Wire` gives **zero storage and zero alignment** — it should be used carefully;
+`valid_only` **drops** a datum if the consumer
 is not looking that cycle. Both are deliberate performance points, not bugs — pick them only
 when you own the timing.
 
-**Decision 3 — `ac_int` everywhere, with an `ap_int` shim for the leftovers.** The reused Vivado
+**3. `ac_int` everywhere, with an `ap_int` shim for the leftovers.** The reused Vivado
 body still prints Vitis `ap_int` types and `x(hi,lo)` bit-slice syntax. Rather than override
 every such site, the emitted header aliases `ap_int` to a thin **`ac_int` subclass** that adds
 the two Vitis affordances (`(hi,lo)` and `>64-bit` narrowing). Under `__SYNTHESIS__` it collapses
 to a plain `ac_int` alias. `Known limitation:` a design that bit-slices a *packed >64-bit* value
 works in csim but can fail at `csyn` (Catapult rejects subclassing its builtin `ac_int`, CIN-15).
 
-**Decision 4 — a kernel's steady-state loop becomes `while(1)` for synthesis.** A dataflow
-kernel's outermost `for t in range(NUM_IT)` runs one router/PE *step* per iteration. Emitted as a
-finite loop before the terminal idle loop, Catapult classifies the whole body as **reset action**
-and never pipelines it (measured: 5–17 cycles/step). Emitting it **as `while(1)`** under
-`__SYNTHESIS__` gives Catapult the pipelinable shape (a step every clock). This only fires when
-the loop counter is *dead* (unused) and the kernel doesn't store to a memory port — so genuinely
-counted loops stay bounded. See "How it works" for the guard.
+**4. A kernel's repeat loop becomes `while(1)` for synthesis.** A dataflow kernel's
+outermost `for t in range(NUM_IT)` just means "run one step NUM_IT times" — `t` itself is
+never used. If the emitter keeps it as a finite `for`, Catapult treats the body as one-time
+setup code ("reset action") and won't pipeline it. Emitting it
+as `while(1)` under `__SYNTHESIS__` instead gives Catapult the shape it *can* pipeline — one
+step per clock, same results. The rewrite only fires when it's safe: the loop counter `t` is
+unused *and* the kernel doesn't store to a memory port (a forever-loop would corrupt a
+`C[i] += …` accumulator). A genuinely counted loop stays bounded. See "How it works" for the
+exact guard.
 
-**Decision 5 — random-access arrays become memory ports.** A 1-D array scanned strictly in order
+**5. Random-access arrays become memory ports.** A 1-D array scanned strictly in order
 (`a[i]` in one loop) is realized as a cheap **stream** (`a[i]` → `.Pop()`). Anything else (2-D,
 strided, random, re-read) can't be a FIFO, so it becomes a **memory port**: an addressable
 `AlloMem`/`AlloMemW` behind a req/rsp channel, indexed by a flattened row-major address.
 
 ---
 
-## How it works, stage by stage
+## Working principle
 
 ```
 @df.region  ──flatten──►  per-kernel SC_MODULEs  ──►  top wiring SC_MODULE  ──►  device header + tb
@@ -135,13 +135,13 @@ arrays become either top-level stream ports or internal `AlloMem`/`AlloMemW` mem
 
 **Stage 3 — the device header + testbench** (`emitModule`). Emits the C++ preamble: MatchLib
 Connections includes, the float shims, the `ap_int` shim, and the component library — `AlloMem`
-(read/write memory), `AlloMemW` (write-only), `AlloFifoC` (the FWFT buffered FIFO). Then a
+(read/write memory), `AlloMemW` (write-only), `AlloFifoC` (the buffered FIFO). Then a
 testbench that drives the boundary streams from `input<N>.data`, runs the design, and checks
 `output<N>.data`.
 
 ---
 
-## What the finished pipeline produces
+## The SystemC output
 
 For the `add1` kernel above (`a: int32[8]` in, `b: int32[8]` out), the emitter produces:
 
@@ -215,7 +215,7 @@ of `#ifdef __SYNTHESIS__` divergences.
 
 ---
 
-## Verification performed
+## Tests and Verification
 
 The backend was validated by re-implementing the open-source **RaveNoC** hand-written RTL router
 as an Allo design (`rvn_router.py`) and checking equivalence on RaveNoC's *own* captured traffic
@@ -225,9 +225,6 @@ as an Allo design (`rvn_router.py`) and checking equivalence on RaveNoC's *own* 
   QoS under concurrent contention — all deliver losslessly to the RaveNoC-correct ports.
 - **RTL (cosim):** the Catapult-synthesized Allo RTL is **bit-exact** with the csim golden on
   both synthetic contention vectors and the real 256-flit packet.
-- **Physical (Genus 23.1, Nangate 45nm, matched config):** Allo 448 MHz / 11.2k µm² vs RaveNoC
-  hand-RTL 547 MHz / 7.7k µm² — the HLS router is functionally equivalent, ~1.22× slower and
-  ~1.46× larger, with the gap attributable to the single-`SC_THREAD` arbitration recurrence.
 
 A `csim`-vs-`cosim` regression harness design (to catch `#ifdef`-divergence regressions) is
 sketched in `tests/dataflow/COSIM_REGRESSION.md`.
@@ -236,7 +233,7 @@ sketched in `tests/dataflow/COSIM_REGRESSION.md`.
 
 ## Files
 
-The SystemC backend's dependency closure (all required for `target="systemc"` to build and run):
+The SystemC backend's dependencies (all required for `target="systemc"` to build and run):
 
 | File | Role |
 |---|---|
@@ -249,7 +246,5 @@ The SystemC backend's dependency closure (all required for `target="systemc"` to
 | `allo/backend/hls.py` | the `target="systemc"` dispatch + `stypes`/`arg_dirs`/`unsigned` attr stamping |
 | `allo/backend/catapult.py` | the `platform=="systemc"` build / csim / csyn / cosim flow |
 
-Plus the dataflow frontend that provides the `Wire`/`Channel`/`Stream` Python types and the
-`emit_systemc` Python binding. Most of this is already on the `wire` branch; the emitter's own
-comment cleanup + the override/new tags + the `TODO: REVISIT` flags are the changes that
-accompany this document.
+Plus the dataflow frontend (allo/dataflow.py) that provides the `Wire`/`Channel`/`Stream` Python types and the
+`emit_systemc` Python binding.

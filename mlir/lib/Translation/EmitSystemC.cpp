@@ -882,6 +882,9 @@ void SystemCModuleEmitter::emitBitcast(arith::BitcastOp op) {  // override (base
   }
 
   // int<->int (or anything involving double): same-width memcpy over trivial PODs.
+  // TODO: REVISIT -- a double (Float64) bitcast falls here and keeps the memcpy, which
+  // would hit the same CIN-71 void*-cast rejection at synthesis that the fp16/fp32
+  // branches avoid. Latent only: no current design bitcasts a double.
   indent();
   emitValue(result);
   std::string rn = std::string(getName(result).str());

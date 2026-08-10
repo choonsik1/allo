@@ -1,16 +1,16 @@
 # The Allo SystemC / Catapult‑HLS Emitter (`EmitSystemC.cpp`)
 
 This document explains how Allo turns a `@df.region` dataflow design into synthesizable
-SystemC for Siemens Catapult HLS. It is **layered**:
+SystemC for Siemens Catapult HLS. It provides more details than SYSTEMC_BACKEND.md. It is **layered**:
 
 - **Part I — Overview** (everyone): what it is and the shape of what it emits.
 - **Part II — Design author's guide** (Allo users): how your design maps to RTL, and the
   pitfalls that bite.
 - **Part III — Maintainer's guide** (emitter devs): architecture, every mechanism with line
   references, and the Catapult‑specific workarounds.
-- **Part IV — Honest assessment & improvement backlog.**
+- **Part IV — Assessment & improvement backlog.**
 
-File: `mlir/lib/Translation/EmitSystemC.cpp` (~3030 lines). Entry point: `allo::emitSystemC`.
+File: `mlir/lib/Translation/EmitSystemC.cpp` (~3000 lines). Entry point: `allo::emitSystemC`.
 Reached from Python via `df.build(..., target="systemc", mode="csim"|"csyn"|"cosim")`.
 
 ---
@@ -19,18 +19,18 @@ Reached from Python via `df.build(..., target="systemc", mode="csim"|"csyn"|"cos
 
 ### What it is
 
-A **textual C++ emitter**. `SystemCModuleEmitter` subclasses **`CatapultModuleEmitter`**
+A **textual SystemC emitter**. `SystemCModuleEmitter` subclasses **`CatapultModuleEmitter`**
 (which subclasses `VhlsModuleEmitter`, the Vivado‑HLS emitter). It overrides the emit‑handlers
 that must produce Connections‑based SystemC and **defers to the base class for everything
 generic** (arithmetic, local arrays, functions, ac_int/ac_fixed codegen, Catapult loop
-pragmas). It prints C++ to an `os` stream — there is no intermediate representation of the
+pragmas). It prints SystemC to an `os` stream — there is no intermediate representation of the
 emitted code.
 
 ### What it emits
 
 One `@df.kernel` → one `SC_MODULE` with a clocked `SC_THREAD run()`. The `@df.region` top →
-one wiring `SC_MODULE` that instantiates the kernels and connects them with channels. Plus a
-large emitted **header preamble** (`device_header`) carrying type shims and the memory/FIFO
+one wiring `SC_MODULE` that instantiates the kernels and connects them with channels. Plus an
+emitted **header preamble** (`device_header`) carrying type shims and the memory/FIFO
 component library, and a **testbench** that drives the region.
 
 ```
@@ -49,7 +49,7 @@ component library, and a **testbench** that drives the region.
 | `csyn`  | Catapult synthesizes the design → Verilog   | it synthesizes; area/latency estimate |
 | `cosim` | Catapult RTL + SCVerify + Xcelium vs the csim golden | the **RTL** matches the C++ |
 
-**Key fact:** csim and synthesis compile *different code* — the emitter is full of
+**Key fact:** csim and synthesis compile *different code* — the emitter uses 5
 `#ifdef __SYNTHESIS__` splits (loop shape, the `ap_int` shim, `wait()` placement, memcpy
 guards). csim passing does **not** guarantee cosim passing; run cosim.
 
@@ -66,14 +66,11 @@ guards). csim passing does **not** guarantee cosim passing; run cosim.
 | **`Channel`** (valid_only) | raw `_dat` + `_vld` signals | valid only, no ready | no | `try_*` (put always succeeds) | a fast one‑way link where a dropped datum is acceptable |
 | **`Stream`** (depth ≥ 1) | `Connections::Fifo` (`AlloFifoC`) | credit/handshake | yes | `try_*`, `empty()`/`full()` | real elastic buffering between kernels |
 
-- A **`Wire` gives zero storage AND zero alignment** — it silently reads garbage unless the
-  two kernels are cycle‑locked. Only use it when you control the timing.
+- A **`Wire` gives zero storage AND zero alignment** — Only use it when you control the timing.
 - **`Stream.empty()/full()`** read a synchronous **sideband** the emitter maintains, not the
-  raw Connections flag (which is a sim‑only latched‑data flag that lags a cycle). This is why
-  a stream you query for empty/full must be **buffered (depth ≥ 1)** — a depth‑0 stream has no
-  FIFO to source the sideband.
+  raw Connections flag (which is a sim‑only latched‑data flag that lags a cycle).
 - A **`Stream` used by exactly one kernel** (that both produces and queries it) becomes a
-  **self‑FIFO**: one kernel owns both the enqueue and dequeue ends, wired as a self‑loop.
+  **self‑FIFO**: one kernel owns both the enqueue and dequeue ends, wired as a self‑loop. (special case, typically not used)
 
 ### Memory‑port arrays
 
@@ -88,15 +85,15 @@ A boundary array argument (`int32[N]`) becomes one of two things depending on ho
 ### Reset
 
 Default is **async** reset (`async_reset_signal_is`). Set env **`ALLO_SYNC_RESET`** to emit
-synchronous reset (`reset_signal_is`) — smaller flops, ASIC‑friendly DFT/timing.
+synchronous reset (`reset_signal_is`) — smaller flops.
 
 ### The loop shape (throughput)
 
 Your kernel's outermost `for t in range(NUM_IT)` is treated as the **steady‑state loop**:
 one iteration = one hardware step. Under synthesis it is emitted as `while(1)` so Catapult
 **pipelines** it (a step every clock). If it stayed a finite `for` before the terminal idle
-loop, Catapult would classify the whole body as *reset action* and never pipeline it (5–17
-cycles/step instead of 1). This transform only fires when it is safe (see Part III §2).
+loop, Catapult would classify the whole body as *reset action* and never pipeline it. 
+This transform only fires when it is safe (see Part III §2).
 
 ### Pitfalls (these have all caused real bugs)
 
@@ -128,7 +125,7 @@ ALLO_DESIGN_TOP=<kernel>_0 python csyn_subdir.py <module> <region> <abs-project-
 df.build(design, target="systemc", mode="cosim", project="out/cosim")(inputs...)
 ```
 Catapult In/Out ports degrade to raw signals if you run synthesis in the source dir instead
-of a build subdir (they become SCHD‑30); `csyn_subdir.py` and `mode="cosim"` handle this.
+of a build subdir (SCHD‑30); `csyn_subdir.py` and `mode="cosim"` handle this.
 
 ---
 
@@ -276,7 +273,7 @@ of `async_reset_signal_is` (hardcoded length 21). Signedness recovered by `linkP
 
 ---
 
-## Part IV — Honest assessment & improvement backlog
+## Part IV — Assessment & improvement backlog
 
 **Strengths.** Clean subclass reuse (only overrides the SystemC‑specific handlers). A coherent
 three‑primitive link model that maps to distinct, defensible RTL. Faithful Connections modeling

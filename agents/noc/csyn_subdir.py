@@ -54,6 +54,40 @@ def main():
         nlines = sum(1 for _ in f)
     print(f"[emit ] OK  {nlines} lines of SystemC  ({time.time()-t0:.1f}s)", flush=True)
 
+    # ALLO_DESIGN_TOP: synthesize a SUBMODULE instead of the whole region.
+    #
+    # WHY THIS MATTERS FOR EVERY AREA NUMBER WE REPORT. A @df.region() contains the design
+    # kernels AND the testbench kernels (the injector/collector that own the host arrays),
+    # plus the AlloMem memories backing those arrays. df.build points DESIGN_HIERARCHY at
+    # the region top, so Catapult synthesizes all of it and the reported area includes the
+    # harness. Comparing that against a reference whose top is the design alone (e.g.
+    # MatchLib's WHVCRouterTop) overstates our area substantially -- the AlloMem shows up
+    # by name in the Genus area report.
+    #
+    # Each kernel is emitted as its own SC_MODULE named <kernel>_0, whose ports are
+    # Connections::In/Out bound to the region's channels, so it is a legal synthesis top
+    # on its own. Setting ALLO_DESIGN_TOP=router_0 measures the design without the harness.
+    #
+    # The testbench is NOT removed -- csim and cosim still drive the full region. This only
+    # changes what Catapult treats as the top, so verification and measurement can differ:
+    #   csim/cosim  -> full region (needs drv/col to supply and check stimulus)
+    #   area/Fmax   -> ALLO_DESIGN_TOP=<kernel>_0
+    # Note cosim does NOT work against a submodule top: SCVerify wraps the design top and
+    # the input<k>.data -> AlloMem stimulus path disappears. Run the two separately.
+    design_top = os.environ.get("ALLO_DESIGN_TOP", "")
+    if design_top:
+        tcl = os.path.join(prj, "run.tcl")
+        with open(tcl, encoding="utf-8") as f:
+            s = f.read()
+        old = f"directive set -DESIGN_HIERARCHY {region_name}"
+        if old not in s:
+            sys.exit(f"[csyn ] cannot retarget: '{old}' not in run.tcl")
+        s = s.replace(old, f"directive set -DESIGN_HIERARCHY {design_top}", 1)
+        with open(tcl, "w", encoding="utf-8") as f:
+            f.write(s)
+        print(f"[csyn ] DESIGN_HIERARCHY {region_name} -> {design_top} "
+              f"(testbench kernels excluded from synthesis)", flush=True)
+
     syn = os.path.join(prj, "syn")          # <-- the whole point: a separate cwd
     os.makedirs(syn, exist_ok=True)
     cat = shutil.which("catapult") or os.path.join(
