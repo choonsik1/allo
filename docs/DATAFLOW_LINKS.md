@@ -183,7 +183,8 @@ def proc(c: int32[N]):
 before pushing — so the value is current **by construction**. Swap either pair of
 lines and the design is racy; nothing in the type system enforces this.
 
-(Full runnable comparison: `docs/dataflow_links_examples.py`, and `agents/noc/wire_sideband.py`.)
+(Full runnable comparison: `docs/dataflow_links_examples.py`; the underlying analysis of why a
+standalone `Wire` reads garbage is in `docs/noc/FINDINGS_wire_channel.md`.)
 
 ---
 

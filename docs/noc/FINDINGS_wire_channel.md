@@ -1,7 +1,8 @@
 # Wire / Channel / non-blocking — what we established, and what is still open
 
-Written 2026-07-30. Covers the designs in `agents/noc/` that exercise the new link
-concepts, and the toolchain gaps found while doing so. Read this before building another
+Written 2026-07-30. Covers the NoC/link experiments that exercised the new link concepts
+(the `agents/noc/` designs, since removed from this branch — recoverable in git history),
+and the toolchain gaps found while doing so. Read this before building another
 Wire or Channel design — several of the constraints below are silent failures.
 
 ---

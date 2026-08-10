@@ -79,7 +79,7 @@ def run_link_types(prj):
 #    carries a derived tag. The FIFO push/get is the barrier that keeps the wire aligned.
 #      gen:  side.put(tg)   THEN  link.put(d)      -> drive wire FIRST, then push
 #      proc: d = link.get() THEN  tg = side.get()  -> block on FIFO, THEN read wire
-#    Swap either pair and it is racy. (agents/noc/wire_sideband.py has the packed baseline.)
+#    Swap either pair and it is racy. (docs/noc/FINDINGS_wire_channel.md has the analysis.)
 # =====================================================================================
 DW = 16   # payload width (buffered)
 TW = 8    # tag width (derived metadata, needed only at the same instant)
