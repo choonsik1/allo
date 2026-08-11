@@ -771,6 +771,15 @@ def analyze_use_def(mod):
         if not isinstance(func, func_d.FuncOp):
             continue
         func_name = func.attributes["sym_name"].value
+        if func.is_external:
+            # A declaration with no body -- an IP spliced in as
+            # `func.func private @ip(...)`. It has no entry block to walk, and
+            # touching func.arguments or func.entry_block raises. Its argument
+            # names must still be registered, because a call site unions against
+            # `f"{callee}:{operand_number}"` without adding it first.
+            for i in range(len(func.type.inputs)):
+                uf_add(f"{func_name}:{i}")
+            continue
         for i, arg in enumerate(func.arguments):
             arg_name = f"{func_name}:{i}"
             uf_add(arg_name)

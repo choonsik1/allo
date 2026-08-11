@@ -3308,7 +3308,26 @@ class ASTTransformer(ASTBuilder):
                         return alloc_op
                     return for_op if not ctx.unroll else None
             # Allo library functions
-            new_args = build_stmts(ctx, node.args)
+            if isinstance(obj, (IPModule, ExternalModule)) and any(
+                shape is STREAM for _, shape in obj.args
+            ):
+                # Do not build stream arguments as value expressions. A bare
+                # stream name happens to build (it resolves to its construct op),
+                # but a *stream array element* -- `cr_e[0, 0]`, which is how a
+                # mesh design names its links -- does not: the array symbol is a
+                # tuple of constructs, so build_Subscript fails with
+                # "'tuple' object has no attribute 'result'".
+                #
+                # Nothing needs them anyway: the branch below re-derives each
+                # stream through get_stream_name(), and the copy-back loop skips
+                # stream operands (they pass by reference). So leave a None
+                # placeholder to keep the positions aligned with call_operands.
+                new_args = [
+                    None if shape is STREAM else build_stmt(ctx, arg)
+                    for arg, (_, shape) in zip(node.args, obj.args)
+                ]
+            else:
+                new_args = build_stmts(ctx, node.args)
             if isinstance(obj, (IPModule, ExternalModule)):
                 # input_idx / output_idx give per-argument direction (which args
                 # the IP reads vs writes). ExternalModule has always carried them;
