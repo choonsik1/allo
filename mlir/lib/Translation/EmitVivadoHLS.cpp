@@ -1505,9 +1505,12 @@ void allo::hls::VhlsModuleEmitter::emitAlloc(OpType op) {
     name = attr.getValue().str();
   }
 
-  indent();
   Value result = op.getResult(); // memref
   fixUnsignedType(result, op->hasAttr("unsigned"));
+  // Pragmas that must PRECEDE the declaration (Catapult's hls_resource). No-op in this
+  // emitter and every other one except Catapult; see EmitBaseHLS.h.
+  emitArrayDirectivesPreheader(result);
+  indent();
   emitArrayDecl(result, false, name);
   os << ";";
   emitInfoAndNewLine(op);

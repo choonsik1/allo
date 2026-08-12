@@ -129,6 +129,13 @@ protected:
   // that FOLLOWS them, unlike Vivado's in-body pragmas -- see the Catapult override.
   virtual void emitLoopDirectivesPreheader(Operation *op) {}
   virtual void emitArrayDirectives(Value memref) {}
+  // Array directives that must be emitted BEFORE the declaration (default: none).
+  // Same asymmetry as emitLoopDirectivesPreheader: Vivado's array pragmas follow the
+  // declaration they name, but Catapult's #pragma hls_resource binds to the variable
+  // DECLARED AFTER IT. Emitted after the declaration it is silently ineffective, and
+  // Catapult then picks a 1R1W RAM for the array -- which serialises every read and,
+  // because Genus treats the RAM as an unresolved black box, reports its area as ZERO.
+  virtual void emitArrayDirectivesPreheader(Value memref) {}
   virtual void emitFunctionDirectives(func::FuncOp func, ArrayRef<Value> portList) {}
 
   virtual void emitFunction(func::FuncOp func) {}

@@ -43,6 +43,7 @@ public:
   void emitStreamEmpty(allo::StreamEmptyOp op) override;
   void emitStreamFull(allo::StreamFullOp op) override;
   void emitArrayDirectives(Value memref) override;
+  void emitArrayDirectivesPreheader(Value memref) override;
   void emitFunction(func::FuncOp func) override;
 
 protected:

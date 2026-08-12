@@ -394,12 +394,67 @@ void CatapultModuleEmitter::emitArrayDirectives(Value memref) {
     }
   }
 
-  // For other array directives, delegate to the parent implementation
-  // but we need to call the parent method explicitly
-  // allo::hls::VhlsModuleEmitter::emitArrayDirectives(memref);
-  // Catapult ignores #pragma HLS array_partition.
-  // TODO: Implement Catapult-specific memory directives (e.g. via TCL or other
-  // pragmas)
+  // Catapult ignores #pragma HLS array_partition, so nothing is emitted AFTER the
+  // declaration. The memory-implementation directive it does understand is
+  // #pragma hls_resource, which must PRECEDE the declaration -- see
+  // emitArrayDirectivesPreheader below.
+}
+
+// A fully-partitioned array means REGISTERS, and Catapult spells that
+//   #pragma hls_resource <name>_rsc variables="<name>" map_to_module="[Register]"
+// placed immediately BEFORE the declaration (verified: Catapult acknowledges it with
+// CIN-341 "Pragma 'hls_resource<..>' detected, variable = '..', module = '[Register]'").
+//
+// WHY THIS MATTERS. Without it Catapult maps any array big enough to a synchronous RAM
+// (its generated tcl does `solution library add ccs_sample_mem`). For a flit buffer read
+// once per slot that is fatal twice over: a 1R1W RAM allows ONE read per cycle, so five
+// slot reads cannot be scheduled together (SCHD-4 "insufficient resources ...  5 are
+// needed, but only 1 instances are available"), and Genus then treats the RAM as an
+// unresolved black box whose area counts as ZERO -- an 8-deep buffer measured SMALLER
+// than a 2-deep one. This used to be worked around with a TCL directive
+// (`directive set /<top>/<proc>/<array>:rsc -MAP_TO_MODULE {[Register]}`), which cannot
+// reach a cosim build because that flow never patches run.tcl.
+//
+// Reusing partition rather than inventing a primitive: s.partition(.., Partition.Complete)
+// already MEANS "make this registers" -- that is exactly how the Vivado backend
+// implements it -- so the Catapult spelling of the same request belongs here.
+//
+// SCOPE: LOCAL arrays only. emitAlloc returns early for a memref that is already declared
+// (a function port), so a partitioned ARGUMENT never reaches here. Ports are a different
+// Catapult concept anyway (hls_design_interface), not hls_resource -- so a partitioned
+// port silently gets no directive. Not a problem for dataflow kernels, whose state arrays
+// are all locals, but worth knowing before reaching for this on a port.
+void CatapultModuleEmitter::emitArrayDirectivesPreheader(Value memref) {
+  auto type = llvm::dyn_cast<MemRefType>(memref.getType());
+  if (!type || !type.hasStaticShape())
+    return;
+
+  // Streams are ac_channel, not memories -- no resource directive applies.
+  if (auto strAttr = llvm::dyn_cast_or_null<StringAttr>(type.getMemorySpace()))
+    if (strAttr.getValue().str().substr(0, 6) == "stream")
+      return;
+
+  // Only a COMPLETE partition maps to registers. A block/cyclic partition asks for
+  // several smaller memories, which is a different directive; leave those to the RAM.
+  if (!getLayoutMap(type))
+    return;
+  for (int64_t dim = 0; dim < type.getRank(); ++dim)
+    if (!isFullyPartitioned(type, dim))
+      return;
+
+  // The name must already exist: emitAlloc calls this before emitArrayDecl, which is
+  // what ADDS the name. Resolve it the same way emitArrayDecl will, via the alloc's
+  // "name" attribute, falling back to the declared name when there is no attribute.
+  std::string name;
+  if (auto *def = memref.getDefiningOp())
+    if (auto attr = llvm::dyn_cast_or_null<StringAttr>(def->getAttr("name")))
+      name = attr.getValue().str();
+  if (name.empty())
+    return; // unnamed temporary: nothing stable to bind the pragma to
+
+  indent();
+  os << "#pragma hls_resource " << name << "_rsc variables=\"" << name
+     << "\" map_to_module=\"[Register]\"\n";
 }
 
 void CatapultModuleEmitter::emitFunction(func::FuncOp func) {

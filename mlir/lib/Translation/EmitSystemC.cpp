@@ -949,6 +949,8 @@ void SystemCModuleEmitter::emitGetSlice(allo::GetIntSliceOp op) {  // override (
   Value num = op.getNum();
   unsigned nw = num.getType().getIntOrFloatBitWidth();
   unsigned w = result.getType().getIntOrFloatBitWidth();
+  // ac_int::slc<w>(lo) is a member fn; the emitted num may be a plain C int with
+  // no .slc -> wrap it in an ac_int temp (mirror of emitSetSlice's set_slc case).
   indent();
   emitValue(result); // "<T> <res>"
   os << ";\n";
@@ -1260,6 +1262,10 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {  // new (System
       indent(); os << "  return " << pn << "_dat.read();\n";
       indent(); os << "}\n";
       // Mirrors PopNB: one edge is consumed whether or not a datum was there.
+      // TODO: REVISIT -- m is written before the vld check, so a caller that
+      // ignores the returned bool reads a stale datum. This matches PopNB's "val
+      // is undefined when ok is false" contract, but is a silent trap; consider
+      // leaving m untouched on a miss once callers are audited.
       indent(); os << "#pragma design modulario <in>\n";
       indent(); os << "bool " << pn << "_try_get(" << T << " &m) {\n";
       indent(); os << "  wait();\n";
