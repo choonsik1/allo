@@ -3362,7 +3362,13 @@ class ASTTransformer(ASTBuilder):
                         )
                         input_types.append(stream.result.type)
                         call_operands.append(stream.result)
-                        if output_idx is not None and idx in output_idx:
+                        # A SystemC port states its own direction in the type
+                        # (Connections::In vs Out), so sc_dirs is authoritative
+                        # and input_idx/output_idx are neither needed nor read.
+                        sc_dirs = getattr(obj, "sc_dirs", None)
+                        if sc_dirs is not None:
+                            stream_dirs += sc_dirs[idx]
+                        elif output_idx is not None and idx in output_idx:
                             stream_dirs += "o"
                         elif input_idx is not None and idx in input_idx:
                             stream_dirs += "i"

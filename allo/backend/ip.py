@@ -81,9 +81,17 @@ def stream_element_type(stream_type: str) -> str:
 
 
 class _StreamShape:
-    """Sentinel shape for an ``hls::stream<T> &`` parameter.
+    """Sentinel shape for a channel-typed IP port -- NOT an HLS-only concept.
 
-    It is deliberately not sized: a stream is neither a scalar ``()``, an array
+    One Allo ``Stream[T, depth]`` has a different spelling per backend:
+    ``hls::stream<T> &`` for Vitis/Vivado HLS, ``Connections::In/Out<T>`` for
+    SystemC. Both parsers mark the port with this same sentinel, which is what
+    lets everything downstream be shared -- the IPModule branch in
+    ``ir/builder.py``, the ``stream_dirs`` attribute, and
+    ``dataflow.move_stream_to_interface`` all test ``shape is STREAM`` and never
+    look at the type string.
+
+    It is deliberately not sized: a channel is neither a scalar ``()``, an array
     (tuple of dims), nor a pointer ``None``, so shape-dispatching code fails
     loudly rather than silently emitting a bad cast for it.
     """
@@ -123,7 +131,8 @@ def parse_cpp_function(code, target_function):
             - shape is () for scalars
             - shape is None for pointers
             - shape is STREAM for hls::stream<T> references, in which case the
-              type is the stream type as written, e.g. "hls::stream<int8_t>"
+              type is the stream type as written, e.g. "hls::stream<int8_t>".
+              (SystemC IPs reach the same STREAM shape via parse_sc_module.)
     """
     # Function pattern that works for both declarations and definitions
     function_pattern = r"(\w+)\s+" + re.escape(target_function) + r"\s*\((.*?)\)\s*[{;]"
@@ -213,6 +222,64 @@ def parse_cpp_function(code, target_function):
     return result
 
 
+def _sc_module_body(code, target_module):
+    """The brace-matched body of `SC_MODULE(name) { ... };`, or None."""
+    m = re.search(r"SC_MODULE\s*\(\s*" + re.escape(target_module) + r"\s*\)\s*\{", code)
+    if m is None:
+        return None
+    depth, i = 1, m.end()
+    while i < len(code) and depth:
+        depth += (code[i] == "{") - (code[i] == "}")
+        i += 1
+    return code[m.end() : i - 1] if depth == 0 else None
+
+
+# A Connections port MEMBER declaration, e.g. `Connections::In<word_t> din;`.
+# Direction is in the type, so unlike hls::stream it needs no input_idx.
+_SC_PORT = re.compile(
+    r"Connections\s*::\s*(In|Out)\s*<\s*(" + _TEMPLATE_ARGS + r")\s*>\s*(\w+)\s*;"
+)
+
+# Clock and reset. NOT dataflow ports -- they stay out of the Allo-visible
+# argument list, or the arity would disagree with the `ip(a, b)` call site.
+# But their NAMES must be captured: the emitter binds them at instantiation,
+# and a third-party module may call them clock/reset_n/rstn, not clk/rst.
+_SC_CLK = re.compile(r"sc_in_clk\s+(\w+)\s*;")
+_SC_RST = re.compile(r"sc_in\s*<\s*bool\s*>\s*(\w+)\s*;")
+
+
+def parse_sc_module(code, target_module):
+    """Ports of an SC_MODULE, in declaration order. None if not found.
+
+    Returns (args, dirs, names, clk, rst): `args` is [(type, STREAM), ...] in
+    the shape parse_cpp_function returns, `dirs` is 'i'/'o' per port, `names`
+    are the member names (SystemC binds by name, not position), and clk/rst are
+    the control-signal names the emitter must bind -- or None if absent.
+    """
+    body = _sc_module_body(code, target_module)
+    if body is None:
+        return None
+    args, dirs, names = [], "", []
+    for direction, payload, name in _SC_PORT.findall(body):
+        # Same (type, STREAM) pair parse_cpp_function returns, so everything
+        # downstream -- builder.py's guard, stream_dirs, the hoist -- is shared.
+        args.append((f"Connections::{direction}<{payload.strip()}>", STREAM))
+        dirs += "i" if direction == "In" else "o"
+        names.append(name)
+    if not args:
+        raise ValueError(
+            f"SC_MODULE '{target_module}' declares no Connections::In/Out ports. "
+            "Allo binds an IP through its dataflow channels; a module with none "
+            "cannot be wired into a region."
+        )
+    clks, rsts = _SC_CLK.findall(body), _SC_RST.findall(body)
+    # Exactly one, or make the caller say which -- guessing produces a design
+    # that elaborates and then hangs on an unreset channel.
+    clk = clks[0] if len(clks) == 1 else None
+    rst = rsts[0] if len(rsts) == 1 else None
+    return args, dirs, names, clk, rst
+
+
 class IPModule:
     def __init__(
         self,
@@ -260,11 +327,23 @@ class IPModule:
                     "Please install Vivado/Vitis HLS and add it to your PATH"
                 )
 
-        # Parse signature
+        # Parse the signature. HLS first: a free function with hls::stream<T>&
+        # parameters. If the file has no such function, try SystemC: an
+        # SC_MODULE whose ports are Connections members. Both yield the same
+        # [(type, STREAM), ...] list, so everything downstream is shared.
         with open(self.impl, "r", encoding="utf-8") as f:
             code = f.read()
-            self.args = parse_cpp_function(code, self.top)
-        assert self.args is not None, f"Failed to parse {self.impl}"
+        self.args = parse_cpp_function(code, self.top)
+        self.is_systemc = self.args is None
+        self.sc_dirs = self.sc_names = self.sc_clk = self.sc_rst = None
+        if self.is_systemc:
+            parsed = parse_sc_module(code, self.top)
+            if parsed is None:
+                raise ValueError(
+                    f"'{self.top}' is neither a function nor an SC_MODULE "
+                    f"in {self.impl}"
+                )
+            self.args, self.sc_dirs, self.sc_names, self.sc_clk, self.sc_rst = parsed
         self.lib_name = f"py{self.top}_{hash(time.time_ns())}"
         self.c_wrapper_file = os.path.join(self.temp_path, f"{self.lib_name}.cpp")
 
