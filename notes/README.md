@@ -17,12 +17,15 @@ Documentation that lives next to its code, deliberately:
 - `mlir/lib/Translation/EmitSystemC.md` — the layered emitter walkthrough
 - `docs/SYSTEMC_BACKEND.md` — user-facing backend docs
 - `docs/DATAFLOW_LINKS.md` — link types, with a runnable companion
-- `simulator_profiling/` — the profiling harness, its results, and the LightningSim
-  stage runs (`README.md`, `RESULTS.md`, `RUN.md`, `lightningsim_*/`)
 - `examples/systemc/VERDICTS.md` — per-example SystemC outcomes
 
-The NoC evaluation is a **separate repo**, `/home/zsm9/final_noc` — designs, harnesses,
-synthesis scripts and the Allo-vs-reference comparison.
+Two things live **outside this repo**:
+
+- `/home/zsm9/simulator_profiling` — the JIT-simulator profiling harness, its results, and
+  the LightningSim stage runs (`README.md`, `RESULTS.md`, `RUN.md`, `lightningsim_*/`).
+  Moved out of the repo on 2026-08-15; `SIMULATOR.md` cites it throughout.
+- `/home/zsm9/final_noc` — the NoC evaluation: designs, harnesses, synthesis scripts and
+  the Allo-vs-reference comparison.
 
 - `papers/` — reference PDFs cited by `SIMULATOR.md`
 - `archive/` — superseded or inherited; see below

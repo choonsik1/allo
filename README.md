@@ -125,7 +125,6 @@ The NoC evaluation itself lives in a **separate repo**, `final_noc`.
 | `notes/` | project state, simulator, backend, gotchas — **start here** |
 | `agents/` | LLM/agent interface-IP experiments |
 | `devtools/` | compiler-pipeline introspection and sweep scripts |
-| `simulator_profiling/` | JIT simulator profiling harness and results |
 
 ## Documentation
 

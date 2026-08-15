@@ -106,3 +106,7 @@ tests/dataflow/*/
 !tests/dataflow/sparse/
 !tests/dataflow/__pycache__/
 *.prj/
+
+# Internal binary documents. Kept on disk, never committed: large, unreviewable in a
+# diff, and this fork's remote is a public GitHub fork.
+*.docx

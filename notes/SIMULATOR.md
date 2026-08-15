@@ -36,8 +36,9 @@ export LLVM_BUILD_DIR=/work/shared/common/llvm-project-main/build-rhel8      # b
 export PYTHONPATH=/home/zsm9/allo_sup && export OMP_NUM_THREADS=8
 python tests/dataflow/test_df_unit.py            # golden
 python tests/dataflow/test_region_stateful.py
-python simulator_profiling/nb_nondeterminism.py  # expect a SINGLE outcome
-python simulator_profiling/read_barrier_test.py  # expect [8]
+# the profiling harness now lives OUTSIDE the repo, at /home/zsm9/simulator_profiling
+python /home/zsm9/simulator_profiling/nb_nondeterminism.py  # expect a SINGLE outcome
+python /home/zsm9/simulator_profiling/read_barrier_test.py  # expect [8]
 ```
 
 Plain `conda run` fails with "Unknown function top"; overriding `LLVM_BUILD_DIR` to
@@ -337,7 +338,7 @@ csynth` → solution dir → LightningSim, sitting *beside* our simulator. **Vit
 same wrong-scheduler risk as §4.3.
 
 **Stage 0 — PASS.** LightningSim `top` = 21 cycles = csynth `top` = 21, exact. Details in
-`simulator_profiling/lightningsim_stage0/`. It also **measured** the 0.4× makespan gap:
+`/home/zsm9/simulator_profiling/lightningsim_stage0/`. It also **measured** the 0.4× makespan gap:
 ours says 7, both oracles say 21, and `store_res0.1` spans cycles 6–20 — the unclocked
 wrappers, exactly as hypothesised.
 

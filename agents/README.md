@@ -17,34 +17,44 @@ primitives, their methods, and the rules for combining them. Ground truth is
 `allo/ir/types.py` (types and methods) and `allo/backend/hls.py` (the backend guard) — the
 document exists so an agent does not invent API outside that table.
 
-## Blocks
+## Contents — measured state, 2026-08-15
 
-| File | Block |
+| File | State |
 |---|---|
-| `eva_blocks.py` | EVA blocks as plain functions — router, switch, PE — with agent-generated connections |
-| `pe_alu.py` | the simplest possible PE: `(op1, op2, opcode) -> result`, no state, no sequencer |
-| `eva_pe_router_split.py` | the EVA design split into router + PE |
-| `eva_sb_syscredit_rtprime.py` | EVA switchbox with system-credit flow control |
+| `INTERCONNECT.md` | **good** — a document, no dependencies to rot |
+| `eva_blocks.py` | **good** — EVA blocks as plain functions (router, switch, PE) on abstract ports; imports cleanly |
+| `pe_alu.py` | **good** — the simplest possible PE: `(op1, op2, opcode) -> result`, no state, no sequencer; imports cleanly |
+| `eva_pe_router_split.py` | **stale, kept** — the EVA design split into router + PE. Unique (not a copy), but dies at `s.partition("node_{i}_{j}:...")` with `RuntimeError: Target function node_0_0 not found`: the kernel-instance naming it assumes no longer matches current Allo. Kept because nothing else holds this split. |
 
-## Callability experiments
+## What was deleted, and why
 
-The load-bearing question for this whole approach is whether a `@df.kernel` can *call* a
-stripped block function — one that mutates arrays and declares locals — without losing
-anything at lowering. These scripts answer it:
+Six files were removed on 2026-08-15 after every file here was re-run. All are recoverable
+from git history.
 
-| File | Checks |
-|---|---|
-| `confirm_blocks.py` | every stripped block builds on the simulator, called by its own name |
-| `exp_block_callable.py` | can a kernel call an array-mutating, locals-declaring block at all |
-| `exp_block_callable2.py` | the harder parameter shapes — 2-D state (`buf[5,2]`), `int32[...]` params |
-| `exp_err.py` | error paths |
-| `cosim_split_sim.py` | smoke test for the split EVA (router + single-cycle PE) on the JIT simulator |
+**Five callability experiments** — `confirm_blocks.py`, `exp_block_callable.py`,
+`exp_block_callable2.py`, `exp_err.py`, `cosim_split_sim.py`. Every one failed at import on
+`router_XY_stripped` / `router_XY_PEs_bp_stripped`. One cause: those stripped router blocks
+lived in `agents/noc/`, which commit `779e435` deleted from this branch — that cleanup moved
+the "still-useful pieces" out and left these dependents dangling.
 
-## Status
+They tested the load-bearing question for this whole approach: whether a `@df.kernel` can
+*call* a stripped block function — one that mutates arrays and declares locals — without
+losing anything at lowering. To revive them, restore their dependency first:
 
-Exploratory. The blocks build and the callability results are in the scripts' own output;
-the generator that would consume `INTERCONNECT.md` is not built yet. See
-[`../notes/STATE.md`](../notes/STATE.md) for where this sits relative to the rest of the work.
+```bash
+git checkout 779e435^ -- agents/noc     # all 53 files
+```
 
-**Known finding worth keeping:** block parameters must be annotated — an unannotated
-parameter silently changes how the block lowers.
+**One duplicate** — `eva_sb_syscredit_rtprime.py`, byte-identical (1,785 lines, 88 KB) to
+`examples/systemc/eva_example/eva_sb_syscredit_rtprime.py`. That directory is the maintained
+home: it has the build and cosim drivers, workloads and a README.
+
+The generator that would consume `INTERCONNECT.md` was never built.
+
+**The one finding worth keeping, because it is not recorded anywhere else:** block
+parameters must be annotated — an unannotated parameter silently changes how the block
+lowers. The experiments that established this no longer run, and they never wrote their
+results down, so this line is the surviving record.
+
+See [`../notes/STATE.md`](../notes/STATE.md) for where this sits relative to the rest of
+the work.
