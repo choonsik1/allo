@@ -1,11 +1,18 @@
 # Print a compact AST of one function in a Python file.
 # Usage:  python print_ast.py <file.py> [function_name]
-#   e.g.  python print_ast.py stream_producer_consumer.py top
+#   e.g.  python print_ast.py ../examples/stream_producer_consumer.py top
 # Pure stdlib — no allo / conda env needed.
 import ast
+import os
 import sys
 
-path = sys.argv[1] if len(sys.argv) > 1 else "stream_producer_consumer.py"
+# Default to the example this tool was written against; it lives in examples/,
+# while this script lives in devtools/.
+_DEFAULT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "examples", "stream_producer_consumer.py")
+
+path = sys.argv[1] if len(sys.argv) > 1 else _DEFAULT
 want = sys.argv[2] if len(sys.argv) > 2 else None
 
 tree = ast.parse(open(path).read())

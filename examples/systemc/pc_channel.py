@@ -19,6 +19,16 @@ Standalone usage (dump / simulate):
     python pc_channel.py mlir      # print the frontend MLIR
     python pc_channel.py systemc   # print the generated SystemC
     python pc_channel.py csim      # build + run csim, check B == A   (default)
+
+`csim` additionally needs a SystemC library to link against. Catapult ships one, but its
+libsystemc wants a newer libstdc++ than the system one -- without the second line here the
+build succeeds and then dies at run time with GLIBCXX_3.4.26 (see notes/ALLO_GOTCHAS.md):
+
+    export SYSTEMC_HOME=$MGC_HOME/shared
+    export ALLO_CXX_EXTRA="-L$CONDA_PREFIX/lib -Wl,-rpath,$CONDA_PREFIX/lib"
+
+Or skip both and run the project's self-contained `csim.sh`, which uses Catapult's own g++
+and bundled SystemC and needs only MGC_HOME.
 """
 import io
 import os

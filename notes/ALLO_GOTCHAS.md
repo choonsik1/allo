@@ -114,6 +114,30 @@ writing a comparison harness that assumes it can.
 
 ## 4. Environment
 
+### SystemC csim needs `SYSTEMC_HOME` **and** `ALLO_CXX_EXTRA`
+
+Calling a `mode="csim"` module (`mod(A, B)`) links against a SystemC library, and fails two
+ways in sequence if the environment is incomplete:
+
+```
+RuntimeError: Set SYSTEMC_HOME for systemc csim.          # hls.py:974
+./sim: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.26' not found
+```
+
+The second is the nastier one: the g++ build **succeeds**, then the binary dies at run time,
+and `hls.py` reports only `RuntimeError: Simulation failed.` Catapult's bundled
+`libsystemc-2.3.3.so` needs a newer libstdc++ than the system one, so point the linker at
+conda's:
+
+```bash
+export SYSTEMC_HOME=$MGC_HOME/shared      # has include/systemc.h + lib/libsystemc.so
+export ALLO_CXX_EXTRA="-L$CONDA_PREFIX/lib -Wl,-rpath,$CONDA_PREFIX/lib"
+```
+
+The generated project's own `csim.sh` sidesteps both — it uses Catapult's `g++` and its
+bundled SystemC, and needs only `MGC_HOME`. If `mod()` is being awkward, run `bash csim.sh`
+in the project dir instead and read `output0.data`.
+
 ### Never override `LLVM_BUILD_DIR`
 
 The conda `allo` env already points it at the RHEL8-compatible build

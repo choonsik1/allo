@@ -14,10 +14,11 @@ import sys
 # editable package happens to be installed (/home/zsm9/allo). Without this,
 # running from examples/ picks up the installed package, which is an older
 # checkout missing newer bindings like emit_systemc. Prepend repo root (for
-# `import allo`) and this dir (for `import stream_producer_consumer`).
+# `import allo`) and examples/ (for `import stream_producer_consumer` -- this
+# script lives in devtools/, the design it dumps lives in examples/).
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _HERE)
+sys.path.insert(0, os.path.join(_REPO_ROOT, "examples"))
 sys.path.insert(0, _REPO_ROOT)
 
 BACKENDS = ["frontend", "vhls", "catapult", "systemc", "tapa", "ihls", "xls", "llvm", "ll"]

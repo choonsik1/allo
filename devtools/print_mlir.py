@@ -7,7 +7,7 @@ import os
 import sys
 
 sys.path.insert(0, "/home/zsm9/allo_sup")
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, "/home/zsm9/allo_sup/examples")  # the design lives in examples/
 
 import allo.dataflow as df
 from stream_producer_consumer import top
