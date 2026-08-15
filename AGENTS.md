@@ -19,12 +19,18 @@
 - Add tests and documentation for new features in `tests/` and `docs/`
 
 # Branching policy
-- `main` is the fork's integration HEAD, its default branch, and the home for all fork-local docs. This is the working branch. It is NOT a mirror of upstream.
-- Upstream (`cornell-zhang/allo`) is tracked via the `upstream` remote; compare against `upstream/main`. There is no local mirror branch and no `next` branch.
-- Remote convention: `origin` = `sunwookim028/allo` (the fork), `upstream` = `cornell-zhang/allo`.
-- New features/fixes go on `feature/*` or `fix/*` branches based on `upstream/main`, one branch per upstream PR.
-- Fork-local files (docs, notes, CLAUDE.md, STATE.md, BRANCHES.md) live on `main` only — never on feature branches destined for upstream.
-- See `BRANCHES.md` for current open PRs and branch dependencies.
+- Remotes here, and note that `origin` is **upstream**, not a fork:
+  `origin` = `cornell-zhang/allo` (upstream), `mine` = `choonsik1/allo` (push here),
+  `sup` = `sunwookim028/allo`, plus `fangtang` / `vincent` for collaborators' branches.
+- `main` tracks `origin/main` and is a plain upstream mirror — do not commit fork-local work
+  to it.
+- `SystemC-emitter` is the working branch and the home for all fork-local docs
+  (`CLAUDE.md`, `AGENTS.md`, `notes/`). It pushes to `mine`.
+- New features/fixes destined upstream go on `feature/*` or `fix/*` branches based on
+  `origin/main`, one branch per PR, and must NOT carry the fork-local docs.
+- `notes/STATE.md` holds current work and open branches. There is no top-level `STATE.md`
+  or `BRANCHES.md`; the `sup` fork's versions are in `notes/archive/` for provenance only
+  and describe a different project.
 
 # Don'ts
 - Do not modify repository structure without approval
