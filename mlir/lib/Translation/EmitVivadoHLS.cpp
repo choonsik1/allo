@@ -326,7 +326,9 @@ public:
   }
   void visitCeilDivExpr(AffineBinaryOpExpr expr) {
     // This is super inefficient.
-    os << "(";
+    // "((" not "(": the tail below emits ") / " + rhs + ")", i.e. two ')'.
+    // A single '(' emitted unbalanced `(a + b - 1) / b)`, which does not compile.
+    os << "((";
     visit(expr.getLHS());
     os << " + ";
     visit(expr.getRHS());
@@ -446,6 +448,7 @@ public:
   bool visitOp(memref::GlobalOp op) { return emitter.emitGlobal(op), true; }
   bool visitOp(memref::DeallocOp op) { return true; }
   bool visitOp(memref::SubViewOp op) { return emitter.emitSubView(op), true; }
+  bool visitOp(memref::CopyOp op) { return emitter.emitCopy(op), true; }
   bool visitOp(memref::ReshapeOp op) { return emitter.emitReshape(op), true; }
 
   /// Tensor-related statements.
@@ -1717,14 +1720,101 @@ void allo::hls::VhlsModuleEmitter::emitGlobal(memref::GlobalOp op) {
   }
 }
 
-void allo::hls::VhlsModuleEmitter::emitSubView(memref::SubViewOp op) {
+/// memref.copy -- a whole-array copy, produced by a slice assignment such as
+/// `local_A[pid, :] = const_array`. No HLS emitter implemented it, so any such
+/// assignment aborted the emitter with "'memref.copy' op is unsupported operation"
+/// (the TypeSwitch default). Emit it as an explicit element-wise nested loop, which is
+/// what the backends can schedule; HLS unrolls or pipelines it like any other loop.
+void allo::hls::VhlsModuleEmitter::emitCopy(memref::CopyOp op) {
+  auto src = op.getSource();
+  auto dst = op.getTarget();
+  auto srcType = llvm::dyn_cast<MemRefType>(src.getType());
+  auto dstType = llvm::dyn_cast<MemRefType>(dst.getType());
+  if (!srcType || !dstType || !srcType.hasStaticShape() ||
+      !dstType.hasStaticShape()) {
+    emitError(op, "memref.copy requires statically shaped operands.");
+    return;
+  }
+  auto shape = srcType.getShape();
+
   indent();
-  emitArrayDecl(op.getResult(), true);
+  os << "{\n";
+  addIndent();
+  unsigned dimIdx = 0;
+  for (auto dim : shape) {
+    indent();
+    os << "for (int _cp" << dimIdx << " = 0; _cp" << dimIdx << " < " << dim
+       << "; ++_cp" << dimIdx++ << ") {\n";
+    addIndent();
+  }
+  indent();
+  emitValue(dst);
+  for (unsigned i = 0; i < shape.size(); ++i)
+    os << "[_cp" << i << "]";
   os << " = ";
+  emitValue(src);
+  for (unsigned i = 0; i < shape.size(); ++i)
+    os << "[_cp" << i << "]";
+  os << ";\n";
+  for (unsigned i = 0; i < shape.size(); ++i) {
+    reduceIndent();
+    indent();
+    os << "}\n";
+  }
+  reduceIndent();
+  indent();
+  os << "}";
+  emitInfoAndNewLine(op);
+}
+
+/// memref.subview -- an ALIAS into its source, not a copy.
+///
+/// This used to emit `int32_t v2[4] = v0;`, which is wrong twice over. It is not legal
+/// C++ (arrays have no copy-initialisation -- "array must be initialized with a
+/// brace-enclosed initializer"), and even had it compiled it would have produced a
+/// LOCAL copy, so writes through the subview would never reach the source array and a
+/// slice assignment like `local_A[pid, :] = const_array` would silently do nothing.
+///
+/// Emit a pointer to the first element of the slice instead, so indexing the subview
+/// reads and writes the source in place. Only contiguous (unit-stride) slices can be
+/// expressed as a flat pointer; anything else is rejected rather than mis-emitted.
+void allo::hls::VhlsModuleEmitter::emitSubView(memref::SubViewOp op) {
+  auto resType = llvm::dyn_cast<MemRefType>(op.getResult().getType());
+  auto srcType = llvm::dyn_cast<MemRefType>(op.getSource().getType());
+  if (!resType || !srcType || !srcType.hasStaticShape()) {
+    emitError(op, "memref.subview requires a statically shaped source.");
+    return;
+  }
+  // Contiguity: every stride must be 1, and every dimension after the first sliced one
+  // must span the whole source dimension. Otherwise the slice is not a flat run of
+  // elements and a pointer cannot represent it.
+  for (auto stride : op.getMixedStrides()) {
+    auto attr = llvm::dyn_cast_or_null<Attribute>(stride);
+    if (!attr || llvm::cast<IntegerAttr>(attr).getInt() != 1) {
+      emitError(op, "only unit-stride memref.subview is supported.");
+      return;
+    }
+  }
+  auto sizes = op.getMixedSizes();
+  auto srcShape = srcType.getShape();
+  for (unsigned i = 1; i < sizes.size(); ++i) {
+    auto attr = llvm::dyn_cast_or_null<Attribute>(sizes[i]);
+    if (!attr || llvm::cast<IntegerAttr>(attr).getInt() != srcShape[i]) {
+      emitError(op, "only a contiguous memref.subview is supported.");
+      return;
+    }
+  }
+
+  indent();
+  os << getTypeName(op.getResult()) << " *"
+     << addName(op.getResult(), /*isPtr=*/false) << " = &";
   emitValue(op.getSource());
-  for (auto index : op.getOffsets()) {
+  for (auto offset : op.getMixedOffsets()) {
     os << "[";
-    emitValue(index);
+    if (auto attr = llvm::dyn_cast_or_null<Attribute>(offset))
+      os << llvm::cast<IntegerAttr>(attr).getInt();
+    else
+      emitValue(llvm::cast<Value>(offset));
     os << "]";
   }
   os << ";";

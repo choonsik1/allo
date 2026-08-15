@@ -52,6 +52,9 @@ public:
   virtual void emitGetGlobalFixed(allo::GetGlobalFixedOp op) {}
   virtual void emitGlobal(memref::GlobalOp op) {}
   virtual void emitSubView(memref::SubViewOp op) {}
+  // Whole-array copy (`dst[:] = src`). Every HLS backend lacked this, so any
+  // slice assignment aborted with "'memref.copy' op is unsupported operation".
+  virtual void emitCopy(memref::CopyOp op) {}
   virtual void emitReshape(memref::ReshapeOp op) {}
 
   /// Tensor-related statement emitters.

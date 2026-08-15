@@ -75,421 +75,10 @@ def recursive_collect_ops_by_name(
                 recursive_collect_ops_by_name(op, target_op_name, res_list)
 
 
-# ---------------------------------------------------------------------------
-# Phase 1: per-PE simulated-time clock (default "all-ones" cost model).
-# ---------------------------------------------------------------------------
-def _op_latency(op):
-    """Static latency (abstract cycles) of one op for the per-PE clock.
-    Default cost model: every op costs 1 tick. This is the single place to
-    refine later toward the HLS II / latency schedule."""
-    return 1
-
-
-def _block_latency(block):
-    """Sum of _op_latency over ops DIRECTLY in this block (nested regions get
-    their own increments, so a loop body is charged once per iteration)."""
-    return sum(_op_latency(op) for op in block.operations)
-
-
-def _collect_blocks(op, res):
-    """Collect every Block in op's regions, recursively -- but NOT inside spin-wait
-    scf.while loops: their iteration count is scheduler-dependent, so charging the
-    clock per spin would make it non-deterministic. The while op still counts once
-    in its enclosing block (via _block_latency)."""
-    for region in op.regions:
-        for block in region.blocks:
-            res.append(block)
-            for inner in block.operations:
-                if inner.name == "scf.while":
-                    continue
-                _collect_blocks(inner, res)
-
-
-def _insert_clock_increments(func, clock_arg, module):
-    """Insert `clock_arg += static_block_latency` at the start of every block of
-    the PE function (recursively), so the PE's clock tracks simulated time under
-    the default cost model. Inert until the clock is read (Phase 3)."""
-    i64 = IntegerType.get_signless(64, module.context)
-    blocks = []
-    _collect_blocks(func, blocks)
-    for block in blocks:
-        lat = _block_latency(block)
-        if lat == 0:
-            continue
-        ip = InsertionPoint(beforeOperation=block.operations[0])
-        cur = memref_d.LoadOp(memref=clock_arg, indices=[], ip=ip)
-        inc = arith_d.ConstantOp(i64, lat, ip=ip)
-        nxt = arith_d.AddIOp(lhs=cur.result, rhs=inc.result, ip=ip)
-        memref_d.StoreOp(nxt, clock_arg, [], ip=ip)
-
-
-def _add_pe_clock_args(module, top_func_name):
-    """Reorder step: give each PE a trailing memref<i64> clock arg and thread it
-    through the (recreated) calls, BEFORE streams are lowered -- so put/get lowering
-    can stamp/advance the clock. Each clocked PE func is tagged 'sim.clock'; its
-    clock is the last block arg. Per-block increments come later (after lowering)."""
-    i64 = IntegerType.get_signless(64, module.context)
-    clk_ty = MemRefType.get([], i64)
-    funcs = {
-        str(op.sym_name).strip('"'): op
-        for op in module.body.operations
-        if isinstance(op, func_d.FuncOp) and len(op.body.blocks) > 0
-    }
-    clocked = set()
-    for caller in funcs.values():
-        calls = []
-        recursive_collect_ops(caller, (func_d.CallOp,), calls)
-        entry_ip = InsertionPoint.at_block_begin(caller.body.blocks[0])
-        for call_op in calls:
-            callee_name = str(call_op.callee)[1:]
-            callee = funcs.get(callee_name)
-            if callee is None or callee_name.startswith(
-                ("load_buf", "store_res", "usleep")
-            ):
-                continue
-            if callee_name not in clocked:
-                clocked.add(callee_name)
-                callee.body.blocks[0].add_argument(clk_ty, Location.unknown())
-                old_ty = callee.type
-                new_ty = FunctionType.get(
-                    list(old_ty.inputs) + [clk_ty], list(old_ty.results)
-                )
-                callee.attributes["function_type"] = TypeAttr.get(new_ty)
-                callee.attributes["sim.clock"] = UnitAttr.get()
-            clk = memref_d.AllocOp(clk_ty, [], [], ip=entry_ip)
-            c0 = arith_d.ConstantOp(i64, 0, ip=entry_ip)
-            memref_d.StoreOp(c0, clk, [], ip=entry_ip)
-            func_d.CallOp(
-                [], call_op.callee,
-                list(call_op.operands_) + [clk.result],
-                ip=InsertionPoint(beforeOperation=call_op),
-            )
-            call_op.operation.erase()
-
-
-def _insert_pe_clock_increments(module):
-    """Insert per-block clock increments into every clocked PE (tagged sim.clock),
-    using its last block arg as the clock. Runs AFTER stream lowering so spin-wait
-    scf.while loops are present and get skipped by _collect_blocks."""
-    for op in module.body.operations:
-        if isinstance(op, func_d.FuncOp) and "sim.clock" in op.attributes:
-            clock_arg = op.body.blocks[0].arguments[-1]
-            _insert_clock_increments(op, clock_arg, module)
-
-
-def _clock_of(func):
-    """The PE's clock block arg (its last arg) if func is a clocked PE (tagged
-    sim.clock), else None."""
-    if "sim.clock" in func.attributes:
-        return func.body.blocks[0].arguments[-1]
-    return None
-
-
-def _stamp_put_ts(ts_ptr, slot_index, clock_arg, ip):
-    """On put: ts_ring[slot] = clock -- stamp the element with the producer's
-    current simulated time. No-op when the enclosing func has no clock."""
-    if clock_arg is None:
-        return
-    clk_val = memref_d.LoadOp(memref=clock_arg, indices=[], ip=ip)
-    memref_d.StoreOp(clk_val, ts_ptr, [slot_index], ip=ip)
-
-
-def _advance_get_ts(ts_ptr, slot_index, clock_arg, ip):
-    """On get: clock = max(clock, ts_ring[slot]) -- advance the consumer clock to
-    when the dequeued element was produced. No-op when there is no clock."""
-    if clock_arg is None:
-        return
-    ts_val = memref_d.LoadOp(memref=ts_ptr, indices=[slot_index], ip=ip)
-    clk_val = memref_d.LoadOp(memref=clock_arg, indices=[], ip=ip)
-    mx = arith_d.MaxSIOp(lhs=clk_val.result, rhs=ts_val.result, ip=ip)
-    memref_d.StoreOp(mx, clock_arg, [], ip=ip)
-
-
-def _lower_nb_stream_op(
-    stream_access_op, head_ptr, tail_ptr, fifo_ptr,
-    stream_type, const_one, const_fifo_depth, module, replace_ip,
-    ts_ptr, clock_arg,
-):
-    """Lower a non-blocking / status stream op (empty/full/try_put/try_get)
-    to its ring-buffer implementation. Returns True if it handled the op,
-    False for a blocking put/get (left to the caller). Shared by the
-    cross-call and local lowering paths (Phase 0 refactor)."""
-    if isinstance(stream_access_op, allo_d.StreamEmptyOp):
-        openmp_d.FlushOp([], ip=replace_ip)
-        head_val = memref_d.LoadOp(memref=head_ptr, indices=[], ip=replace_ip)
-        tail_val = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=replace_ip)
-        cmp_op = arith_d.CmpIOp(0, lhs=head_val, rhs=tail_val, ip=replace_ip)
-        stream_access_op.results[0].replace_all_uses_with(cmp_op.result)
-        stream_access_op.operation.erase()
-        return True
-    if isinstance(stream_access_op, allo_d.StreamFullOp):
-        openmp_d.FlushOp([], ip=replace_ip)
-        tail_val = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=replace_ip)
-        tail_inc = arith_d.AddIOp(
-            lhs=tail_val.result, rhs=const_one.result, ip=replace_ip
-        )
-        tail_next = arith_d.RemUIOp(
-            lhs=tail_inc.result, rhs=const_fifo_depth.result, ip=replace_ip
-        )
-        head_val = memref_d.LoadOp(memref=head_ptr, indices=[], ip=replace_ip)
-        cmp_op = arith_d.CmpIOp(
-            0, lhs=tail_next.result, rhs=head_val.result, ip=replace_ip
-        )
-        stream_access_op.results[0].replace_all_uses_with(cmp_op.result)
-        stream_access_op.operation.erase()
-        return True
-    if isinstance(stream_access_op, allo_d.StreamTryPutOp):
-        openmp_d.FlushOp([], ip=replace_ip)
-        tail_val_op = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=replace_ip)
-        tail_inc_op = arith_d.AddIOp(
-            lhs=tail_val_op.result, rhs=const_one.result, ip=replace_ip
-        )
-        tail_next_op = arith_d.RemUIOp(
-            lhs=tail_inc_op.result, rhs=const_fifo_depth.result, ip=replace_ip
-        )
-        head_val_op = memref_d.LoadOp(memref=head_ptr, indices=[], ip=replace_ip)
-        is_full = arith_d.CmpIOp(
-            0, lhs=head_val_op.result, rhs=tail_next_op.result, ip=replace_ip
-        )
-        is_not_full = arith_d.CmpIOp(
-            1, lhs=head_val_op.result, rhs=tail_next_op.result, ip=replace_ip
-        )
-        if_op = scf_d.IfOp(
-            is_not_full.result,
-            [IntegerType.get_signless(1, module.context)],
-            has_else=True,
-            ip=replace_ip,
-        )
-        # Then block (Not Full)
-        then_ip = InsertionPoint(if_op.then_block)
-        data = stream_access_op.data
-        tail_index_op = index_d.CastUOp(
-            output=IndexType.get(module.context), input=tail_val_op, ip=then_ip
-        )
-        if isinstance(data.type, MemRefType):
-            element_type = data.type.element_type
-            rank = data.type.rank
-            for_ip = then_ip
-            for_induction_vars = []
-            for_ips = []
-            for i in range(rank):
-                dim_size = data.type.get_dim_size(i)
-                for_loop_op = affine_d.AffineForOp(0, dim_size, ip=for_ip)
-                for_induction_vars.append(for_loop_op.induction_variable)
-                for_ip = InsertionPoint(for_loop_op.body)
-                for_ips.append(for_ip)
-            element_dim_map = AffineMap.get(
-                dim_count=rank,
-                symbol_count=0,
-                exprs=[AffineExpr.get_dim(i) for i in range(rank)],
-                context=module.context,
-            )
-            element_load_op = affine_d.AffineLoadOp(
-                result=element_type,
-                memref=data,
-                indices=for_induction_vars,
-                map=AffineMapAttr.get(element_dim_map),
-                ip=for_ip,
-            )
-            memref_d.StoreOp(
-                value=element_load_op,
-                memref=fifo_ptr,
-                indices=[tail_index_op] + for_induction_vars,
-                ip=for_ip,
-            )
-            for ip in for_ips:
-                affine_d.AffineYieldOp([], ip=ip)
-        else:
-            fifo_element_type = stream_type.element_type
-            store_value = data
-            if data.type != fifo_element_type:
-                if (
-                    isinstance(data.type, (IntegerType, IndexType))
-                    and isinstance(fifo_element_type, (IntegerType, IndexType))
-                ):
-                    if isinstance(data.type, IndexType):
-                        store_value = index_d.CastSOp(
-                            fifo_element_type, data, ip=then_ip
-                        )
-                    elif isinstance(fifo_element_type, IndexType):
-                        store_value = index_d.CastSOp(
-                            IndexType.get(module.context), data, ip=then_ip
-                        )
-                    elif data.type.width > fifo_element_type.width:
-                        store_value = arith_d.TruncIOp(
-                            fifo_element_type, data, ip=then_ip
-                        )
-                    elif data.type.width < fifo_element_type.width:
-                        if data.type.is_signed:
-                            store_value = arith_d.ExtSIOp(
-                                fifo_element_type, data, ip=then_ip
-                            )
-                        else:
-                            store_value = arith_d.ExtUIOp(
-                                fifo_element_type, data, ip=then_ip
-                            )
-            memref_d.StoreOp(
-                value=store_value,
-                memref=fifo_ptr,
-                indices=[tail_index_op],
-                ip=then_ip,
-            )
-        _stamp_put_ts(ts_ptr, tail_index_op, clock_arg, then_ip)
-        critical_op = openmp_d.CriticalOp(ip=then_ip)
-        critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
-        memref_d.StoreOp(tail_next_op, tail_ptr, [], ip=critical_ip)
-        openmp_d.TerminatorOp(ip=critical_ip)
-        openmp_d.FlushOp([], ip=then_ip)
-        true_val = arith_d.ConstantOp(
-            IntegerType.get_signless(1, module.context), 1, ip=then_ip
-        )
-        scf_d.YieldOp(results_=[true_val.result], ip=then_ip)
-        # Else block (Full)
-        else_ip = InsertionPoint(if_op.else_block)
-        false_val = arith_d.ConstantOp(
-            IntegerType.get_signless(1, module.context), 0, ip=else_ip
-        )
-        scf_d.YieldOp(results_=[false_val.result], ip=else_ip)
-        stream_access_op.results[0].replace_all_uses_with(if_op.results[0])
-        stream_access_op.operation.erase()
-        return True
-    if isinstance(stream_access_op, allo_d.StreamTryGetOp):
-        openmp_d.FlushOp([], ip=replace_ip)
-        head_val_op = memref_d.LoadOp(memref=head_ptr, indices=[], ip=replace_ip)
-        tail_val_op = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=replace_ip)
-        is_empty = arith_d.CmpIOp(
-            0, lhs=head_val_op.result, rhs=tail_val_op.result, ip=replace_ip
-        )
-        is_not_empty = arith_d.CmpIOp(
-            1, lhs=head_val_op.result, rhs=tail_val_op.result, ip=replace_ip
-        )
-        orig_got_val = stream_access_op.results[0]
-        expected_type = orig_got_val.type
-        if_op = scf_d.IfOp(
-            is_not_empty.result,
-            [expected_type, IntegerType.get_signless(1, module.context)],
-            has_else=True,
-            ip=replace_ip,
-        )
-        # Then block (Not Empty)
-        then_ip = InsertionPoint(if_op.then_block)
-        head_index_op = index_d.CastUOp(
-            output=IndexType.get(module.context), input=head_val_op, ip=then_ip
-        )
-        head_inc_op = arith_d.AddIOp(
-            lhs=head_val_op.result, rhs=const_one.result, ip=then_ip
-        )
-        head_next_op = arith_d.RemUIOp(
-            lhs=head_inc_op.result, rhs=const_fifo_depth.result, ip=then_ip
-        )
-        if isinstance(expected_type, MemRefType):
-            element_alloc_op = memref_d.AllocOp(
-                memref=expected_type,
-                dynamicSizes=[],
-                symbolOperands=[],
-                ip=then_ip,
-            )
-            rank = expected_type.rank
-            for_ip = then_ip
-            for_induction_vars = []
-            for_ips = []
-            for i in range(rank):
-                for_loop_op = affine_d.AffineForOp(
-                    0, expected_type.get_dim_size(i), ip=for_ip
-                )
-                for_induction_vars.append(for_loop_op.induction_variable)
-                for_ip = InsertionPoint(for_loop_op.body)
-                for_ips.append(for_ip)
-            element_dim_map = AffineMap.get(
-                dim_count=rank,
-                symbol_count=0,
-                exprs=[AffineExpr.get_dim(i) for i in range(rank)],
-                context=module.context,
-            )
-            element_load_op = memref_d.LoadOp(
-                memref=fifo_ptr,
-                indices=[head_index_op] + for_induction_vars,
-                ip=for_ip,
-            )
-            affine_d.AffineStoreOp(
-                value=element_load_op,
-                memref=element_alloc_op,
-                indices=for_induction_vars,
-                map=AffineMapAttr.get(element_dim_map),
-                ip=for_ip,
-            )
-            for ip in for_ips:
-                affine_d.AffineYieldOp([], ip=ip)
-            data_val = element_alloc_op.result
-        else:
-            new_get_op = memref_d.LoadOp(
-                memref=fifo_ptr, indices=[head_index_op], ip=then_ip
-            )
-            loaded_value = new_get_op.result
-            if loaded_value.type != expected_type:
-                if isinstance(loaded_value.type, IntegerType) and isinstance(
-                    expected_type, IntegerType
-                ):
-                    if loaded_value.type.width < expected_type.width:
-                        if loaded_value.type.is_signed:
-                            loaded_value = arith_d.ExtSIOp(
-                                expected_type, loaded_value, ip=then_ip
-                            )
-                        else:
-                            loaded_value = arith_d.ExtUIOp(
-                                expected_type, loaded_value, ip=then_ip
-                            )
-                    elif loaded_value.type.width > expected_type.width:
-                        loaded_value = arith_d.TruncIOp(
-                            expected_type, loaded_value, ip=then_ip
-                        )
-            data_val = loaded_value
-        _advance_get_ts(ts_ptr, head_index_op, clock_arg, then_ip)
-        critical_op = openmp_d.CriticalOp(ip=then_ip)
-        critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
-        memref_d.StoreOp(head_next_op, head_ptr, [], ip=critical_ip)
-        openmp_d.TerminatorOp(ip=critical_ip)
-        openmp_d.FlushOp([], ip=then_ip)
-        true_val = arith_d.ConstantOp(
-            IntegerType.get_signless(1, module.context), 1, ip=then_ip
-        )
-        scf_d.YieldOp(results_=[data_val, true_val.result], ip=then_ip)
-        # Else block (Empty)
-        else_ip = InsertionPoint(if_op.else_block)
-        if isinstance(expected_type, MemRefType):
-            dummy_data = memref_d.AllocOp(
-                memref=expected_type,
-                dynamicSizes=[],
-                symbolOperands=[],
-                ip=else_ip,
-            )
-            dummy_data_val = dummy_data.result
-        elif isinstance(expected_type, IntegerType):
-            dummy_data_val = arith_d.ConstantOp(expected_type, 0, ip=else_ip).result
-        elif isinstance(expected_type, FloatType):
-            dummy_data_val = arith_d.ConstantOp(
-                expected_type, 0.0, ip=else_ip
-            ).result
-        else:
-            raise NotImplementedError(
-                f"Unsupported stream type for dummy data: {expected_type}"
-            )
-        false_val = arith_d.ConstantOp(
-            IntegerType.get_signless(1, module.context), 0, ip=else_ip
-        )
-        scf_d.YieldOp(results_=[dummy_data_val, false_val.result], ip=else_ip)
-        stream_access_op.results[0].replace_all_uses_with(if_op.results[0])
-        stream_access_op.results[1].replace_all_uses_with(if_op.results[1])
-        stream_access_op.operation.erase()
-        return True
-    return False
-
-
 def _process_function_streams(
     module: Module,
     func: func_d.FuncOp,
     processed_funcs: set,
-    all_pe_calls_by_func: dict,
 ):
     """
     Process streams and PE calls within a single function.
@@ -508,9 +97,7 @@ def _process_function_streams(
     pe_call_define_ops: dict[func_d.CallOp, func_d.FuncOp] = {}
     stream_construct_ops: dict[str, allo_d.StreamConstructOp] = {}
 
-    # Collect PE calls and stream construct ops in this function.
-    # The top-level scan handles direct (non-nested) calls and local stream
-    # constructs, which is sufficient to identify top-level parallel PE calls.
+    # Collect PE calls and stream construct ops in this function
     for op in func_ops:
         if isinstance(op, memref_d.AllocOp):
             continue
@@ -521,43 +108,12 @@ def _process_function_streams(
                     if isinstance(mod_op, func_d.FuncOp):
                         if callee_name == str(mod_op.sym_name).strip('"'):
                             pe_call_define_ops[op] = mod_op
-                            _process_function_streams(
-                                module, mod_op, processed_funcs, all_pe_calls_by_func
-                            )
+                            # Recursively process the callee function first
+                            _process_function_streams(module, mod_op, processed_funcs)
                             break
         elif isinstance(op, allo_d.StreamConstructOp):
             stream_name = str(op.attributes["name"]).strip('"')
             stream_construct_ops[stream_name] = op
-
-    # Deep scan: also reach func.call ops nested inside affine.for / scf.if /
-    # other control-flow regions. Without this, a sub-region call like
-    # ``inner(buf)`` placed inside ``for _ in range(N): inner(buf)`` is not
-    # discovered by the top-level scan above, and the callee's own
-    # ``allo.stream_put`` / ``allo.stream_get`` ops survive into LLVM
-    # lowering -- ``convert-func-to-llvm`` then fails with
-    # "cannot be converted to LLVM IR: missing LLVMTranslationDialectInterface
-    # registration for dialect for op: func.func".
-    #
-    # We do not add nested calls to ``pe_call_define_ops`` here: nested
-    # calls do not pass parent-region streams as call args (those would
-    # have been visible at the top level), so there is no parent-side
-    # arg-mapping to perform. We only need to ensure the callee gets
-    # processed so its internal streams are lowered.
-    nested_calls: list = []
-    recursive_collect_ops(func, func_d.CallOp, nested_calls)
-    for call_op in nested_calls:
-        if call_op in pe_call_define_ops:
-            continue
-        callee_name = str(call_op.callee)[1:]
-        if callee_name.startswith(("load_buf", "store_res", "usleep")):
-            continue
-        for mod_op in module.body.operations:
-            if isinstance(mod_op, func_d.FuncOp):
-                if callee_name == str(mod_op.sym_name).strip('"'):
-                    _process_function_streams(
-                        module, mod_op, processed_funcs, all_pe_calls_by_func
-                    )
-                    break
 
     # If no streams, nothing to do for this function
     if not stream_construct_ops:
@@ -595,12 +151,6 @@ def _process_function_streams(
         stream_memref_op = memref_d.AllocOp(memref_stream_type, [], [], ip=ip)
         stream_head_op = memref_d.AllocOp(memref_scalar_int_type, [], [], ip=ip)
         stream_tail_op = memref_d.AllocOp(memref_scalar_int_type, [], [], ip=ip)
-        # Phase 2: parallel timestamp ring -- ts_ring[i] holds the producer's
-        # simulated-time clock at the moment element i was put. Same length as
-        # the data ring; i64 to match the per-PE clock.
-        i64_type = IntegerType.get_signless(64, func.context)
-        ts_ring_type = MemRefType.get([stream_depth + 1], i64_type)
-        ts_ring_op = memref_d.AllocOp(ts_ring_type, [], [], ip=ip)
         if not const_0_defined:
             const_zero = arith_d.ConstantOp(int_type, 0, ip=ip)
             const_0_defined = True
@@ -611,13 +161,12 @@ def _process_function_streams(
                 memref_stream_type,
                 memref_scalar_int_type,
                 memref_scalar_int_type,
-                ts_ring_type,
             ],
             context=func.context,
         )
         fifo_struct_op = allo_d.StructConstructOp(
             output=fifo_struct_type,
-            input=[stream_memref_op, stream_head_op, stream_tail_op, ts_ring_op],
+            input=[stream_memref_op, stream_head_op, stream_tail_op],
             ip=ip,
         )
         fifo_struct_memref_type = MemRefType.get([], fifo_struct_type)
@@ -644,53 +193,20 @@ def _process_function_streams(
         assert isinstance(call_op.operands_, OpOperandList)
         assert isinstance(func_def_op.arguments, BlockArgumentList)
         assert len(call_op.operands_) == len(func_def_op.arguments)
-        # 1. Update this call site and callee signature for all stream arguments
         for i in range(len(call_op.operands_)):
             arg_instance = call_op.operands_[i]
             for stream_name, stream_construct_op in stream_construct_ops.items():
                 if Value(stream_construct_op.result) == arg_instance:
                     arg_def = func_def_op.arguments[i]
-                    stream_memref = stream_struct_table[stream_name]
                     arg_stream_table[arg_def] = stream_name
-                    # Change argument definitions
-                    arg_def.set_type(stream_memref.type)
-                    old_func_type = func_def_op.type
-                    new_inputs = list(old_func_type.inputs)
-                    new_inputs[arg_def.arg_number] = stream_memref.type
-                    new_func_type = FunctionType.get(
-                        inputs=new_inputs,
-                        results=old_func_type.results,
-                        context=old_func_type.context,
-                    )
-                    func_def_op.attributes["function_type"] = TypeAttr.get(
-                        new_func_type, module.context
-                    )
-                    call_op.operands_[arg_def.arg_number] = stream_memref
         # Collect and replace `stream_get`s and `stream_put`s
         func_stream_ops = []
         recursive_collect_ops(
-            func_def_op,
-            (
-                allo_d.StreamGetOp,
-                allo_d.StreamPutOp,
-                allo_d.StreamTryGetOp,
-                allo_d.StreamTryPutOp,
-                allo_d.StreamEmptyOp,
-                allo_d.StreamFullOp,
-            ),
-            func_stream_ops,
+            func_def_op, (allo_d.StreamGetOp, allo_d.StreamPutOp), func_stream_ops
         )
         for stream_access_op in func_stream_ops:
             assert isinstance(
-                stream_access_op,
-                (
-                    allo_d.StreamGetOp,
-                    allo_d.StreamPutOp,
-                    allo_d.StreamTryGetOp,
-                    allo_d.StreamTryPutOp,
-                    allo_d.StreamEmptyOp,
-                    allo_d.StreamFullOp,
-                ),
+                stream_access_op, (allo_d.StreamGetOp, allo_d.StreamPutOp)
             )
             replace_ip = InsertionPoint(beforeOperation=stream_access_op)
             # Have to leverage weak typing here
@@ -708,6 +224,20 @@ def _process_function_streams(
             stream_name = arg_stream_table[stream_arg]
             stream_type = stream_type_table[stream_name]
             stream_memref = stream_struct_table[stream_name]
+            # Change argument definitions
+            stream_arg.set_type(stream_memref.type)
+            old_func_type = func_def_op.type
+            new_inputs = old_func_type.inputs.copy()
+            new_inputs[stream_arg.arg_number] = stream_memref.type
+            new_func_type = FunctionType.get(
+                inputs=new_inputs,
+                results=old_func_type.results,
+                context=old_func_type.context,
+            )
+            func_def_op.attributes["function_type"] = TypeAttr.get(
+                new_func_type, module.context
+            )
+            call_op.operands_[stream_arg.arg_number] = stream_memref
             # FIFO access
             # Spin and wait for the FIFO to be not full
             assert isinstance(stream_memref.type, MemRefType)
@@ -733,30 +263,14 @@ def _process_function_streams(
             fifo_ptr = allo_d.StructGetOp(
                 output=stream_type, input=stream_struct, index=0, ip=replace_ip
             )
-            ts_ring_type = MemRefType.get(
-                [stream_type.get_dim_size(0)],
-                IntegerType.get_signless(64, module.context),
-            )
-            ts_ptr = allo_d.StructGetOp(
-                output=ts_ring_type, input=stream_struct, index=3, ip=replace_ip
-            )
-            clock_arg = _clock_of(func_def_op)
             const_one = arith_d.ConstantOp(int_type, 1, ip=replace_ip)
             const_fifo_depth = arith_d.ConstantOp(
                 int_type, stream_type.get_dim_size(0), ip=replace_ip
             )
-            if _lower_nb_stream_op(
-                stream_access_op, head_ptr, tail_ptr, fifo_ptr,
-                stream_type, const_one, const_fifo_depth, module, replace_ip,
-                ts_ptr, clock_arg,
-            ):
-                continue
             if isinstance(stream_access_op, allo_d.StreamPutOp):
-                openmp_d.FlushOp([], ip=replace_ip)
                 tail_val_op = memref_d.LoadOp(
                     memref=tail_ptr, indices=[], ip=replace_ip
                 )
-
                 tail_inc_op = arith_d.AddIOp(
                     lhs=tail_val_op.result, rhs=const_one.result, ip=replace_ip
                 )
@@ -878,12 +392,10 @@ def _process_function_streams(
                         ip=replace_ip,
                     )
                 # Atomic update of tail
-                _stamp_put_ts(ts_ptr, tail_index_op, clock_arg, replace_ip)
                 critical_op = openmp_d.CriticalOp(ip=replace_ip)
                 critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
                 memref_d.StoreOp(tail_next_op, tail_ptr, [], ip=critical_ip)
                 openmp_d.TerminatorOp(ip=critical_ip)
-                openmp_d.FlushOp([], ip=replace_ip)
             else:
                 assert isinstance(stream_access_op, allo_d.StreamGetOp)
                 tail_val_op = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=before_ip)
@@ -971,7 +483,6 @@ def _process_function_streams(
                                     expected_type, loaded_value, ip=replace_ip
                                 )
                     orig_got_val.replace_all_uses_with(loaded_value)
-                _advance_get_ts(ts_ptr, head_index_op, clock_arg, replace_ip)
                 critical_op = openmp_d.CriticalOp(ip=replace_ip)
                 critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
                 memref_d.StoreOp(head_next_op, head_ptr, [], ip=critical_ip)
@@ -982,16 +493,7 @@ def _process_function_streams(
     # (streams defined locally and used locally via stream_get/put, not passed to callees)
     local_stream_ops = []
     recursive_collect_ops(
-        func,
-        (
-            allo_d.StreamGetOp,
-            allo_d.StreamPutOp,
-            allo_d.StreamTryGetOp,
-            allo_d.StreamTryPutOp,
-            allo_d.StreamEmptyOp,
-            allo_d.StreamFullOp,
-        ),
-        local_stream_ops,
+        func, (allo_d.StreamGetOp, allo_d.StreamPutOp), local_stream_ops
     )
 
     for stream_access_op in local_stream_ops:
@@ -1036,26 +538,11 @@ def _process_function_streams(
         fifo_ptr = allo_d.StructGetOp(
             output=stream_type, input=stream_struct, index=0, ip=replace_ip
         )
-        ts_ring_type = MemRefType.get(
-            [stream_type.get_dim_size(0)],
-            IntegerType.get_signless(64, module.context),
-        )
-        ts_ptr = allo_d.StructGetOp(
-            output=ts_ring_type, input=stream_struct, index=3, ip=replace_ip
-        )
-        clock_arg = _clock_of(func)
         const_one = arith_d.ConstantOp(int_type, 1, ip=replace_ip)
         const_fifo_depth = arith_d.ConstantOp(
             int_type, stream_type.get_dim_size(0), ip=replace_ip
         )
-        if _lower_nb_stream_op(
-            stream_access_op, head_ptr, tail_ptr, fifo_ptr,
-            stream_type, const_one, const_fifo_depth, module, replace_ip,
-            ts_ptr, clock_arg,
-        ):
-            continue
         if isinstance(stream_access_op, allo_d.StreamPutOp):
-            openmp_d.FlushOp([], ip=replace_ip)
             tail_val_op = memref_d.LoadOp(memref=tail_ptr, indices=[], ip=replace_ip)
             tail_inc_op = arith_d.AddIOp(
                 lhs=tail_val_op.result, rhs=const_one.result, ip=replace_ip
@@ -1157,12 +644,10 @@ def _process_function_streams(
                     indices=[tail_index_op],
                     ip=replace_ip,
                 )
-            _stamp_put_ts(ts_ptr, tail_index_op, clock_arg, replace_ip)
             critical_op = openmp_d.CriticalOp(ip=replace_ip)
             critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
             memref_d.StoreOp(tail_next_op, tail_ptr, [], ip=critical_ip)
             openmp_d.TerminatorOp(ip=critical_ip)
-            openmp_d.FlushOp([], ip=replace_ip)
         else:
             assert isinstance(stream_access_op, allo_d.StreamGetOp)
             head_val_op = memref_d.LoadOp(memref=head_ptr, indices=[], ip=replace_ip)
@@ -1270,7 +755,6 @@ def _process_function_streams(
                                 expected_type, loaded_value, ip=replace_ip
                             )
                 orig_got_val.replace_all_uses_with(loaded_value)
-            _advance_get_ts(ts_ptr, head_index_op, clock_arg, replace_ip)
             critical_op = openmp_d.CriticalOp(ip=replace_ip)
             critical_ip = InsertionPoint(Block.create_at_start(critical_op.region))
             memref_d.StoreOp(head_next_op, head_ptr, [], ip=critical_ip)
@@ -1281,10 +765,6 @@ def _process_function_streams(
     for op in stream_construct_ops.values():
         op.operation.erase()
 
-    # Accumulate PE calls keyed by function for recursive OMP injection
-    if pe_call_define_ops:
-        all_pe_calls_by_func[func_name] = pe_call_define_ops
-
     return (
         stream_struct_table,
         stream_type_table,
@@ -1293,39 +773,7 @@ def _process_function_streams(
     )
 
 
-def _inject_omp_parallel_sections(pe_call_define_ops):
-    """Wrap a set of func.call ops in omp.parallel > omp.sections > omp.section blocks."""
-    assert len(pe_call_define_ops) > 0
-    omp_ip = InsertionPoint(beforeOperation=list(pe_call_define_ops.keys())[0])
-    omp_parallel_op = openmp_d.ParallelOp([], [], [], [], ip=omp_ip)
-    assert isinstance(omp_parallel_op.region, Region)
-    omp_parallel_block = Block.create_at_start(omp_parallel_op.region, [])
-
-    # Add `omp.sections`
-    ip_omp_parallel = InsertionPoint(omp_parallel_block)
-    omp_sections_op = openmp_d.SectionsOp([], [], [], [], ip=ip_omp_parallel)
-    omp_sections_block = Block.create_at_start(omp_sections_op.region, [])
-    openmp_d.TerminatorOp(ip=ip_omp_parallel)
-
-    # Add `omp.section`s for PE calls
-    ip_omp_sections = InsertionPoint(omp_sections_block)
-    for call_op in pe_call_define_ops:
-        assert isinstance(call_op, OpView)
-        omp_section_op = openmp_d.SectionOp(ip=ip_omp_sections)
-        omp_section_block = Block.create_at_start(omp_section_op.region, [])
-        ip_omp_section = InsertionPoint(omp_section_block)
-        omp_term_op = openmp_d.TerminatorOp(ip=ip_omp_section)
-        call_op.operation.move_before(omp_term_op.operation)
-    openmp_d.TerminatorOp(ip=ip_omp_sections)
-
-
 def build_dataflow_simulator(module: Module, top_func_name: str):
-    # Enable nested OpenMP parallelism so that peer kernels calling
-    # sub-regions (which have their own omp.parallel/sections) don't
-    # deadlock.  This is safe because the simulator already controls
-    # thread counts via omp.sections.
-    if os.environ.get("OMP_MAX_ACTIVE_LEVELS") is None:
-        os.environ["OMP_MAX_ACTIVE_LEVELS"] = "4"
     with module.context, Location.unknown():
         # Declare usleep for spinloop yielding
         found_usleep = False
@@ -1351,17 +799,12 @@ def build_dataflow_simulator(module: Module, top_func_name: str):
 
         # Process all functions with streams recursively, starting from top
         processed_funcs: set = set()
-        all_pe_calls_by_func: dict = {}
         func = find_func_in_module(module, top_func_name)
         assert isinstance(func.body, Region)
 
-        # Phase 1/2 reorder: thread a per-PE clock arg through the calls BEFORE
-        # stream lowering, so put/get lowering can stamp/advance the clock.
-        _add_pe_clock_args(module, top_func_name)
-
         # Recursively process the top function and all its callees
         _, _, pe_call_define_ops, _ = _process_function_streams(
-            module, func, processed_funcs, all_pe_calls_by_func
+            module, func, processed_funcs
         )
 
         # If no PE calls were found in top function, collect them again from the processed functions
@@ -1376,17 +819,30 @@ def build_dataflow_simulator(module: Module, top_func_name: str):
                                 if callee_name == str(mod_op.sym_name).strip('"'):
                                     pe_call_define_ops[op] = mod_op
                                     break
-            all_pe_calls_by_func[top_func_name] = pe_call_define_ops
 
-        # Phase 1: insert the per-PE clock increments (after stream lowering, so
-        # spin-wait scf.while loops exist and are skipped). Clock args were already
-        # threaded before lowering by _add_pe_clock_args above.
-        _insert_pe_clock_increments(module)
+        # Add the outmost `omp.parallel`
+        assert len(pe_call_define_ops) > 0
+        omp_ip = InsertionPoint(beforeOperation=list(pe_call_define_ops.keys())[0])
+        omp_parallel_op = openmp_d.ParallelOp([], [], [], [], ip=omp_ip)
+        assert isinstance(omp_parallel_op.region, Region)
+        omp_parallel_block = Block.create_at_start(omp_parallel_op.region, [])
 
-        # Inject omp.parallel/sections into every function that has PE calls
-        for func_pe_calls in all_pe_calls_by_func.values():
-            if func_pe_calls:
-                _inject_omp_parallel_sections(func_pe_calls)
+        # Add `omp.sections`
+        ip_omp_parallel = InsertionPoint(omp_parallel_block)
+        omp_sections_op = openmp_d.SectionsOp([], [], [], [], ip=ip_omp_parallel)
+        omp_sections_block = Block.create_at_start(omp_sections_op.region, [])
+        openmp_d.TerminatorOp(ip=ip_omp_parallel)
+
+        # Add `omp.section`s for PE calls
+        ip_omp_sections = InsertionPoint(omp_sections_block)
+        for call_op in pe_call_define_ops:
+            assert isinstance(call_op, OpView)
+            omp_section_op = openmp_d.SectionOp(ip=ip_omp_sections)
+            omp_section_block = Block.create_at_start(omp_section_op.region, [])
+            ip_omp_section = InsertionPoint(omp_section_block)
+            omp_term_op = openmp_d.TerminatorOp(ip=ip_omp_section)
+            call_op.operation.move_before(omp_term_op.operation)
+        openmp_d.TerminatorOp(ip=ip_omp_sections)
 
 
 # This pass is only meant to run on fully lowered MLIR code

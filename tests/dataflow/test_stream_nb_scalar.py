@@ -53,6 +53,12 @@ def test_scalar_empty_full_sim():
     assert out[4] == 1, f"try_put() should succeed, got {out[4]}"
     print("test_scalar_empty_full_sim PASSED")
 
+    mod_sc = df.build(nb_status, target="systemc", mode="cosim", project="test_stream_nb_scalar")
+    out[...] = 0   # clear the simulator's result first
+    mod_sc(out)
+    assert out[4] == 1, f"try_put() should succeed, got {out[4]}"
+    print("SystemC Cosim Passed!")
+
 
 def test_scalar_try_put_try_get_sim():
     """try_put / try_get spin-until-success on a SCALAR stream (producer/consumer)."""
@@ -81,6 +87,12 @@ def test_scalar_try_put_try_get_sim():
     sim(out)
     np.testing.assert_array_equal(out, [0, 10, 20, 30])
     print("test_scalar_try_put_try_get_sim PASSED")
+
+    mod_sc = df.build(top_nb, target="systemc", mode="cosim", project="test_stream_nb_scalar_2")
+    out[...] = 0   # clear the simulator's result first
+    mod_sc(out)
+    np.testing.assert_array_equal(out, [0, 10, 20, 30])
+    print("SystemC Cosim Passed!")
 
 
 def test_scalar_nb_ops_hls_codegen():

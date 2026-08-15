@@ -44,6 +44,7 @@ public:
   void emitGetGlobalFixed(allo::GetGlobalFixedOp op) override;
   void emitGlobal(memref::GlobalOp op) override;
   void emitSubView(memref::SubViewOp op) override;
+  void emitCopy(memref::CopyOp op) override;
   void emitReshape(memref::ReshapeOp op) override;
 
   /// Tensor-related statement emitters.

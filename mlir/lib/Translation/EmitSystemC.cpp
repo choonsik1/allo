@@ -2343,6 +2343,27 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {  // override (base emit
   // flat top before emission — SystemC can't nest regions inside a thread.
   flattenHierarchy(module);
 
+  // Argument classification (streamDir / argDir) indexes `stypes` / `arg_dirs` by
+  // argument position and returns 0 -- "not a stream" / "no direction" -- for an
+  // out-of-range index. So a string one char SHORT silently reclassifies the last
+  // argument: a stream port becomes a plain value, a 'b' memory port loses its
+  // write side. Wrong hardware, no diagnostic. Both strings are produced by the
+  // frontend (dataflow.py), so a length mismatch is a frontend bug, not user
+  // input: fail the build rather than emit. Checked AFTER flattening, so it sees
+  // the functions actually emitted.
+  for (auto f : module.getOps<func::FuncOp>())
+    for (const char *an : {"stypes", "arg_dirs"})
+      if (auto a = f->getAttrOfType<StringAttr>(an))
+        if (a.getValue().size() != f.getNumArguments()) {
+          f.emitError("`")
+              << an << "` has " << a.getValue().size() << " chars but `"
+              << f.getName() << "` has " << f.getNumArguments()
+              << " arguments; argument classification would silently mis-assign "
+                 "the trailing ones";
+          state.encounteredError = true;
+          return;
+        }
+
   // A stream passed to exactly ONE kernel call is a self-FIFO (one kernel both
   // produces and queries it) -> realize as a local ac_channel, not a directional
   // Connections port. Mark the construct result + the callee's block arg.

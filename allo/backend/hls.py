@@ -1274,7 +1274,18 @@ class HLSModule:
                 else:
                     rpt_dir = self.project
                     cmd = f"cd {self.project}; {catapult_cmd} -shell -f run.tcl"
-                assert len(args) == 0, f"{self.mode} mode does not need to pass in arguments"
+                # Synthesis EXECUTES NOTHING, so output arrays are never written. Passing
+                # them is therefore always a caller mistake, and it must fail HERE: this
+                # was briefly downgraded to a warning so one call site could serve every
+                # mode, and the result was that a test ran on to compare its untouched
+                # (all-zero) output against a golden and reported a 100% mismatch -- a
+                # confusing failure 20 lines from the real cause. Fail fast instead.
+                assert len(args) == 0, (
+                    f"{self.mode} mode synthesizes only and runs nothing, so it takes no "
+                    f"arguments (got {len(args)}). Output arrays would stay unwritten. "
+                    f'Call mod() with no arguments, and use mode="csim" or "cosim" if you '
+                    f"want results back."
+                )
                 print(
                     f"[{time.strftime('%H:%M:%S', time.gmtime())}] Begin synthesizing project with Catapult HLS ({self.mode} mode)..."
                 )
