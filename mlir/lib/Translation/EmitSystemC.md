@@ -340,6 +340,33 @@ documents. Array resets emit one loop nest (the frontend only allows a splat ini
 an assignment per element. Uses need no rewriting — the base `emitGetGlobal` already binds the
 SSA result to the global's symbol name.
 
+**Measured: a function‑scope `static` and an SC_MODULE member synthesize IDENTICALLY**
+(Catapult 2024.2, 2026‑08‑16). The same design was emitted twice — once with the member +
+reset‑action assignment above, once hand‑edited to the Vitis shape
+(`static int32_t x[4] = {0,0,0,0};` inside `run()`) — and put through the full flow. csim
+correct both ways; csynth clean both ways; and the two `rtl.v` files are **byte‑identical
+apart from the generation timestamp** (21 always‑blocks, 1242 lines). Catapult hoists the
+static initialiser into the reset action and the registers get a proper async reset
+(`always @(posedge clk or negedge rst) … if (~rst) buffer_0_dat <= 32'b0`).
+
+Consequences worth knowing before touching this code:
+
+- The claim that `static` "skips the reset" is **false for the synthesized path**. It is true
+  only of the C++ semantics that csim executes.
+- `static` also solves the coroutine‑stack overflow by itself (static storage is not the
+  thread stack). What actually overflowed was the original *non‑static* local.
+- The two forms differ **only in csim**: a `static` is shared by all instances of the class
+  and initialises once per program; a member is per‑object and re‑initialises on every reset.
+  Neither bites today — each kernel `func` becomes its own SC_MODULE class instantiated once,
+  and the testbench asserts reset exactly once — so this is latent, not active. It would
+  surface as csim/cosim divergence if one class were ever instantiated N times, or if a design
+  reset mid‑simulation.
+- So the member form is a **defensive** choice, not a required one. The minimal implementation
+  would have been to stop skipping stateful globals in the const‑array block and let
+  `emitGlobal` emit `static` (it already keys on the `__stateful_` name), for identical
+  hardware. The member buys per‑instance storage and reset re‑initialisation against two
+  things nothing currently does.
+
 **Not pinned to registers.** `hls_resource … map_to_module="[Register]"` is emitted from
 `emitArrayDirectivesPreheader`, which runs off `emitAlloc`; a stateful array comes from
 `emitGlobal` and so never gets the pragma. It is functionally correct but may map to a 1R1W
