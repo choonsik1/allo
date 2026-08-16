@@ -161,6 +161,46 @@ def codegen_host(top, module):
 
 
 
+# Device strings that belong to an FPGA flow, not to Catapult.
+#
+# `configs["device"]` means different things to different backends: for vitis_hls it is an
+# FPGA PART (u280, xcu250-...), for Catapult it is an ASIC STANDARD-CELL LIBRARY
+# (nangate-45nm_beh, sky130). A script that supports both backends typically has one
+# `--device` flag and forwards it to whichever it was asked for, so an FPGA part reaches
+# this flow whenever the systemc/catapult path is taken with the FPGA default still set.
+#
+# The generator below passes any unrecognised device straight through as
+# `solution library add <device>`, so that mistake used to surface only as Catapult's
+#   "Could not locate library file for library name u280 for current configuration"
+# from inside a csyn run -- with nothing pointing at the actual cause. Catch it here.
+#
+# DELIBERATELY A BLACKLIST, NOT A WHITELIST: a custom or site-specific ASIC library is a
+# legitimate value we must keep passing through untouched. Only patterns that can ONLY be
+# an FPGA are rejected.
+_FPGA_DEVICE_PATTERNS = (
+    "u200", "u250", "u280", "u50", "u55",          # AMD/Xilinx Alveo boards
+    "xcu", "xc7", "xcvu", "xczu", "xcku", "xcau",  # Xilinx part prefixes
+    "versal", "zynq", "kintex", "virtex", "artix", "spartan",
+    "arria", "stratix", "cyclone", "agilex",       # Intel/Altera families
+)
+
+
+def _reject_fpga_device(device):
+    """Fail early if an FPGA part was handed to the Catapult (ASIC) flow."""
+    d = str(device).lower()
+    if not any(p in d for p in _FPGA_DEVICE_PATTERNS):
+        return
+    raise ValueError(
+        f"device={device!r} is an FPGA part, but the Catapult/SystemC flow synthesizes to "
+        f"an ASIC standard-cell library (e.g. 'nangate-45nm_beh' or 'sky130'). Catapult has "
+        f"no such library and would fail later with "
+        f"\"Could not locate library file for library name {device}\".\n"
+        f"If one script drives both backends, pass the FPGA part only to target='vitis_hls' "
+        f"and either omit 'device' for target='systemc' (it defaults to 'nangate-45nm_beh') "
+        f"or give it an ASIC library."
+    )
+
+
 def codegen_tcl(top, configs):
     """Generate TCL script for Catapult HLS synthesis.
 
@@ -195,6 +235,7 @@ def codegen_tcl(top, configs):
     mode = configs.get("mode", "csyn")
     platform = configs.get("platform", "catapult")
     device = configs.get("device", "nangate-45nm_beh")
+    _reject_fpga_device(device)
     # preserve_hier=True keeps sub-function boundaries in RTL output,
     # enabling per-module area/power breakdown in area.rpt.
     preserve_hier = configs.get("preserve_hierarchy", True)
