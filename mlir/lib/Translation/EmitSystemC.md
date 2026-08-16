@@ -367,6 +367,33 @@ Consequences worth knowing before touching this code:
   hardware. The member buys per‑instance storage and reset re‑initialisation against two
   things nothing currently does.
 
+**Measured: an SC_MODULE MEMBER ARRAY CANNOT BE EXTERNALIZED by a resource directive**
+(Catapult 2024.2, 2026‑08‑16). Worth knowing before anyone tries to expose boundary arrays
+as `_rsc_*` memory pins the cheap way.
+
+Catapult's own `examples/interfaces/ram_w_handshake` selects a RAM interface per array with
+`directive set /mul_matrix/inMat:rsc -MAP_TO_MODULE {…_r}` — no source change at all. That
+works because the design is a **C++ function** and `inMat` is an **argument**, so the array
+inherently has an outside. Reproducing it on a SystemC member array fails three different
+ways depending on how the array is used:
+
+| array shape | outcome |
+|---|---|
+| read **and** written, live | resource `/top/run/arr:rsc` exists and the directive is accepted, but the component is rejected — `IFSYN-7 Invalid component selection` (the `_r`/`_w` components are single‑direction) |
+| persists across reset | `CIN-233 'arr' must be set in reset action, preserving state across reset is not supported` — Catapult classifies a member array as **design state that must be reset**, the opposite of an external memory |
+| read‑only, or write‑only | no external provenance or consumer, so it is proven dead and eliminated: `directive set: Unknown path '/top/run/arr:rsc'` — even when filled with real data from a port |
+
+The last row is the crux: a member array has no outside, and there is no way to tell
+Catapult it has one. **Only a PORT gives an array an outside**, which is precisely what
+`ram_wire` provides (`sc_out<A> addr_read; sc_in<D> data_read;`). So exposing boundary
+arrays as memory pins requires emitting ports — the directive shortcut does not exist here.
+
+Useful side finding for when that is done: model the bundle on
+`ccs_ramifc_w_handshake_{r,w}` rather than the bare `ram_wire`. Its pins are
+`s_re, s_rrdy, s_raddr, s_din` (read) and `s_we, s_wrdy, s_waddr, s_dout` (write) — note
+`s_rrdy`/`s_wrdy`, so the memory **can** stall the design. A bare `ram_wire` has no such
+line and does impose fixed timing.
+
 **Not pinned to registers.** `hls_resource … map_to_module="[Register]"` is emitted from
 `emitArrayDirectivesPreheader`, which runs off `emitAlloc`; a stateful array comes from
 `emitGlobal` and so never gets the pragma. It is functionally correct but may map to a 1R1W
