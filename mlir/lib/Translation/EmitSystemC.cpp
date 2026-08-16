@@ -664,6 +664,17 @@ void SystemCModuleEmitter::emitAffineFor(affine::AffineForOp op) {  // override 
   emitLoopDirectivesPreheader(op);
   // Header twice, body ONCE: both branches open exactly one brace.
   os << "#ifdef __SYNTHESIS__\n";
+  // This loop never exits, so the `done.write(true)` that emitFunction places AFTER the
+  // body is UNREACHABLE in RTL -- and the region's _agg_done ANDs every kernel's done,
+  // so one steady-state kernel keeps the whole region's `done` low forever. A
+  // free-running kernel has no "finished"; the honest RTL signal is "running", so raise
+  // it on entry. csim takes the #else branch and still completes normally.
+  if (auto pf = op->getParentOfType<func::FuncOp>())
+    if (pf->hasAttr("df.kernel")) {
+      indent();
+      os << "done.write(true);  // steady-state: no completion, so assert on entry "
+            "(the post-body write is unreachable here)\n";
+    }
   indent();
   os << "while (1) {  // steady-state loop (was `for t`): 1 iteration = 1 step\n";
   os << "#else\n";
