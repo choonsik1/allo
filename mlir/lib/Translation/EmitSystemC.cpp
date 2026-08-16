@@ -404,6 +404,12 @@ private:
     unsigned addrw, dataw;
     char dir;           // 'i' read / 'o' write / 'b' read+write
     int inIdx, outIdx;  // the region array's input/output file indices (-1 = none)
+    std::string base;   // REGION array this replicates -- the grouping key. Several
+                        // MemInsts share a base exactly when the array is replicated
+                        // across clients, which decides whether it can be exposed as
+                        // a top-level port (see the port-emission comment).
+    bool exposed;       // true -> lives in the tb, reachable through top ports;
+                        // false -> stays an internal memory (multi-client replica)
   };
   SmallVector<MemInst> memInsts;
 
@@ -2270,18 +2276,73 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {  // new (SystemC-o
                std::to_string(opnd.index()),
            instNames[it.index()], std::string(getName(carg).str()),
            std::string(getStreamPayloadTypeName(mt.getElementType(), linkPayloadUnsigned(carg)).str()), total,
-           scAddrW(total), scDataW(mt.getElementType()), mp, ii, oo});
+           scAddrW(total), scDataW(mt.getElementType()), mp, ii, oo,
+           std::string(getName(ov).str()), /*exposed=*/false});
     }
   }
-  // Memory-port members: a req channel + memory (+ rsp channel for read-capable
-  // ports). 'i'/'b' -> AlloMem (req + rsp); 'o' -> AlloMemW (req only).
+  // Decide which memories can become TOP-LEVEL PORTS.
+  //
+  // A boundary array touched by N kernels is REPLICATED into N memories (see the MemInst
+  // comment). Inside the design that is a private trick the testbench compensates for:
+  // reads preload every replica from the same file, writes are summed across replicas at
+  // readout. At the BOUNDARY it stops being private and becomes the interface contract --
+  // an array shared by 15 kernels would present 15 request ports carrying identical reads,
+  // and a shared output would present 10 write ports whose values the integrator is
+  // somehow expected to sum. Measured on the current suite: test_hierachical replicates 4
+  // input arrays into 60 memories and 2 outputs into 20. That is not an interface anyone
+  // can wire.
+  //
+  // So only a SINGLE-CLIENT array is exposed. A replicated one keeps the old behaviour --
+  // memory inside the design -- which is still wrong for area but at least honest and
+  // wireable, and keeps the existing designs passing. Exposing those properly needs one
+  // memory with an arbiter behind a single port pair (the AlloMemShared component), which
+  // is separate work.
+  {
+    llvm::StringMap<unsigned> clients;
+    for (auto &mi : memInsts)
+      clients[mi.base]++;
+    for (auto &mi : memInsts)
+      mi.exposed = (clients[mi.base] == 1);
+  }
+  // Memory-port arrays -> TOP-LEVEL PORTS, not internal storage.
+  //
+  // These used to be an internal Connections::Combinational + AlloMem instance, so the
+  // array's storage lived INSIDE the synthesized design: a region whose boundary arrays
+  // are all random-access produced `module top(clk, rst, done)` with every workload
+  // array turned into registers/RAM in the DUT. That silently inflates every area
+  // number and is not a shape anyone can integrate -- the Vitis/Catapult backend
+  // exposes the same arrays as memory interfaces (`_rsc_radr/_re/_q`, `_rsc_d/_we`).
+  //
+  // So the DUT now only carries the ACCESS PORTS and the memory moves to the testbench
+  // (see the tb, which instantiates AlloMem/AlloMemW and binds them). The request
+  // encoding, the kernel-side client ports and AlloMem itself are all unchanged -- only
+  // where the memory is instantiated moves. Latency-insensitive Connections rather than
+  // raw RAM pins keeps the existing handshake and imposes no memory-timing assumption.
+  // Ports are named after the ARRAY (`A_req`), not the internal replica key
+  // (`mp0_1_req`) -- an integrator reading the port list should recognise the design's
+  // own names. Safe because only single-client arrays get here, so the name is unique.
   for (auto &mi : memInsts) {
+    if (!mi.exposed)
+      continue;
+    std::string reqT =
+        "ac_int<" + std::to_string(1 + mi.addrw + mi.dataw) + ", false>";
+    indent();
+    os << "Connections::Out< " << reqT << " > " << mi.base << "_req;\n";
+    if (mi.dir != 'o') { // 'i' and 'b' read -> the memory answers on rsp
+      indent();
+      os << "Connections::In< " << mi.ctype << " > " << mi.base << "_rsp;\n";
+    }
+  }
+  // Replicated (multi-client) arrays keep their memory INSIDE the design.
+  for (auto &mi : memInsts) {
+    if (mi.exposed)
+      continue;
     std::string reqT =
         "ac_int<" + std::to_string(1 + mi.addrw + mi.dataw) + ", false>";
     indent();
     os << "Connections::Combinational< " << reqT << " > " << mi.chan
        << "_req_ch;\n";
-    if (mi.dir != 'o') { // 'i' and 'b' read -> need a response channel
+    if (mi.dir != 'o') {
       indent();
       os << "Connections::Combinational< " << mi.ctype << " > " << mi.chan
          << "_rsp_ch;\n";
@@ -2289,7 +2350,7 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {  // new (SystemC-o
     indent();
     os << (mi.dir == 'o' ? "AlloMemW< " : "AlloMem< ") << mi.ctype << ", "
        << mi.total << ", " << mi.addrw << ", " << mi.dataw << " > " << mi.chan
-       << "_mem;\n";
+       << "_mem;  // replicated across clients: cannot be a port\n";
   }
 
   // Constructor: init list (channel names + instance names) + bindings.
@@ -2334,10 +2395,16 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {  // new (SystemC-o
     sep = ", ";
   }
   for (auto &mi : memInsts) {
-    os << sep << mi.chan << "_req_ch(\"" << mi.chan << "_req_ch\")";
-    if (mi.dir != 'o')
-      os << ", " << mi.chan << "_rsp_ch(\"" << mi.chan << "_rsp_ch\")";
-    os << ", " << mi.chan << "_mem(\"" << mi.chan << "_mem\")";
+    if (mi.exposed) {
+      os << sep << mi.base << "_req(\"" << mi.base << "_req\")";
+      if (mi.dir != 'o')
+        os << ", " << mi.base << "_rsp(\"" << mi.base << "_rsp\")";
+    } else {
+      os << sep << mi.chan << "_req_ch(\"" << mi.chan << "_req_ch\")";
+      if (mi.dir != 'o')
+        os << ", " << mi.chan << "_rsp_ch(\"" << mi.chan << "_rsp_ch\")";
+      os << ", " << mi.chan << "_mem(\"" << mi.chan << "_mem\")";
+    }
     sep = ", ";
   }
   os << " {\n";
@@ -2431,17 +2498,25 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {  // new (SystemC-o
         std::string ca = std::string(getName(carg).str());
         std::string rb = std::string(getName(ov).str());
         if (mp) {
-          // random-access memory port: bind req (+ rsp) to THIS client's own
-          // (replicated) memory channels (mp<call>_<arg>).
+          // random-access memory port: bind req (+ rsp) straight through to THIS
+          // client's TOP-LEVEL port (mp<call>_<arg>). The memory itself is outside
+          // the design now, so there is no internal channel to land on -- the kernel
+          // port and the top port are the same wire.
           std::string chan = "mp" + std::to_string(it.index()) + "_" +
                              std::to_string(opnd.index());
+          // Exposed (single-client) -> bind straight to the top port named after the
+          // array. Replicated -> bind to this replica's internal channel, as before.
+          std::string tgt = chan + "_req_ch", tgtR = chan + "_rsp_ch";
+          for (auto &mi : memInsts)
+            if (mi.chan == chan && mi.exposed) {
+              tgt = mi.base + "_req";
+              tgtR = mi.base + "_rsp";
+            }
           indent();
-          os << instNames[it.index()] << "." << ca << "_req(" << chan
-             << "_req_ch);\n";
+          os << instNames[it.index()] << "." << ca << "_req(" << tgt << ");\n";
           if (mp != 'o') { // 'i' and 'b' bind the response channel too
             indent();
-            os << instNames[it.index()] << "." << ca << "_rsp(" << chan
-               << "_rsp_ch);\n";
+            os << instNames[it.index()] << "." << ca << "_rsp(" << tgtR << ");\n";
           }
         } else if (streamArgDir(carg)) {
           // sequential-scan boundary -> single stream port
@@ -2472,8 +2547,11 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {  // new (SystemC-o
       indent(); os << nm << "_fifo.full_o(" << nm << "_full_sig);\n";
     }
   }
-  // Wire each internal memory: clk/rst + req channel (+ rsp channel for reads).
+  // Exposed memories are wired in the TESTBENCH (they are outside the design now).
+  // Replicated ones stay here and are wired as before.
   for (auto &mi : memInsts) {
+    if (mi.exposed)
+      continue;
     indent(); os << mi.chan << "_mem.clk(clk);\n";
     indent(); os << mi.chan << "_mem.rst(rst);\n";
     indent(); os << mi.chan << "_mem.req(" << mi.chan << "_req_ch);\n";
@@ -3094,17 +3172,63 @@ struct AlloFifoC : public Connections::Fifo<T, N> {
       os << "Connections::Combinational< " << a.ctype << " > ch_" << a.member
          << ";\n";
     }
+    // The random-access memories live HERE, not in the DUT: a boundary array is
+    // storage the design ACCESSES, not storage it CONTAINS. Keeping them inside made
+    // every workload array synthesize into the design (a region whose arrays are all
+    // random-access emitted `module top(clk, rst, done)` with the arrays as registers),
+    // which inflates every area number and is not an integratable interface.
+    for (auto &mi : memInsts) {
+      if (!mi.exposed)
+        continue; // replicated: still inside the DUT
+      std::string reqT =
+          "ac_int<" + std::to_string(1 + mi.addrw + mi.dataw) + ", false>";
+      indent();
+      os << "Connections::Combinational< " << reqT << " > " << mi.chan
+         << "_req_ch;\n";
+      if (mi.dir != 'o') {
+        indent();
+        os << "Connections::Combinational< " << mi.ctype << " > " << mi.chan
+           << "_rsp_ch;\n";
+      }
+      indent();
+      os << (mi.dir == 'o' ? "AlloMemW< " : "AlloMem< ") << mi.ctype << ", "
+         << mi.total << ", " << mi.addrw << ", " << mi.dataw << " > " << mi.chan
+         << "_mem;\n";
+    }
     indent(); os << "SC_HAS_PROCESS(tb);\n";
     indent();
     os << "tb(sc_module_name n) : sc_module(n), clk(\"clk\", 1, SC_NS), dut(\"dut\")";
     for (auto &a : ioArrays)
       os << ", ch_" << a.member << "(\"ch_" << a.member << "\")";
+    for (auto &mi : memInsts) {
+      if (!mi.exposed)
+        continue;
+      os << ", " << mi.chan << "_req_ch(\"" << mi.chan << "_req_ch\")";
+      if (mi.dir != 'o')
+        os << ", " << mi.chan << "_rsp_ch(\"" << mi.chan << "_rsp_ch\")";
+      os << ", " << mi.chan << "_mem(\"" << mi.chan << "_mem\")";
+    }
     os << " {\n";
     addIndent();
     indent(); os << "dut.clk(clk); dut.rst(rst); dut.done(done_sig);\n";
     for (auto &a : ioArrays) {
       indent();
       os << "dut." << a.member << "(ch_" << a.member << ");\n";
+    }
+    // Bind each exposed memory to the DUT's matching port pair, and clock it here.
+    for (auto &mi : memInsts) {
+      if (!mi.exposed)
+        continue;
+      indent();
+      os << mi.chan << "_mem.clk(clk); " << mi.chan << "_mem.rst(rst);\n";
+      indent();
+      os << "dut." << mi.base << "_req(" << mi.chan << "_req_ch); " << mi.chan
+         << "_mem.req(" << mi.chan << "_req_ch);\n";
+      if (mi.dir != 'o') {
+        indent();
+        os << "dut." << mi.base << "_rsp(" << mi.chan << "_rsp_ch); " << mi.chan
+           << "_mem.rsp(" << mi.chan << "_rsp_ch);\n";
+      }
     }
     indent(); os << "SC_THREAD(src); sensitive << clk.posedge_event(); "
                     "async_reset_signal_is(rst, false);\n";
@@ -3203,9 +3327,11 @@ struct AlloFifoC : public Connections::Fifo<T, N> {
         bool isF = (mi.ctype == "half" || mi.ctype == "double" ||
                     mi.ctype.find("ieee_float") != std::string::npos);
         std::string rt = isF ? mi.ctype : std::string("long long");
+        // Exposed memories live in the tb; replicated ones are still inside the DUT.
+        std::string owner = mi.exposed ? "t." : "t.dut.";
         os << "{ std::ifstream _f(\"input" << mi.inIdx << ".data\"); " << rt
-           << " _v; for (int f = 0; f < " << mi.total << "; ++f) { _f >> _v; t.dut."
-           << mi.chan << "_mem.mem[f] = (" << mi.ctype << ")_v; } }\n";
+           << " _v; for (int f = 0; f < " << mi.total << "; ++f) { _f >> _v; "
+           << owner << mi.chan << "_mem.mem[f] = (" << mi.ctype << ")_v; } }\n";
       }
     indent(); os << "t.rst = 0; sc_start(1, SC_NS);\n";
     // A stream output stops the sim via sc_stop (self-synchronizing: the sink
@@ -3247,11 +3373,13 @@ struct AlloFifoC : public Connections::Fifo<T, N> {
         os << (isFloat ? "    float _s = 0;\n" : "    long long _s = 0;\n");
         for (auto &mi : memInsts)
           if (mi.dir != 'i' && mi.outIdx == m.outIdx) {
+            // Exposed memories live in the tb; replicated ones inside the DUT.
+            std::string owner = mi.exposed ? "t." : "t.dut.";
             indent();
             if (isFloat)
-              os << "    _s += t.dut." << mi.chan << "_mem.mem[f].to_float();\n";
+              os << "    _s += " << owner << mi.chan << "_mem.mem[f].to_float();\n";
             else
-              os << "    _s += (long long) t.dut." << mi.chan
+              os << "    _s += (long long) " << owner << mi.chan
                  << "_mem.mem[f];\n";
           }
         indent();
