@@ -183,7 +183,39 @@ meaningless. Fixing this *reversed* the RaveNoC Fmax verdict.
 
 `rtl.v` leaves the Connections modular-IO wrappers as unresolved black boxes — 12 of
 them in one design — and black boxes are excluded from **both** area and the timing
-graph. Verify with `grep -c CDFG-428 genus.log` (must be 0).
+graph. Verify with `grep -c CDFG-428 genus.log` (must be 0). Check **CDFG-331** too — a
+"logic abstract" is an empty module, which is how Catapult emits the `AlloMem`
+`ccs_ram_sync`. Grepping only for 428 misses every Allo array.
+
+### A Genus effort is an ATTRIBUTE, and a bare one exits 0 having done nothing
+
+`syn_generic_effort high` is not a command. Genus reports `invalid command name`,
+**abandons the rest of the script**, and prints `Normal exit` with status 0. Reports written
+before that line survive on disk, so a runner that greps them finds stale numbers from a
+previous run and reports them as current. It must be `set_db syn_generic_effort high`;
+`genus_hi.tcl` has always had it, `genus_preserve.tcl` had lost it in an edit and therefore
+never once completed a synthesis.
+
+### `set_db <inst> .preserve` cannot protect anything pre-`syn_map`
+
+The obvious way to stop Genus sweeping unobservable logic does not work on an unmapped
+netlist:
+
+```
+Error : Cannot preserve unmapped leaf instance.                [TUI-210]
+Error : Cannot preserve partially mapped hierarchical instance. [TUI-214]
+```
+
+`preserve` applies to already-mapped instances, so it is useless against the sweep that
+happens *during* `syn_generic`. Worse, `get_db [current_design] .insts` returns **leaf
+gates**, not hierarchical instances (`get_db hinsts` gives those) — so a `catch`-wrapped
+loop over it fails on every single element and still prints "PRESERVED 291 instances".
+
+The lever that works is to disable the optimisations themselves, as root attributes:
+`hdl_preserve_unused_registers true` (before `read_hdl`), `delete_unloaded_seqs false`,
+`delete_unloaded_insts false`, `optimize_constant_0_flops false`,
+`optimize_constant_1_flops false`, plus `boundary_opto false` and `auto_ungroup none` to
+keep the hierarchy reportable.
 
 ### Never assume a reference design's cycles/step
 
