@@ -185,19 +185,49 @@ _FPGA_DEVICE_PATTERNS = (
 )
 
 
-def _reject_fpga_device(device):
-    """Fail early if an FPGA part was handed to the Catapult (ASIC) flow."""
+def _looks_like_fpga(device):
     d = str(device).lower()
-    if not any(p in d for p in _FPGA_DEVICE_PATTERNS):
-        return
+    return any(p in d for p in _FPGA_DEVICE_PATTERNS)
+
+
+def resolve_library(configs):
+    """Pick the Catapult standard-cell library, from `library` or legacy `device`.
+
+    `library` is the canonical key: what this flow selects IS a library
+    (`solution library add <name>`), and calling it `device` invited exactly the bug
+    this resolves -- one shared `--device` flag meaning an FPGA part to vitis_hls and a
+    cell library here.
+
+    Resolution order, chosen so a script that drives BOTH backends can be fixed by ADDING
+    one key rather than restructuring what it passes:
+
+      1. `library` given            -> use it; any `device` present belongs to the other
+                                       backend and is ignored.
+      2. no `library`, `device` given:
+           - an FPGA part           -> ERROR. Nothing sensible to select, and silently
+                                       defaulting would hand back an area number measured
+                                       against a library the caller never chose.
+           - anything else          -> use it (back-compat, incl. custom ASIC libraries).
+      3. neither                    -> the default.
+    """
+    library = configs.get("library")
+    if library is not None:
+        return library
+    device = configs.get("device")
+    if device is None:
+        return "nangate-45nm_beh"
+    if not _looks_like_fpga(device):
+        return device  # legacy spelling of `library`
     raise ValueError(
         f"device={device!r} is an FPGA part, but the Catapult/SystemC flow synthesizes to "
         f"an ASIC standard-cell library (e.g. 'nangate-45nm_beh' or 'sky130'). Catapult has "
         f"no such library and would fail later with "
         f"\"Could not locate library file for library name {device}\".\n"
-        f"If one script drives both backends, pass the FPGA part only to target='vitis_hls' "
-        f"and either omit 'device' for target='systemc' (it defaults to 'nangate-45nm_beh') "
-        f"or give it an ASIC library."
+        f"If one script drives both backends, the smallest fix is to ADD a 'library' key "
+        f"for this flow -- configs={{'library': 'nangate-45nm_beh', 'device': {device!r}}} "
+        f"-- since 'library' wins and 'device' is then left for target='vitis_hls'. "
+        f"Dropping 'device' from the systemc configs works too (it defaults to "
+        f"'nangate-45nm_beh')."
     )
 
 
@@ -234,8 +264,8 @@ def codegen_tcl(top, configs):
     )
     mode = configs.get("mode", "csyn")
     platform = configs.get("platform", "catapult")
-    device = configs.get("device", "nangate-45nm_beh")
-    _reject_fpga_device(device)
+    # `library` is the canonical key; `device` still accepted (see resolve_library).
+    device = resolve_library(configs)
     # preserve_hier=True keeps sub-function boundaries in RTL output,
     # enabling per-module area/power breakdown in area.rpt.
     preserve_hier = configs.get("preserve_hierarchy", True)
