@@ -278,6 +278,15 @@ private:
   // with an ac_ieee_float operand otherwise fails template deduction).
   void emitMaxMin(Operation *op, const char *syntax) override;
 
+  // Stateful globals (`x: T @ Stateful`). The base emits them as function-scope
+  // `static`s -- correct for a C function that is CALLED REPEATEDLY, wrong for an
+  // SC_THREAD (see the reset-action block in emitKernelModule).
+  void emitGlobalStorageQualifier(memref::GlobalOp op) override;
+  // getTypeName isn't virtual, so the declaration would otherwise print Xilinx
+  // ap_int/ap_fixed while the body's uses print Catapult-native types.
+  void emitStatefulGlobalElementType(Type type) override;
+  static bool isStatefulGlobal(memref::GlobalOp g);
+
   // Loop-shape transform: the kernel's outermost `for t` becomes a free-running while(1)
   // under __SYNTHESIS__ so Catapult pipelines the body (see emitAffineFor).
   bool isSteadyStateLoop(affine::AffineForOp op);
@@ -448,6 +457,34 @@ char SystemCModuleEmitter::argDir(func::FuncOp func, unsigned i) {  // new (Syst
     return 0;
   char c = s[i];
   return (c == 'i' || c == 'o' || c == 'b') ? c : 0;
+}
+
+// A `x: T @ Stateful` variable. The frontend lowers it to a private memref.global
+// carrying an initial value, tagged BOTH with a `static` attr and a `__stateful_`
+// name prefix (allo/ir/builder.py); the base emitter keys off either, so match both.
+bool SystemCModuleEmitter::isStatefulGlobal(memref::GlobalOp g) {  // new (SystemC-only)
+  return g->hasAttr("static") ||
+         g.getSymName().str().find("__stateful_") != std::string::npos;
+}
+
+// Storage class. The base maps stateful -> `static`, which is right for a C function
+// called repeatedly but WRONG here on two counts: a function-scope static in run() has
+// static storage duration (shared by every instance of the SC_MODULE, not per-instance),
+// and it is initialised once at program start, so an RTL reset would NOT clear it and
+// csim would silently diverge from cosim. We emit no storage class at all and declare
+// the variable in the reset action instead (emitKernelModule), which gives per-instance
+// state that the reset re-initialises -- matching the RTL.
+void SystemCModuleEmitter::emitGlobalStorageQualifier(memref::GlobalOp op) {  // override (base emitter)
+  if (isStatefulGlobal(op) && !op->hasAttr("constant"))
+    return;
+  CatapultModuleEmitter::emitGlobalStorageQualifier(op);
+}
+
+// Element type of a global's declaration. getTypeName is not virtual, so without this
+// the declaration prints Xilinx ap_int/ap_fixed while every use of it in the body prints
+// the Catapult-native type -- they interoperate only through the ap_int shim.
+void SystemCModuleEmitter::emitStatefulGlobalElementType(Type type) {  // override (base emitter)
+  os << getSCTypeName(type);
 }
 
 // Safe-to-stream check: sequential single-pass access only. The stream transform
@@ -1286,6 +1323,44 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {  // new (System
   for (auto &lf : localFifos) {
     indent(); os << "int " << lf.first << "_cnt = 0;\n";
   }
+  // Stateful variables (`x: T @ Stateful`) -- state that must survive from one
+  // steady-state iteration to the next. Declared HERE, in the reset action above the
+  // body, for the same reason the self-FIFO counters above are: a declaration before
+  // the `while(1)` is per-instance, is re-initialised by the reset, and Catapult
+  // schedules it as a register rather than folding it into the loop body. (Vitis
+  // instead emits a function-scope `static`, because there the kernel is a function
+  // called once per invocation; an SC_THREAD is entered once and loops internally, so
+  // `static` would both share the state across module instances and skip the reset.)
+  //
+  // Uses need no rewriting: the base emitGetGlobal binds the GetGlobalOp's SSA result
+  // to the global's SYMBOL NAME, so loads/stores in the body already name this variable.
+  {
+    llvm::SmallVector<memref::GlobalOp, 4> statefulGlobals;
+    func.walk([&](memref::GetGlobalOp gg) {
+      auto g = gg->getParentOfType<ModuleOp>()
+                   .lookupSymbol<memref::GlobalOp>(gg.getName());
+      if (!g || !isStatefulGlobal(g) || g->hasAttr("constant"))
+        return;
+      for (auto &e : statefulGlobals)
+        if (e.getSymName() == g.getSymName())
+          return;
+      statefulGlobals.push_back(g);
+    });
+    for (auto &g : statefulGlobals) {
+      // emitGlobal silently emits NOTHING without an initial value, which would leave
+      // the body referencing an undeclared name -- the exact silent failure this whole
+      // block fixes. Fail the build instead.
+      if (!g.getInitialValue().has_value()) {
+        g.emitError("stateful global `")
+            << g.getSymName()
+            << "` has no initial value, so no declaration can be emitted; the kernel "
+               "body would reference an undeclared variable";
+        state.encounteredError = true;
+        return;
+      }
+      emitGlobal(g);
+    }
+  }
   // Raw sc_out wire ports must be driven in the reset action (Catapult CIN-233).
   for (auto &pn : wireOutPorts) {
     indent(); os << pn << ".write(0);\n";
@@ -1297,7 +1372,8 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {  // new (System
   // SystemC path (unlike Vhls emitFunction) never emitted the global itself, so the
   // body's reads of `W` were undefined at synthesis. Emit each such const array as
   // a local `[static] const T W[...] = {...}` before the body reads it. Stateful
-  // (__stateful_) globals need cross-call persistence and are out of scope here.
+  // (__stateful_) globals are WRITTEN, so they are declared in the reset action above
+  // instead -- `static const` here would be both shared and unwritable.
   {
     llvm::SmallVector<memref::GlobalOp, 4> constGlobals;
     func.walk([&](memref::GetGlobalOp gg) {
@@ -1305,9 +1381,8 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {  // new (System
                    .lookupSymbol<memref::GlobalOp>(gg.getName());
       if (!g || !g.getInitialValue().has_value())
         return;
-      // Stateful/static globals need cross-call persistence -- out of scope.
-      if (g->hasAttr("static") ||
-          g.getSymName().str().find("__stateful_") != std::string::npos)
+      // Stateful globals: handled by the reset-action block above.
+      if (isStatefulGlobal(g) && !g->hasAttr("constant"))
         return;
       for (auto &e : constGlobals)
         if (e.getSymName() == g.getSymName())
@@ -2363,6 +2438,42 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {  // override (base emit
           state.encounteredError = true;
           return;
         }
+
+  // A stateful variable declared at REGION scope and touched by more than one kernel
+  // is shared mutable state between concurrently-running SC_MODULEs. There is no
+  // correct local form for it: emitting the declaration into each kernel's reset action
+  // (what the single-kernel path does) gives every kernel its OWN copy, so writes by one
+  // are invisible to the others -- wrong answers, no diagnostic. Real sharing needs a
+  // memory with arbitration, i.e. the AlloMem memory-port path, which is a separate
+  // feature. Reject it here rather than emit plausible-looking wrong hardware.
+  {
+    llvm::DenseMap<StringRef, unsigned> statefulUsers;
+    for (auto f : module.getOps<func::FuncOp>()) {
+      if (!f->hasAttr("df.kernel"))
+        continue;
+      llvm::DenseSet<StringRef> seenInThisKernel;
+      f.walk([&](memref::GetGlobalOp gg) {
+        auto g = module.lookupSymbol<memref::GlobalOp>(gg.getName());
+        if (!g || !isStatefulGlobal(g) || g->hasAttr("constant"))
+          return;
+        if (seenInThisKernel.insert(g.getSymName()).second)
+          statefulUsers[g.getSymName()]++;
+      });
+    }
+    for (auto &kv : statefulUsers)
+      if (kv.second > 1) {
+        module.emitError("stateful variable `")
+            << kv.first << "` is used by " << kv.second
+            << " kernels. A region-scope `@ Stateful` shared between kernels is shared "
+               "mutable state between concurrent hardware modules; the SystemC backend "
+               "cannot express it (each kernel would get a private copy and silently "
+               "disagree). Give each kernel its own `@ Stateful` variable, or pass the "
+               "shared array as a region argument so it becomes an arbitrated memory "
+               "port.";
+        state.encounteredError = true;
+        return;
+      }
+  }
 
   // A stream passed to exactly ONE kernel call is a self-FIFO (one kernel both
   // produces and queries it) -> realize as a local ac_channel, not a directional

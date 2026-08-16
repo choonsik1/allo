@@ -325,5 +325,17 @@ words, FWFT FIFO). The code is unusually well‑commented — most hacks cite th
    sub‑threads so a design can break its own recurrence without hand‑splitting into kernels.
 
 **Open TODOs already in the code:** emit ac_int/ac_fixed natively and drop the `ap_int` shim
-(L2544); sub‑region hierarchy (L2809); wire up memory‑port `'o'`/`'b'` cleanly (L504); stateful
-globals (L1287); block‑streams (L1515).
+(L2544); sub‑region hierarchy (L2809); wire up memory‑port `'o'`/`'b'` cleanly (L504);
+block‑streams (L1515).
+
+**`@ Stateful` (done 2026‑08‑16).** A stateful variable lowers to a private `memref.global`
+(`__stateful_` prefix + `static` attr + initial value). Vitis declares it as a function‑scope
+`static`, correct for a function *called repeatedly*. An SC_THREAD is entered once and loops
+internally, so `static` would be shared by every instance of the module AND skipped by the RTL
+reset. The emitter instead declares it in the **reset action**, beside the self‑FIFO counters:
+per‑instance, reset‑initialised, and scheduled as a register. Uses need no rewriting — the
+base `emitGetGlobal` already binds the SSA result to the global's symbol name. Two hooks made
+this reuse the base's initializer formatting: `emitGlobalStorageQualifier` (new, suppresses
+`static`) and `emitStatefulGlobalElementType` (so the declaration prints Catapult‑native types
+rather than `ap_int`). **Not supported:** a region‑scope stateful shared by >1 kernel — shared
+mutable state between concurrent modules, rejected with a diagnostic in `emitModule`.

@@ -44,8 +44,10 @@ Headline (Genus 20.1 high effort, Nangate 45nm, 2.0 ns, `concat_rtl.v`, 0 black 
 
 ## Known gaps in the backend
 
-- **Stateful category** — `__stateful_*` globals are not declared in the SC_MODULE, so
-  those designs do not compile through SystemC.
+- ~~**Stateful category**~~ — **DONE 2026-08-16.** `x: T @ Stateful` now emits in the
+  SC_THREAD reset action (per-instance, reset-initialised) rather than as the Vitis
+  function-scope `static`. Scalar + array, csim and cosim bit-exact:
+  `tests/dataflow/test_stateful_systemc.py`.
 - **Bit-slicing under csynth** — the `(hi,lo)` bit-range is csim-only, so packed-stream
   designs fail at their slice site. Root cause and the fix that would delete it are in
   `BACKEND.md`.

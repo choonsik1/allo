@@ -38,14 +38,26 @@ Plus the dedicated suite `tests/dataflow/test_systemc_backend.py` — **28/28 PA
 (memory ports i/o/both, multi-client, hierarchy, empty/full, bit-slice packing,
 stream depth).
 
-## FAIL — real backend gap (2)
-| example | class | root cause |
-|---|---|---|
-| region_stateful | `@ Stateful` unsupported | region-scope persistent buffer; sim MLIRError / emit gap |
-| hierachical_mesh | `@ Stateful` unsupported | emit: `__stateful_*_ctrl/daddr/size` undeclared in scope |
+## FAIL — real backend gap (1, was 2)
 
-Remaining real gap: **`@ Stateful` persistent buffers** are not declared by the
-emitter (`__stateful_*` control/addr/size state). Needs stateful-decl emission.
+**`@ Stateful` per-kernel state is now SUPPORTED (2026-08-16).** The emitter declares
+each `__stateful_*` global in the SC_THREAD reset action — per-instance and
+reset-initialised, rather than the Vitis function-scope `static` (which would be shared
+across module instances and skipped by reset). Scalar and array, csim and cosim
+bit-exact: `tests/dataflow/test_stateful_systemc.py`.
+
+| example | class | status |
+|---|---|---|
+| hierachical_mesh | `@ Stateful` | **FIXED** — 26 (2x1) / 64 (2x2) stateful names, all declared |
+| region_stateful | region-scope `@ Stateful` shared by 2 kernels | **still unsupported, now diagnosed** |
+
+Remaining real gap: a `@ Stateful` declared at REGION scope and touched by **more than
+one kernel** is shared mutable state between concurrent hardware modules. There is no
+correct local form — each kernel would get a private copy and silently disagree — so the
+emitter now rejects it with a named diagnostic instead of emitting wrong hardware. Real
+support needs an arbitrated memory (the AlloMem memory-port path). 1 of the 3
+`test_region_stateful` cases (the single-kernel one) passes.
+
 (The mem-mapped-output readout race that previously failed tiled_gemm /
 pingpong_gemm / hierachical / wrap_movement is FIXED — see single-shot above.)
 

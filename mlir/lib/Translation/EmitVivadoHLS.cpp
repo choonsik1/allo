@@ -1656,22 +1656,7 @@ void allo::hls::VhlsModuleEmitter::emitGlobal(memref::GlobalOp op) {
     indent();
     auto arrayType = llvm::dyn_cast<ShapedType>(op.getType());
     auto type = arrayType.getElementType();
-    // Check for static attribute or stateful variable naming pattern
-    bool isStatic = op->hasAttr("static");
-    if (!isStatic) {
-      // Check if symbol name contains "__stateful_" pattern (stateful
-      // variables)
-      std::string symName = op.getSymName().str();
-      if (symName.find("__stateful_") != std::string::npos) {
-        isStatic = true;
-      }
-    }
-    if (isStatic) {
-      os << "static ";
-    }
-    if (op->hasAttr("constant")) {
-      os << "const ";
-    }
+    emitGlobalStorageQualifier(op);
     emitStatefulGlobalElementType(type);
     os << " " << op.getSymName();
     for (auto &shape : arrayType.getShape())
@@ -3110,6 +3095,24 @@ allo::hls::VhlsModuleEmitter::emitFunctionSignature(func::FuncOp func) {
 
 void allo::hls::VhlsModuleEmitter::emitStatefulGlobalElementType(Type type) {
   os << getTypeName(type);
+}
+
+/// Storage class for a global's declaration. A C function is CALLED REPEATEDLY, so
+/// `static` is what makes a stateful variable persist between calls -- hence both the
+/// explicit `static` attr and the `__stateful_` naming convention map to it here.
+void allo::hls::VhlsModuleEmitter::emitGlobalStorageQualifier(
+    memref::GlobalOp op) {
+  bool isStatic = op->hasAttr("static");
+  if (!isStatic) {
+    // Check if symbol name contains "__stateful_" pattern (stateful variables)
+    std::string symName = op.getSymName().str();
+    if (symName.find("__stateful_") != std::string::npos)
+      isStatic = true;
+  }
+  if (isStatic)
+    os << "static ";
+  if (op->hasAttr("constant"))
+    os << "const ";
 }
 
 void allo::hls::VhlsModuleEmitter::emitFloatArrayElement(float value) {
