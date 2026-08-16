@@ -332,10 +332,23 @@ block‑streams (L1515).
 (`__stateful_` prefix + `static` attr + initial value). Vitis declares it as a function‑scope
 `static`, correct for a function *called repeatedly*. An SC_THREAD is entered once and loops
 internally, so `static` would be shared by every instance of the module AND skipped by the RTL
-reset. The emitter instead declares it in the **reset action**, beside the self‑FIFO counters:
-per‑instance, reset‑initialised, and scheduled as a register. Uses need no rewriting — the
-base `emitGetGlobal` already binds the SSA result to the global's symbol name. Two hooks made
+reset. The emitter instead declares it as an **SC_MODULE member** and assigns its initial value
+in the **reset action**: per‑instance, reset‑initialised, and scheduled as a register. A member
+rather than a `run()` local because an SC_THREAD body lives on a ~64KB coroutine stack, so a
+large stateful array would overflow it and segfault — the same trap the const‑array block
+documents. Array resets emit one loop nest (the frontend only allows a splat initialiser), not
+an assignment per element. Uses need no rewriting — the base `emitGetGlobal` already binds the
+SSA result to the global's symbol name.
+
+**Not pinned to registers.** `hls_resource … map_to_module="[Register]"` is emitted from
+`emitArrayDirectivesPreheader`, which runs off `emitAlloc`; a stateful array comes from
+`emitGlobal` and so never gets the pragma. It is functionally correct but may map to a 1R1W
+RAM — one access per cycle, and the zero‑area Genus artifact of `RESULTS.md` trap #2. Route
+stateful arrays through the partition/pragma path before using `@ Stateful` for a router buffer. Two hooks made
 this reuse the base's initializer formatting: `emitGlobalStorageQualifier` (new, suppresses
 `static`) and `emitStatefulGlobalElementType` (so the declaration prints Catapult‑native types
 rather than `ap_int`). **Not supported:** a region‑scope stateful shared by >1 kernel — shared
-mutable state between concurrent modules, rejected with a diagnostic in `emitModule`.
+mutable state between concurrent modules, rejected with a diagnostic in `emitModule`. Note the
+memory‑port path is **not** an escape hatch: it REPLICATES a shared array (one `AlloMem` per
+client, writes summed at readout, L388), which reproduces the same silent disagreement. Real
+support needs a multi‑client arbitrated memory.

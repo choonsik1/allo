@@ -286,6 +286,10 @@ private:
   // ap_int/ap_fixed while the body's uses print Catapult-native types.
   void emitStatefulGlobalElementType(Type type) override;
   static bool isStatefulGlobal(memref::GlobalOp g);
+  // One element of a dense initializer, as a C++ literal. Mirrors the base emitGlobal's
+  // per-element formatting, which is only reachable there inside a full `= {...}` brace
+  // list -- a reset action needs the values one at a time.
+  void emitDenseElementLiteral(Attribute element, Type type, bool isUnsigned);
 
   // Loop-shape transform: the kernel's outermost `for t` becomes a free-running while(1)
   // under __SYNTHESIS__ so Catapult pipelines the body (see emitAffineFor).
@@ -460,11 +464,16 @@ char SystemCModuleEmitter::argDir(func::FuncOp func, unsigned i) {  // new (Syst
 }
 
 // A `x: T @ Stateful` variable. The frontend lowers it to a private memref.global
-// carrying an initial value, tagged BOTH with a `static` attr and a `__stateful_`
-// name prefix (allo/ir/builder.py); the base emitter keys off either, so match both.
+// carrying an initial value, tagged BOTH with a `static` attr and a `__stateful_` name
+// prefix (allo/ir/builder.py:1965, the only site that sets either).
+//
+// Keyed on the NAME ALONE, deliberately, even though the base emitter accepts either.
+// `static` on its own means "give this static storage duration", which is a different
+// request: a global carrying it but NOT stateful would be handed a per-instance member
+// and a reset, silently changing its lifetime. Matching the name keeps this to variables
+// the frontend actually created from `@ Stateful`.
 bool SystemCModuleEmitter::isStatefulGlobal(memref::GlobalOp g) {  // new (SystemC-only)
-  return g->hasAttr("static") ||
-         g.getSymName().str().find("__stateful_") != std::string::npos;
+  return g.getSymName().str().find("__stateful_") != std::string::npos;
 }
 
 // Storage class. The base maps stateful -> `static`, which is right for a C function
@@ -485,6 +494,45 @@ void SystemCModuleEmitter::emitGlobalStorageQualifier(memref::GlobalOp op) {  //
 // the Catapult-native type -- they interoperate only through the ap_int shim.
 void SystemCModuleEmitter::emitStatefulGlobalElementType(Type type) {  // override (base emitter)
   os << getSCTypeName(type);
+}
+
+// One dense-initializer element as a standalone C++ literal. The base emits these only
+// inside a brace list; resetting a member needs them individually.
+void SystemCModuleEmitter::emitDenseElementLiteral(Attribute element, Type type,
+                                                   bool isUnsigned) {  // new (SystemC-only)
+  if (llvm::isa<FloatType>(type)) {
+    // f16 needs an explicit half(...) ctor (state.acFloatConstCtor); reuse the base's
+    // float formatter so INFINITY / precision handling stays in one place.
+    auto fa = llvm::cast<FloatAttr>(element);
+    if (type.isF64()) {
+      double v = fa.getValue().convertToDouble();
+      if (std::isfinite(v))
+        os << v;
+      else
+        os << (v > 0 ? "INFINITY" : "-INFINITY");
+    } else {
+      emitFloatArrayElement(fa.getValue().convertToFloat());
+    }
+    return;
+  }
+  if (type.isInteger(1)) {
+    os << (llvm::cast<BoolAttr>(element).getValue() ? "true" : "false");
+    return;
+  }
+  if (type.isIntOrIndex()) {
+    auto it = llvm::dyn_cast<IntegerType>(type);
+    if (isUnsigned) {
+      os << llvm::cast<IntegerAttr>(element).getValue().getZExtValue();
+      if (it && it.getWidth() > 64)
+        os << "ULL";
+    } else {
+      os << llvm::cast<IntegerAttr>(element).getValue();
+      if (it && it.getWidth() > 64)
+        os << "LL";
+    }
+    return;
+  }
+  emitError(nullptr, "stateful variable has an unsupported element type.");
 }
 
 // Safe-to-stream check: sequential single-pass access only. The stream transform
@@ -1244,6 +1292,35 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {  // new (System
     }
   }
 
+  // Stateful variables (`x: T @ Stateful`) as MODULE MEMBERS, initialised in the reset
+  // action below. Not locals in run(): an SC_THREAD body runs on a coroutine stack of
+  // only ~64KB, and a large stateful array would overflow it and segfault at run time
+  // with no useful message (the same trap the const-array block documents -- test_mlp's
+  // 128KB weight array). Members also can't be `static`, which would share the state
+  // across every instance of this module and skip the reset. This is the shape MatchLib
+  // uses for its own state, and Catapult registers it identically.
+  llvm::SmallVector<memref::GlobalOp, 4> statefulGlobals;
+  func.walk([&](memref::GetGlobalOp gg) {
+    auto g = gg->getParentOfType<ModuleOp>()
+                 .lookupSymbol<memref::GlobalOp>(gg.getName());
+    if (!g || !isStatefulGlobal(g) || g->hasAttr("constant"))
+      return;
+    for (auto &e : statefulGlobals)
+      if (e.getSymName() == g.getSymName())
+        return;
+    statefulGlobals.push_back(g);
+  });
+  for (auto &g : statefulGlobals) {
+    auto at = llvm::cast<ShapedType>(g.getType());
+    fixUnsignedType(g, g->hasAttr("unsigned"));
+    indent();
+    emitStatefulGlobalElementType(at.getElementType());
+    os << " " << g.getSymName();
+    for (auto &s : at.getShape())
+      os << "[" << s << "]";
+    os << ";  // @ Stateful\n";
+  }
+
   // Constructor: name the ports + register a clocked, reset-aware thread.
   indent(); os << "SC_HAS_PROCESS(" << name << ");\n";
   indent(); os << name << "(sc_module_name n) : sc_module(n), done(\"done\")";
@@ -1323,42 +1400,74 @@ void SystemCModuleEmitter::emitKernelModule(func::FuncOp func) {  // new (System
   for (auto &lf : localFifos) {
     indent(); os << "int " << lf.first << "_cnt = 0;\n";
   }
-  // Stateful variables (`x: T @ Stateful`) -- state that must survive from one
-  // steady-state iteration to the next. Declared HERE, in the reset action above the
-  // body, for the same reason the self-FIFO counters above are: a declaration before
-  // the `while(1)` is per-instance, is re-initialised by the reset, and Catapult
-  // schedules it as a register rather than folding it into the loop body. (Vitis
-  // instead emits a function-scope `static`, because there the kernel is a function
-  // called once per invocation; an SC_THREAD is entered once and loops internally, so
-  // `static` would both share the state across module instances and skip the reset.)
-  //
-  // Uses need no rewriting: the base emitGetGlobal binds the GetGlobalOp's SSA result
-  // to the global's SYMBOL NAME, so loads/stores in the body already name this variable.
-  {
-    llvm::SmallVector<memref::GlobalOp, 4> statefulGlobals;
-    func.walk([&](memref::GetGlobalOp gg) {
-      auto g = gg->getParentOfType<ModuleOp>()
-                   .lookupSymbol<memref::GlobalOp>(gg.getName());
-      if (!g || !isStatefulGlobal(g) || g->hasAttr("constant"))
-        return;
-      for (auto &e : statefulGlobals)
-        if (e.getSymName() == g.getSymName())
-          return;
-      statefulGlobals.push_back(g);
-    });
-    for (auto &g : statefulGlobals) {
-      // emitGlobal silently emits NOTHING without an initial value, which would leave
-      // the body referencing an undeclared name -- the exact silent failure this whole
-      // block fixes. Fail the build instead.
-      if (!g.getInitialValue().has_value()) {
-        g.emitError("stateful global `")
-            << g.getSymName()
-            << "` has no initial value, so no declaration can be emitted; the kernel "
-               "body would reference an undeclared variable";
-        state.encounteredError = true;
-        return;
+  // Stateful variables: INITIALISE the members declared above. This is the reset
+  // action, so the RTL reset re-establishes the initial value exactly as csim does --
+  // the property that makes cosim meaningful. Uses need no rewriting: the base
+  // emitGetGlobal binds the GetGlobalOp's SSA result to the global's SYMBOL NAME, so
+  // loads and stores in the body already name this member.
+  for (auto &g : statefulGlobals) {
+    // Without an initial value there is nothing to reset to, and the body would run on
+    // an undefined register. emitGlobal used to swallow this case silently.
+    auto init = g.getInitialValue();
+    if (!init.has_value()) {
+      g.emitError("stateful variable `")
+          << g.getSymName()
+          << "` has no initial value, so its register cannot be reset; the kernel body "
+             "would read undefined state";
+      state.encounteredError = true;
+      return;
+    }
+    auto dense = llvm::dyn_cast<DenseElementsAttr>(init.value());
+    if (!dense) {
+      g.emitError("stateful variable `")
+          << g.getSymName() << "` has a non-dense initial value, which is unsupported";
+      state.encounteredError = true;
+      return;
+    }
+    auto at = llvm::cast<ShapedType>(g.getType());
+    fixUnsignedType(g, g->hasAttr("unsigned"));
+    // The frontend only allows a single scalar initialiser (`x: T[N] @ Stateful = 0`),
+    // so the attribute is a splat and one loop nest resets the whole array. Emitting an
+    // assignment per element instead would put thousands of statements in the reset
+    // action of any sizeable buffer.
+    if (dense.isSplat()) {
+      unsigned rank = at.getRank();
+      for (unsigned d = 0; d < rank; ++d) {
+        indent();
+        os << "for (int _sr" << d << " = 0; _sr" << d << " < " << at.getShape()[d]
+           << "; ++_sr" << d << ") {\n";
+        addIndent();
       }
-      emitGlobal(g);
+      indent();
+      os << g.getSymName();
+      for (unsigned d = 0; d < rank; ++d)
+        os << "[_sr" << d << "]";
+      os << " = ";
+      emitDenseElementLiteral(dense.getSplatValue<Attribute>(), at.getElementType(),
+                              g->hasAttr("unsigned"));
+      os << ";\n";
+      for (unsigned d = 0; d < rank; ++d) {
+        reduceIndent();
+        indent();
+        os << "}\n";
+      }
+    } else {
+      // Not reachable from the current frontend; kept correct rather than silently wrong.
+      SmallVector<int64_t> idx(at.getRank(), 0);
+      for (auto element : dense.getValues<Attribute>()) {
+        indent();
+        os << g.getSymName();
+        for (int64_t i : idx)
+          os << "[" << i << "]";
+        os << " = ";
+        emitDenseElementLiteral(element, at.getElementType(), g->hasAttr("unsigned"));
+        os << ";\n";
+        for (int d = (int)at.getRank() - 1; d >= 0; --d) {
+          if (++idx[d] < at.getShape()[d])
+            break;
+          idx[d] = 0;
+        }
+      }
     }
   }
   // Raw sc_out wire ports must be driven in the reset action (Catapult CIN-233).
@@ -2468,8 +2577,10 @@ void SystemCModuleEmitter::emitModule(ModuleOp module) {  // override (base emit
                "mutable state between concurrent hardware modules; the SystemC backend "
                "cannot express it (each kernel would get a private copy and silently "
                "disagree). Give each kernel its own `@ Stateful` variable, or pass the "
-               "shared array as a region argument so it becomes an arbitrated memory "
-               "port.";
+               "state between them over a Stream/Channel so the ordering is explicit. "
+               "NOTE: passing it as a region argument does NOT work either -- the "
+               "memory-port path REPLICATES a shared array (one AlloMem per client, "
+               "writes summed at readout), which reproduces this same failure.";
         state.encounteredError = true;
         return;
       }
