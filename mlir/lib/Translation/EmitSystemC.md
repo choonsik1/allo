@@ -394,6 +394,50 @@ Useful side finding for when that is done: model the bundle on
 `s_rrdy`/`s_wrdy`, so the memory **can** stall the design. A bare `ram_wire` has no such
 line and does impose fixed timing.
 
+**Measured: a `modulario` method CANNOT contain a data‑dependent wait** (Catapult 2024.2,
+2026‑08‑17). This is what stops the memory ready lines from being honoured.
+
+The RAM‑pin bundles carry `_rrdy`/`_wrdy`, matching Catapult's own
+`ccs_ramifc_w_handshake_{r,w}`. The obvious way to use them is to stall in the accessor:
+
+```cpp
+#pragma design modulario <in>
+T A_rd(AddrT addr) {
+  A_radr.write(addr); A_re.write(true);
+  do { wait(); } while (!A_rrdy.read());   // <-- does NOT synthesize
+  ...
+}
+```
+
+That fails outright:
+
+```
+Top-down synthesis of C-CORE 'rev_0__A_rd' failed (ASM-2)
+CHANOPERWRITE "io_syncw(ccs_ccore_done)" ... (BASIC-25)
+```
+
+A `modulario` method is a **fixed‑protocol C‑CORE**: its cycle behaviour must be static, so a
+loop whose trip count depends on an input signal cannot be expressed. Not a throughput cost —
+a hard build failure. Reverting to the fixed two‑edge read restores `cosim MATCH`, which
+confirms the stall loop was the sole cause.
+
+Why Catapult's own component *does* have `s_rrdy`: in the **function flow** the tool generates
+the stall logic itself from `inMat[i]`. In the SystemC flow the accessor is ours to write, and
+that is precisely what `modulario` forbids.
+
+**Consequence, and it is a real limitation:** the pins are declared and `AlloMemPins` holds
+them high, but the design does **not** honour them. Against a memory that is not always ready
+it would sample `_q` before the data arrives. Making them real needs the stall *outside* the
+`modulario` method, or an interface component that absorbs it as the vendor's does.
+
+**Related trap in the same area:** a driven `sc_out` must be written in the reset action
+(CIN‑233), and the emitter does that via `wireOutPorts`. Writing a literal `0` is wrong for a
+float payload — `sc_out<ac_ieee_float<binary32>>::write` takes `const T&` and there is no
+implicit `int`→`T` conversion, so it fails to compile only for float designs. `wireOutPorts`
+therefore carries a per‑port zero expression. (The deleted `AlloMemW` used `_mem_decode<T>(0)`
+for the same reason; removing it as dead code re‑introduced the problem until the suite caught
+it on `test_producer_consumer`.)
+
 **Not pinned to registers.** `hls_resource … map_to_module="[Register]"` is emitted from
 `emitArrayDirectivesPreheader`, which runs off `emitAlloc`; a stateful array comes from
 `emitGlobal` and so never gets the pragma. It is functionally correct but may map to a 1R1W
