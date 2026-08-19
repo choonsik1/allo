@@ -2520,6 +2520,45 @@ void SystemCModuleEmitter::emitTopModule(func::FuncOp func) {  // new (SystemC-o
       clients[mi.base]++;
     for (auto &mi : memInsts)
       mi.exposed = (clients[mi.base] == 1);
+
+    // A replicated array whose clients disagree about DIRECTION cannot work. Each
+    // client gets a private copy, so one kernel's writes are invisible to another
+    // kernel's reads. Measured: a writer kernel storing 100..107 and a reader kernel
+    // reading the same array emitted, compiled, synthesized and RAN -- and returned
+    // all zeros, with no diagnostic anywhere. That is the worst failure mode we have.
+    //
+    // Reject ONLY the mixed read/write case. Replication itself is not the bug and is
+    // relied upon: several clients that all WRITE are the disjoint-element pattern the
+    // testbench merges at readout (test_hierachical replicates 2 outputs into 20
+    // memories), and several clients that all READ share an identically preloaded copy.
+    // Both stay legal.
+    // PURE reader / PURE writer only. A client that both reads and writes ('b') is
+    // self-contained: it reads back what it wrote into its own replica, plus the
+    // preloaded values it never touched. test_hierachical does exactly that with 16
+    // clients on one array and is correct -- an earlier, broader version of this check
+    // flagged it and turned a passing test into an error.
+    llvm::StringMap<bool> anyPureRead, anyPureWrite;
+    for (auto &mi : memInsts) {
+      if (clients[mi.base] < 2)
+        continue;
+      if (mi.dir == 'i')
+        anyPureRead[mi.base] = true;
+      if (mi.dir == 'o')
+        anyPureWrite[mi.base] = true;
+    }
+    llvm::StringMap<bool> reported;   // StringMap, not StringSet: no StringSet.h here
+    for (auto &mi : memInsts) {
+      if (clients[mi.base] < 2 || !anyPureRead.lookup(mi.base) ||
+          !anyPureWrite.lookup(mi.base) || !reported.insert({mi.base, true}).second)
+        continue;
+      emitError(func, "array '" + mi.base + "' is accessed at arbitrary indices by " +
+                          std::to_string(clients[mi.base]) +
+                          " kernels, and at least one WRITES it while another READS "
+                          "it. Such an array is replicated per client, so the writes "
+                          "would be invisible to the reader and the result silently "
+                          "wrong. Pass the values through a stream instead, or keep "
+                          "the array private to one kernel.");
+    }
   }
   // Memory-port arrays -> TOP-LEVEL PORTS, not internal storage.
   //
