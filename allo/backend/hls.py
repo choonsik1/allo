@@ -1184,7 +1184,13 @@ class HLSModule:
                     f"[{time.strftime('%H:%M:%S', time.gmtime())}] "
                     "cosim: synthesizing RTL (Catapult + SCVerify) ..."
                 )
-                synth_to = int(os.environ.get("ALLO_COSIM_SYNTH_TIMEOUT", "900"))
+                # 900s was too small for real designs: test_multi_cache_gemm times
+                # out at 900s on an OTHERWISE IDLE machine (914s, and 914s again under
+                # load -- contention was not the cause) yet PASSES in 1825s end-to-end.
+                # A legitimate design failing is worse than a stuck one taking longer to
+                # report, and since the timeout now kills the whole process group a long
+                # budget no longer leaves anything running behind it.
+                synth_to = int(os.environ.get("ALLO_COSIM_SYNTH_TIMEOUT", "2400"))
                 r = _run_group_timeout(
                     f"cd {syn}; {catapult_cmd} -shell -f {self.project}/run.tcl",
                     synth_to,
