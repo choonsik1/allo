@@ -5,6 +5,7 @@
 import os
 import re
 import io
+import signal
 import subprocess
 import time
 import numpy as np
@@ -246,6 +247,45 @@ def separate_header(hls_code, top=None, extern_c=True):
         sig_str += '} // extern "C"\n'
     sig_str += "\n#endif // KERNEL_H\n"
     return sig_str, args
+
+
+
+def _run_group_timeout(cmd, timeout, what, **kwargs):
+    """subprocess.run(timeout=...) whose timeout actually kills the process TREE.
+
+    subprocess.run kills only the process it spawned. With shell=True, or with a
+    tool that forks helpers -- Catapult spawns catapult-pm, CLIP and
+    salt_mgls_asy -- the children are reparented to init and keep running
+    FOREVER. Measured on this repo: two orphaned Catapult synthesis runs left by
+    timed-out cosims, alive 25h and 12h at ~86% CPU each, still holding
+    tests/dataflow/test_mlp/cosb. They also skew every later measurement, since a
+    synthesis that merely got starved then looks like one that needs a longer
+    budget.
+
+    start_new_session puts the child in its own process group, so on timeout the
+    whole group can be signalled at once.
+    """
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+        **kwargs,
+    )
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
+        proc.communicate()
+        raise RuntimeError(
+            f"cosim: {what} timed out after {timeout}s "
+            f"(raise ALLO_COSIM_{'SYNTH' if 'synthesis' in what else 'SIM'}_TIMEOUT "
+            f"to allow longer)."
+        ) from None
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
 
 
 class HLSModule:
@@ -1145,16 +1185,13 @@ class HLSModule:
                     "cosim: synthesizing RTL (Catapult + SCVerify) ..."
                 )
                 synth_to = int(os.environ.get("ALLO_COSIM_SYNTH_TIMEOUT", "900"))
-                try:
-                    r = subprocess.run(
-                        f"cd {syn}; {catapult_cmd} -shell -f {self.project}/run.tcl",
-                        shell=True,
-                        capture_output=True,
-                        text=True,
-                        timeout=synth_to,
-                    )
-                except subprocess.TimeoutExpired as e:
-                    raise RuntimeError("cosim: Catapult synthesis timed out.") from e
+                r = _run_group_timeout(
+                    f"cd {syn}; {catapult_cmd} -shell -f {self.project}/run.tcl",
+                    synth_to,
+                    "Catapult synthesis",
+                    shell=True,
+                    text=True,
+                )
                 with open(f"{self.project}/synth.log", "w", encoding="utf-8") as lf:
                     lf.write((r.stdout or "") + (r.stderr or ""))
                 if r.returncode != 0:
@@ -1227,25 +1264,23 @@ class HLSModule:
                     "cosim: running RTL simulation (Xcelium) ..."
                 )
                 cosim_to = int(os.environ.get("ALLO_COSIM_SIM_TIMEOUT", "900"))
-                try:
-                    r2 = subprocess.run(
-                        [
-                            f"{mgc_home}/bin/make",
-                            "-f",
-                            "./scverify/Verify_concat_sim_rtl_v_ncsim.mk",
-                            f"NC_ROOT={nc_root}",
-                            f"NCSim_NC_ROOT={nc_root}",
-                            "SIMTOOL=ncsim",
-                            "sim",
-                        ],
-                        cwd=v1,
-                        capture_output=True,
-                        text=True,
-                        timeout=cosim_to,
-                        env=env,
-                    )
-                except subprocess.TimeoutExpired as e:
-                    raise RuntimeError("cosim: RTL simulation timed out.") from e
+                # make -> ncsim forks a tree of its own; same group-kill treatment.
+                r2 = _run_group_timeout(
+                    [
+                        f"{mgc_home}/bin/make",
+                        "-f",
+                        "./scverify/Verify_concat_sim_rtl_v_ncsim.mk",
+                        f"NC_ROOT={nc_root}",
+                        f"NCSim_NC_ROOT={nc_root}",
+                        "SIMTOOL=ncsim",
+                        "sim",
+                    ],
+                    cosim_to,
+                    "RTL simulation",
+                    cwd=v1,
+                    text=True,
+                    env=env,
+                )
                 with open(f"{self.project}/cosim.log", "w", encoding="utf-8") as lf:
                     lf.write((r2.stdout or "") + (r2.stderr or ""))
 
