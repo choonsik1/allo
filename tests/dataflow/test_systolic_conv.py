@@ -1,6 +1,7 @@
 # Copyright Allo authors. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import os
 import numpy as np
 import allo
 from allo.ir.types import float32, int32, Stream
@@ -121,7 +122,7 @@ def test_convolution():
     print("SystemC Cosim Passed!")
 
     mod = df.build(top, target="vitis_hls", mode="hw_emu")
-    if hls.is_available("vitis_hls"):
+    if hls.is_available("vitis_hls") and "XDEVICE" in os.environ:
         C_sys = np.zeros((OR, OC), dtype=np.float32)
         mod(A, B, C_sys)
         np.testing.assert_allclose(C_sys, test_C, atol=1e-5)

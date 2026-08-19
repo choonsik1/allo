@@ -1,6 +1,7 @@
 # Copyright Allo authors. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import os
 import tempfile
 
 import allo
@@ -69,7 +70,7 @@ def test_systolic():
     np.testing.assert_allclose(C, np.dot(A, B), atol=1e-5)
     print("SystemC Cosim Passed!")
 
-    if hls.is_available("vitis_hls"):
+    if hls.is_available("vitis_hls") and "XDEVICE" in os.environ:
         s = df.customize(top)
         s.partition("top:A", dim=1, factor=2)
         s.partition("top:B", dim=2, factor=2)

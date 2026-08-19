@@ -1,6 +1,7 @@
 # Copyright Allo authors. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import os
 import tempfile
 
 import allo
@@ -111,7 +112,7 @@ def test_systolic():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         mod = df.build(top, target="vitis_hls", mode="hw", project=tmpdir)
-        if hls.is_available("vitis_hls"):
+        if hls.is_available("vitis_hls") and "XDEVICE" in os.environ:
             S = np.zeros((P0 - 1, P1 - 1), dtype=np.int32)
             mod(A, B, S)
 

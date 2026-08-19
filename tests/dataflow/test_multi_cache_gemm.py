@@ -1,6 +1,7 @@
 # Copyright Allo authors. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import os
 import tempfile
 
 import pytest
@@ -214,16 +215,19 @@ def test_large_scale_gemm():
             )
             modc()
 
-        C_packed = np.zeros((M * N // Rt), dtype=np_type_C)
-        with tempfile.TemporaryDirectory() as tmpdir:
-            modhw = df.build(
-                top,
-                target="vitis_hls",
-                mode="hw",
-                project=tmpdir,
-                wrap_io=False,
-            )
-            modhw(A_packed, B_packed, C_packed)
+        # The hw flow runs through a Makefile that needs XDEVICE (the target
+        # platform); is_available() above only proves the tool is installed.
+        if "XDEVICE" in os.environ:
+            C_packed = np.zeros((M * N // Rt), dtype=np_type_C)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                modhw = df.build(
+                    top,
+                    target="vitis_hls",
+                    mode="hw",
+                    project=tmpdir,
+                    wrap_io=False,
+                )
+                modhw(A_packed, B_packed, C_packed)
 
         # # Enable the hw_emu test with data types that OpenCL supports
         # with tempfile.TemporaryDirectory() as tmpdir:
