@@ -94,7 +94,7 @@ def test_systemc_golden():
 def test_systemc_mem_port_reread():
     """A re-read (identity a[k] under an OUTER loop, each element touched twice)
     is not a single-pass scan, so the INPUT array a routes to a random-access
-    memory port (AlloMem) — a LOAD may fire many times, which is correct."""
+    memory port — a read may fire many times, which is correct."""
 
     N = 8
 
@@ -117,8 +117,8 @@ def test_systemc_mem_port_reread():
                 b[i] = s
 
     code = df.build(top, target="systemc").hls_code
-    assert "AlloMem<" in code  # re-read input -> internal memory
-    assert "_req.Push(" in code and "_rsp.Pop()" in code
+    assert "AlloMemPins<" in code  # re-read input -> memory behind RAM pins
+    assert "_re.write(true)" in code and "_q.read()" in code  # the read pins
     print("re-read input -> memory port")
 
 
@@ -180,12 +180,16 @@ def _empty_full():
 
 
 def test_systemc_empty_full_emit():
-    """empty()/full() map to In<T>.Empty() (consumer) / Out<T>.Full() (producer)."""
+    """empty()/full() are served by AlloFifoC's empty_o/full_o SIDEBAND PINS, which
+    the kernels read as plain sc_in<bool>. NOT Connections In.Empty()/Out.Full():
+    a regular In/Out cannot report Empty/Full in HLS (that needs InBuffered/
+    OutBuffered, absent in Catapult 2024.2), so the FIFO exports them instead."""
     top, _ = _empty_full()
     code = df.build(top, target="systemc").hls_code
-    assert ".Full();" in code  # producer's Out port
-    assert ".Empty();" in code  # consumer's In port
-    print("empty()/full() -> In.Empty() / Out.Full()")
+    assert "full_o" in code and "empty_o" in code  # AlloFifoC exports the sidebands
+    assert "_full.read();" in code  # producer reads the full pin
+    assert "_empty.read();" in code  # consumer reads the empty pin
+    print("empty()/full() -> AlloFifoC empty_o/full_o sideband pins")
 
 
 @pytest.mark.skipif(
@@ -241,21 +245,21 @@ def _mem_port_reverse():
 
 
 def test_systemc_mem_port_emit():
-    """A non-sequential INPUT array is routed to an internal AlloMem addressed by
-    a Connections req/resp handshake (the only memory kind the SystemC flow
-    supports), NOT silently mis-streamed. The flat address is the reversed index."""
+    """A non-sequential INPUT array is routed to a memory behind RAM PINS
+    (radr/re/q, driven by a `modulario` _rd accessor), NOT silently mis-streamed.
+    The flat address is the reversed index."""
     top, _ = _mem_port_reverse()
     code = df.build(top, target="systemc").hls_code
-    assert "AlloMem<" in code  # internal random-access memory instantiated
-    assert "_req.Push(" in code and "_rsp.Pop()" in code  # LOAD handshake
-    assert "_req_ch" in code and "_rsp_ch" in code  # wired at top
+    assert "AlloMemPins<" in code  # random-access memory instantiated
+    assert "_re.write(true)" in code and "_q.read()" in code  # the read pins
+    assert "_radr" in code  # address pin wired at top
     assert ".mem[f] =" in code  # tb preloads the memory from input file
     print("random INPUT access -> memory port emitted")
 
 
 def _mem_port_scatter():
     """B[N-1-i] = A[i] + 1 : B WRITTEN reversed -> random-access OUTPUT (write-
-    only AlloMemW) memory port; A is a sequential input stream. No stream output,
+    only) memory port; A is a sequential input stream. No stream output,
     so completion is time-based.  B == (A+1)[::-1]."""
     N = 8
 
@@ -270,20 +274,21 @@ def _mem_port_scatter():
 
 
 def test_systemc_mem_port_store_emit():
-    """A non-sequential OUTPUT array routes to a write-only AlloMemW addressed by
-    STORE reqs (opcode bit0=1), no response port; the tb reads mem[] out after a
-    time-based run (no stream output)."""
+    """A non-sequential OUTPUT array routes to a write-only memory driven by the
+    WRITE pins (wadr/d/we) via a `modulario` _wr accessor; the tb reads mem[] out
+    after a time-based run (no stream output)."""
     top, _ = _mem_port_scatter()
     code = df.build(top, target="systemc").hls_code
-    assert "AlloMemW<" in code  # write-only internal memory
-    assert "_req.Push(" in code  # STORE handshake (no _rsp.Pop for this port)
+    assert "AlloMemPins<" in code  # write-only memory
+    # write pins driven, read pins never used for a store-only array
+    assert "_we.write(true)" in code and "_re.write(true)" not in code
     assert "sc_start(" in code and "SC_NS);" in code  # time-based completion
     assert "_mem.mem[f];" in code  # tb reads the memory out (sum-merge) to file
     print("random OUTPUT access -> write memory port emitted")
 
 
 def _both_mem_port():
-    """A read+write random-access array ('both') -> AlloMem (LOAD+STORE, req+rsp),
+    """A read+write random-access array ('both') -> one memory, both pin bundles,
     preloaded AND read back (in-place). Reads a[4..7], writes a[0..3] (disjoint,
     so re-execution under the free-running kernel is idempotent). Final:
     A[0:4] = A[4:8] + 1, A[4:8] unchanged."""
@@ -300,14 +305,14 @@ def _both_mem_port():
 
 
 def test_systemc_both_mem_port_emit():
-    """A read+write random-access array uses AlloMem (not AlloMemW) and emits BOTH
-    a LOAD (opcode 0) and a STORE (opcode 1) req on the same port."""
+    """A read+write random-access array is ONE memory carrying BOTH pin bundles:
+    the read pins (radr/re/q) and the write pins (wadr/d/we)."""
     top, _ = _both_mem_port()
     code = df.build(top, target="systemc").hls_code
-    assert "AlloMem<" in code and "AlloMemW<" not in code  # read+write -> AlloMem
-    assert code.count("_req.Push(") >= 2  # both a LOAD and a STORE req
-    assert "_rsp.Pop()" in code  # the LOAD response
-    print("both (read+write) memory port -> AlloMem, LOAD + STORE")
+    assert code.count("AlloMemPins<") == 1  # ONE memory, not one per direction
+    assert "_re.write(true)" in code and "_we.write(true)" in code  # both bundles
+    assert "_q.read()" in code  # the read data pin
+    print("both (read+write) memory port -> one memory, read + write pins")
 
 
 @pytest.mark.skipif(
@@ -333,8 +338,8 @@ def test_systemc_both_mem_port_csim():
     reason="Catapult (MGC_HOME) not available — csim needs zhang-21",
 )
 def test_systemc_mem_port_csim():
-    """Compile + simulate the memory-port design: A preloaded into AlloMem, read
-    reversed over the req/resp handshake, +1, streamed to B. Assert B == A[::-1]+1."""
+    """Compile + simulate the memory-port design: A preloaded into the memory, read
+    reversed over the RAM pins, +1, streamed to B. Assert B == A[::-1]+1."""
     top, N = _mem_port_reverse()
     with tempfile.TemporaryDirectory() as tmp:
         mod = df.build(top, target="systemc", mode="csim", project=tmp)
@@ -351,7 +356,7 @@ def test_systemc_mem_port_csim():
 )
 def test_systemc_mem_port_store_csim():
     """Compile + simulate the store-side design: A streamed in, +1, scattered to B
-    reversed via STORE reqs into AlloMemW, read out after a time-based run. Assert
+    reversed via the write pins into the memory, read out after a time-based run. Assert
     B == (A+1)[::-1]."""
     top, N = _mem_port_scatter()
     with tempfile.TemporaryDirectory() as tmp:
@@ -517,8 +522,10 @@ def test_systemc_multi_client_emit():
     channel. N read replicas for A, N write replicas for C."""
     top, N = _multi_client_grid()
     code = df.build(top, target="systemc").hls_code
-    assert code.count("AlloMem<") == N  # A replicated per reader
-    assert code.count("AlloMemW<") == N  # C replicated per writer
+    # one memory per (kernel, arg): N readers of A + N writers of C
+    assert code.count("AlloMemPins<") == 2 * N
+    assert code.count("_re.write(true)") == N  # A read replicas
+    assert code.count("_we.write(true)") == N  # C write replicas
     print(f"shared arrays replicated into {N} read + {N} write memories")
 
 
@@ -587,11 +594,12 @@ def _tiled_systolic_gemm():
 
 def test_systemc_tiled_systolic_emit():
     """The standard Allo tiled-systolic GEMM maps to a grid of PEs + memory ports:
-    A,B -> AlloMem (reads), C -> AlloMemW (write). (Non-corner PEs only.)"""
+    A,B -> read pins, C -> write pins. (Non-corner PEs only.)"""
     top, *_ = _tiled_systolic_gemm()
     code = df.build(top, target="systemc").hls_code
-    assert code.count("AlloMem<") == 2  # A, B read ports
-    assert code.count("AlloMemW<") == 1  # C write port
+    assert code.count("AlloMemPins<") == 3  # A, B, C
+    assert code.count("_re.write(true)") == 2  # A, B read ports
+    assert code.count("_we.write(true)") == 1  # C write port
     assert "SC_MODULE(gemm_1_1)" in code  # the main-body PE survives DCE
     print("tiled systolic GEMM -> grid + 2 read / 1 write memory ports")
 
