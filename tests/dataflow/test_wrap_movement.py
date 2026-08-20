@@ -1,6 +1,8 @@
 # Copyright Allo authors. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import os
+
 from allo.ir.types import float32
 import allo.dataflow as df
 import allo.backend.hls as hls
@@ -86,6 +88,21 @@ def test_wrap_void():
         mod(A, B, C)
         np.testing.assert_allclose(C, np.dot(A, B), rtol=1e-5, atol=1e-5)
         print("Functionality Passed!")
+
+    # SystemC RTL cosim. Worth having here specifically: all three arrays are
+    # accessed at arbitrary indices by all 4 PEs, so each becomes a replicated
+    # memory -- A and B replicated across 4 readers, C written by 4 PEs at
+    # DISJOINT tiles and merged at readout. That replicate-and-merge path is
+    # exactly what the RAM-pin memory boundary has to get right, and no other
+    # test covers it against real RTL.
+    if os.environ.get("MGC_HOME"):
+        C_sc = np.zeros((M, N), dtype=np.float32)
+        mod_sc = df.build(
+            top, target="systemc", mode="cosim", project="test_wrap_movement.prj"
+        )
+        mod_sc(A, B, C_sc)
+        np.testing.assert_allclose(C_sc, np.dot(A, B), rtol=1e-5, atol=1e-5)
+        print("SystemC Cosim Passed!")
 
 
 def test_nowrap():

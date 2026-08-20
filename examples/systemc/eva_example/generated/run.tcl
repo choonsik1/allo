@@ -19,6 +19,9 @@ directive set -CLOCKS {clk {-CLOCK_PERIOD 2.0}}
 # Set output language
 solution options set /Output/OutputVerilog true
 solution options set /Output/OutputVHDL false
+
+directive set -IO_MODE super
+directive set -SPECULATE true
 solution library add nangate-45nm_beh
 
 # Flow

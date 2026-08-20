@@ -815,7 +815,44 @@ bool SystemCModuleEmitter::isSteadyStateLoop(affine::AffineForOp op) {  // new (
     if (isa<BlockArgument>(target))
       storesToPort = true;   // a func argument == a memory port
   });
-  return !storesToPort;
+  if (storesToPort)
+    return false;
+
+  // A kernel that LOADS from a memory port INSIDE the loop is streaming FINITE data out
+  // of that array. Its termination lives in a local cursor over the port, not in the
+  // loop counter, so a dead induction variable proves nothing about it being
+  // free-running.
+  //
+  // Measured on EVA: rdrv_w/e/n/s walk `sp[r]` through `rdin_w[r, sp[r]]` and never
+  // mention `t`, so they passed every other guard. Made free-running they keep injecting
+  // neutral packets after the data is exhausted and the design never completes -- the
+  // reported "stuck in the while loop". A sibling kernel `drv_w` escaped only by
+  // accident, because it happens to write `t >= sp[r]`.
+  //
+  // Scoped to the loop BODY deliberately, not the whole function: `node` reads its
+  // config `pcfg[0,0]` in the PROLOGUE, before the loop, and must KEEP the transform --
+  // it is the kernel the pipelining win was measured on (23 -> 4 cycles/iteration).
+  // Checking the whole function would disable the transform there and undo that.
+  bool loadsFromPortInLoop = false;
+  op.walk([&](Operation *o) {
+    Value src;
+    if (auto ld = dyn_cast<memref::LoadOp>(o))
+      src = ld.getMemRef();
+    else if (auto ld = dyn_cast<affine::AffineLoadOp>(o))
+      src = ld.getMemRef();
+    else
+      return;
+    while (auto *def = src.getDefiningOp()) {
+      if (def->getNumOperands() == 0)
+        break;
+      if (!isa<memref::SubViewOp, memref::CastOp, memref::ReinterpretCastOp>(def))
+        break;
+      src = def->getOperand(0);
+    }
+    if (isa<BlockArgument>(src))
+      loadsFromPortInLoop = true;
+  });
+  return !loadsFromPortInLoop;
 }
 
 void SystemCModuleEmitter::emitAffineFor(affine::AffineForOp op) {  // override (base emitter)
@@ -823,8 +860,17 @@ void SystemCModuleEmitter::emitAffineFor(affine::AffineForOp op) {  // override 
     CatapultModuleEmitter::emitAffineFor(op);
     return;
   }
-  emitLoopDirectivesPreheader(op);
   // Header twice, body ONCE: both branches open exactly one brace.
+  //
+  // The preheader directives must be emitted INSIDE each branch, immediately above that
+  // branch's loop header -- NOT once before the `#ifdef`. A Catapult pragma binds to the
+  // NEXT construct, so with the `#ifdef` line (and the `done.write` below) in between it
+  // binds to nothing and is dropped SILENTLY: no CIN-203 acknowledgement, and therefore
+  // no CIN-319 "cannot bind pragma" either. That made `s.pipeline()` a no-op on every
+  // steady-state kernel -- measured on EVA: only the 8 collector loops (which have no
+  // `#ifdef` between pragma and header) were pipelined, while the PE node and all 8
+  // drivers were skipped. Placing it correctly lets the elastic PE schedule at II=4:
+  // 23 -> 4 cycles/iteration, -5.3 % area, and it meets 2.0 ns where unscheduled misses.
   os << "#ifdef __SYNTHESIS__\n";
   // This loop never exits, so the `done.write(true)` that emitFunction places AFTER the
   // body is UNREACHABLE in RTL -- and the region's _agg_done ANDs every kernel's done,
@@ -837,9 +883,11 @@ void SystemCModuleEmitter::emitAffineFor(affine::AffineForOp op) {  // override 
       os << "done.write(true);  // steady-state: no completion, so assert on entry "
             "(the post-body write is unreachable here)\n";
     }
+  emitLoopDirectivesPreheader(op); // must sit directly above the header (see above)
   indent();
   os << "while (1) {  // steady-state loop (was `for t`): 1 iteration = 1 step\n";
   os << "#else\n";
+  emitLoopDirectivesPreheader(op); // and again for the csim header
   indent();
   os << "l_steady: for (";   // emitValue emits the type on first use
   emitValue(op.getInductionVar(), 0, false, "t");
