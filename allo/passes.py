@@ -478,8 +478,32 @@ def decompose_library_function(module):
         return module
 
 
-def call_ext_libs_in_ptr(module, ext_libs):
-    lib_map = {lib.top: lib for lib in ext_libs}
+def call_ext_libs_in_ptr(module, ext_libs, allow_stream_ip=False):
+    # This rewrite turns each IP call into a call through unranked-memref
+    # pointers -- an `hls::stream<T>` port has no such representation, so a
+    # stream IP cannot go through it.
+    #
+    # `allow_stream_ip=True` is passed by the dataflow simulator only: there,
+    # stream IPs are left untouched here and lowered later by
+    # `backend/simulator.py`, which knows the ring buffer each stream became and
+    # calls the IP through the stream shim (see docs/IP_STREAM_SIM_SHIM.md).
+    #
+    # The plain LLVM target keeps raising: it executes the kernels sequentially,
+    # one call after another, so an IP that blocks waiting on a FIFO another
+    # kernel has not filled yet would simply hang. Only the simulator gives each
+    # kernel its own thread.
+    stream_ips = [lib for lib in ext_libs if getattr(lib, "has_stream_args", False)]
+    if stream_ips and not allow_stream_ip:
+        raise NotImplementedError(
+            f"IP '{stream_ips[0].top}' has hls::stream<T> arguments, which are "
+            "supported for the vitis_hls/vivado_hls targets and for the dataflow "
+            "simulator (df.build(..., target='simulator')), but not for the "
+            "'llvm' target: it runs the kernels sequentially, so a blocking "
+            "stream read could never be satisfied."
+        )
+    lib_map = {
+        lib.top: lib for lib in ext_libs if not getattr(lib, "has_stream_args", False)
+    }
     with module.context, Location.unknown():
         op_to_remove = []
         for op in module.body.operations:
@@ -504,7 +528,10 @@ def call_ext_libs_in_ptr(module, ext_libs):
                 )
                 func_op.attributes["sym_visibility"] = StringAttr.get("private")
                 op_to_remove.append(op)
-            elif isinstance(op, func_d.FuncOp):
+            elif isinstance(op, func_d.FuncOp) and not op.is_external:
+                # `not op.is_external`: a declaration has no entry block to walk.
+                # Reachable now that a stream IP's declaration is deliberately
+                # left in place here (it is lowered by backend/simulator.py).
                 for body_op in op.entry_block.operations:
                     # update call function
                     if (
@@ -776,6 +803,15 @@ def analyze_use_def(mod):
         if not isinstance(func, func_d.FuncOp):
             continue
         func_name = func.attributes["sym_name"].value
+        if func.is_external:
+            # A declaration with no body -- an IP spliced in as
+            # `func.func private @ip(...)`. It has no entry block to walk, and
+            # touching func.arguments or func.entry_block raises. Its argument
+            # names must still be registered, because a call site unions against
+            # `f"{callee}:{operand_number}"` without adding it first.
+            for i in range(len(func.type.inputs)):
+                uf_add(f"{func_name}:{i}")
+            continue
         for i, arg in enumerate(func.arguments):
             arg_name = f"{func_name}:{i}"
             uf_add(arg_name)

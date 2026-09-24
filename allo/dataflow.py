@@ -147,21 +147,28 @@ def move_stream_to_interface(
                         # These don't strictly define direction, but we need to choose one
                         # to avoid the error. Default to 'in' for empty (consumer) and 'out' for full (producer)
                         direction = "in" if isinstance(use.owner, allo_d.StreamEmptyOp) else "out"
-                    elif (
-                        isinstance(use.owner, func_d.CallOp)
-                        and "stream_dirs" in use.owner.attributes
-                    ):
+                    elif isinstance(use.owner, func_d.CallOp):
                         # An IP call. The stream is passed as an ARGUMENT rather
                         # than read or written by a get/put op, so the direction
-                        # comes from the IP's own declaration: stream_dirs holds
-                        # one character per operand, in operand order.
+                        # comes from the IP's own declaration: `stream_dirs` holds
+                        # one character per operand in operand order ('i' input,
+                        # 'o' output, '_' other), recorded by the builder from the
+                        # IPModule's input_idx/output_idx.
+                        if "stream_dirs" not in use.owner.attributes:
+                            raise ValueError(
+                                f"Stream passed to call {use.owner.attributes['callee']} "
+                                "without a stream_dirs attribute; the IPModule must "
+                                "declare input_idx/output_idx for its stream ports."
+                            )
                         dirs = use.owner.attributes["stream_dirs"].value
-                        idx = next(
-                            i
-                            for i, o in enumerate(use.owner.operands)
-                            if o == op.result
-                        )
-                        direction = "in" if dirs[idx] == "i" else "out"
+                        # `use.operand_number` is THIS use's own operand position.
+                        # Scanning the operand list for one equal to op.result
+                        # looks equivalent and is not: a stream passed twice to
+                        # the same call (once in, once out) makes every scan
+                        # return the FIRST index, so the second use gets the
+                        # wrong direction. passes.py indexes call operands the
+                        # same way.
+                        direction = "in" if dirs[use.operand_number] == "i" else "out"
                     else:
                         raise ValueError(f"Stream is not used correctly: {use.owner}")
                 if with_stream_type and stream_name not in stream_types_dict:
