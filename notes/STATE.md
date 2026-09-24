@@ -1,40 +1,100 @@
-# Project state — `/home/zsm9/allo_sup`
+# Project state — `/home/zsm9/allo_final`
 
-Last updated 2026-08-12.
+Last updated 2026-09-24. Branch **`systemc-all`**.
+
+## Worktrees
+
+One repository (`/work/shared/users/zsm9/allo_new/.git`), three checkouts. Consolidated
+from six on 2026-09-24; removing a worktree never removed a branch, and every branch
+below is pushed to `mine`.
+
+| Directory | Branch | Role |
+|---|---|---|
+| **`/home/zsm9/allo_final`** | **`systemc-all`** | **The final work. Start here.** |
+| `/home/zsm9/allo_scratch` → `/work/shared/users/zsm9/allo_scratch` | `ext/x1-connections-backend` | Scratch. `git switch` to any other branch here. |
+| `/work/shared/users/zsm9/allo_new` | `main` | Holds `.git`. Clean mirror of `origin/main`; do not commit here. |
 
 ## Remotes
 
 | Remote | Points at | Role |
 |---|---|---|
-| `mine` | `choonsik1/allo` | Your fork. Where this work is pushed. |
+| `mine` | `choonsik1/allo` | Your fork. Everything is pushed here. |
 | `origin` | `cornell-zhang/allo` | Upstream baseline. |
-| `sup` | `sunwookim028/allo` | The fork this checkout was originally taken from (hence `allo_sup`). |
+| `sup` | `sunwookim028/allo` | The fork this checkout came from (hence the old name `allo_sup`). |
 | `fangtang`, `vincent` | collaborators' forks | Read-only reference. |
 
-## Local branches
+## Branches
 
 | Branch | Role |
 |---|---|
-| `SystemC-emitter` | **Current working branch** — the SystemC/Catapult emitter work. |
-| `wire` | Predecessor line: Wire/Channel link types, the emitter fix series. |
-| `main` | Integration branch. |
-| `ext/sup-main`, `ext/x1-connections-backend` | Imported external lines. |
-| `fix/nb-stream-scalar` | Non-blocking stream scalar fix. |
-| `ip-stream-integration` | IP/stream integration work. |
+| **`systemc-all`** | **Final.** All three SystemC lines merged, plus `EVA/` and `ip_integration/`. |
+| `SystemC-emitter` | The emitter line. Fully contained in `systemc-all`. |
+| `systemc-ip-integration` | SC_MODULE-as-Allo-IP. Fully contained in `systemc-all`. |
+| `ip-stream-integration` | Vitis `hls::stream` IP line. Fully contained in `systemc-all`. |
+| `ext/x1-connections-backend` | External line + the `convert-math-to-llvm` fix. Forks from a **newer** `main` than `systemc-all`. |
+| `main` | Tracks `origin/main`, unmodified. |
+| `wire`, `fix/nb-stream-scalar`, `ext/sup-main` | Older lines, kept for reference. |
+| `backup/pre-rebase-systemc-ip`, `backup-pre-docx-rewrite` | Safety snapshots. |
 
-## Current work
+## What is on `systemc-all`
 
-The SystemC/Catapult backend and its evaluation. Recent commits on `SystemC-emitter`:
-`#pragma hls_resource` for fully-partitioned local arrays, the `agents/noc` branch
-cleanup, the emitter documentation pass, and `synth_top` + ns clock-period rendering.
+Beyond the merged emitter work, two directories that existed in no repository until
+2026-09-24 and were committed verbatim, to be sorted through later:
 
-**The evaluation lives outside this repo**, in `/home/zsm9/final_noc` (its own git repo):
-NoC designs rebuilt in Allo and measured against MatchLib WHVCRouter, MatchLib
-ArbitratedCrossbar and RaveNoC. Authoritative numbers are in
-`final_noc/designs/whvcrouter/RESULTS.md` and
-`final_noc/designs/router_rvn_equiv/reports/README.md`.
+- **`EVA/`** (134 files) — the EVA chips driven through the SystemC backend into
+  Catapult. Designs, run/report harnesses, results archive, and a README carrying the
+  measured area/timing tables and the traps behind them. Includes 8.6 MB of Catapult
+  logs, force-added against `.gitignore` because they are the evidence for the archived
+  numbers. Snapshot of `/home/zsm9/final_eva_systemc`, which is still the live working
+  copy — **this is a copy, not the working tree**.
+- **`ip_integration/`** (76 files, 852 KB) — a third-party RISC-V core wrapped as an Allo
+  `IPModule` and wired into the EVA PE grid. `ip/` is the integration; `rv/`, `hl5_cat/`
+  and `drim_cat/` carry vendored cores, each with its upstream `LICENSE` and a
+  provenance README (both Apache 2.0, matching allo's own).
 
-Headline (Genus 20.1 high effort, Nangate 45nm, 2.0 ns, `concat_rtl.v`, 0 black boxes):
+## ⚠️ Build trap — two build trees, one tracked symlink
+
+`allo/_mlir` is a **tracked** symlink, but which build it must point at is
+**host-specific**, so the branch can never be clean on both machines:
+
+| Build dir | Host | Built | Emitter | Portability |
+|---|---|---|---|---|
+| `mlir/build` | `zhang-21` (gcc-toolset-13) | 2026-08-25 | **old** (pre-merge) | runs on both hosts |
+| `mlir/build_xcel` | `brg-zhang-xcel` (`/usr/bin/c++`) | 2026-09-24 | **merged** | xcel only |
+
+`devtools/rebuild.sh` picks the tree by hostname and flips the symlink. On xcel the
+symlink is flipped to `build_xcel` and marked `git update-index --skip-worktree`, so the
+local flip neither shows as dirty nor can be committed. **To undo that marking:**
+`git update-index --no-skip-worktree allo/_mlir`.
+
+`mlir/build` cannot be rebuilt on xcel — its CMake cache pins
+`/opt/rh/gcc-toolset-13/root/usr/bin/c++`, which does not exist there.
+
+⚠️ `devtools/rebuild.sh` does `cd "$(dirname "$0")"`, which lands in `devtools/` where
+there is no `mlir/`. Run its steps from the repo root instead, or fix the `cd` to `..`.
+
+## ⚠️ `/home/zsm9/allo_sup` is a compatibility symlink
+
+The worktree was renamed `allo_sup` → `allo_final` on 2026-09-24. The compiled
+extensions bake an absolute `RUNPATH` (`$ORIGIN:/home/zsm9/allo_sup/mlir/build/...`) and
+the build tree holds four absolute symlinks into the old name, so
+`/home/zsm9/allo_sup` → `/home/zsm9/allo_final` was left in place. It is load-bearing
+for any build tree configured before the rename, and it also keeps `EVA/archive/**`
+driver snapshots resolving. A rebuild regenerates those paths for the tree it rebuilds.
+
+Old build artifacts are backed up at
+`/work/shared/users/zsm9/allo_build_backups/2026-09-24/` (both trees' loadable libs plus
+the original symlink target).
+
+## The EVA and NoC evaluations live outside this repo
+
+- **EVA** — `/home/zsm9/final_eva_systemc` (not a git repo; snapshotted here as `EVA/`).
+  Its scripts import allo via `sys.path.insert(0, "/home/zsm9/allo_final")`.
+- **NoC** — `/home/zsm9/final_noc` (its own git repo). Authoritative numbers in
+  `final_noc/designs/whvcrouter/RESULTS.md` and
+  `final_noc/designs/router_rvn_equiv/reports/README.md`.
+
+Headline NoC (Genus 20.1 high effort, Nangate 45nm, 2.0 ns, `concat_rtl.v`, 0 black boxes):
 
 | design | Allo | reference | verdict |
 |---|---|---|---|

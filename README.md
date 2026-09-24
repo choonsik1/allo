@@ -10,6 +10,12 @@
 > It adds a **SystemC / Catapult-HLS backend** that takes an Allo dataflow design all the way
 > to ASIC RTL, plus a JIT dataflow simulator. Everything below the "Upstream Allo" heading is
 > unchanged from upstream. Start at [`notes/README.md`](notes/README.md) for project state.
+>
+> **Branch `systemc-all`** is the final line: the emitter plus both IP-integration
+> lines merged, and two directories that live nowhere else —
+> [`EVA/`](EVA/README.md) (EVA chips through SystemC → Catapult, with the measured
+> area/timing tables) and [`ip_integration/`](ip_integration/README.md) (a RISC-V core
+> wrapped as an Allo `IPModule`, driving the EVA PE grid).
 
 Allo is a Python-embedded, MLIR-based language and compiler for building large-scale,
 high-performance accelerators from composable parts.

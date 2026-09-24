@@ -110,6 +110,40 @@ A bare `int32` in `args=[...]` is rejected (PR #577). Use `int32[1]`, which maps
 using either link type cannot be built for `vhls`/`vitis` at all — worth knowing before
 writing a comparison harness that assumes it can.
 
+### Renaming a worktree breaks the compiled extension
+
+The Python extensions bake an **absolute** `RUNPATH`
+(`$ORIGIN:/home/zsm9/allo_sup/mlir/build/tools/allo/_mlir:`) and the build tree holds
+absolute symlinks into the same path, both fixed at configure time. Rename the worktree
+and `import allo` dies with
+
+```
+ImportError: libAlloMLIRAggregateCAPI.so.22.0git: cannot open shared object file
+```
+
+and then, once that is on `LD_LIBRARY_PATH`, with a *misleading* follow-on:
+
+```
+ImportError: cannot import name 'allo' from 'allo._mlir.dialects' (unknown location)
+```
+
+The second is a symptom of the first, not a separate problem — the dialect bindings are
+present and fine. Fix by rebuilding that tree, or by leaving a symlink at the old name
+(`/home/zsm9/allo_sup` → `/home/zsm9/allo_final` is exactly that).
+
+### `allo/_mlir` is tracked but host-specific
+
+It must point at `mlir/build` on zhang-21 and `mlir/build_xcel` on xcel, so the worktree
+is dirty on one of them by construction. `git update-index --skip-worktree allo/_mlir`
+holds the local flip without letting it be committed; `--no-skip-worktree` undoes it. A
+build dir is married to its host: `mlir/build`'s CMake cache pins gcc-toolset-13, absent
+on xcel, so it cannot be rebuilt there at all.
+
+### `devtools/rebuild.sh` cds to the wrong directory
+
+It runs `cd "$(dirname "$0")"`, landing in `devtools/`, which has no `mlir/`. Run its
+steps from the repo root, or change the `cd` to `"$(dirname "$0")/.."`.
+
 ---
 
 ## 4. Environment
