@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+# Run a VERIFICATION-FOLDER chip (elastic / skid) on the SHIPPED GOLDEN EVA VECTORS,
+# through the Allo SystemC backend + Catapult.
+#
+# WHY: `run_golden_systemc.py` gives v16/v3.0 real golden-EVA verification (programs from
+# file_col_upp_*.mem, inputs from the golden tb .sv, outputs diffed against captured golden
+# RTL logs). The elastic/skid chips had only a SYNTHETIC numpy-MMM check — not comparable.
+# This closes that gap using the pre-encoded vectors in
+#   /work/shared/users/zsm9/verification/vectors/Allo/<chip>/<workload>/<workload>.h
+# whose EOUT "equals the RTL EVA output bit-for-bit" (see that folder's README).
+#
+#   CHIP=eva_fp16_elastic VEC=fp16_elastic WL=fft MODE=csim PRJ=/scratch/... \
+#     python scripts/run_golden_vec_systemc.py
+import os, re, sys, glob, importlib
+import numpy as np
+
+os.environ.setdefault("OMP_NUM_THREADS", "8")
+os.environ.setdefault("MGC_HOME", "/opt/siemens/catapult/2024.2/Mgc_home")
+MGC = os.environ["MGC_HOME"]
+os.environ["PATH"] = f"{MGC}/bin:" + os.environ.get("PATH", "")
+os.environ.setdefault("SYSTEMC_HOME", f"{MGC}/shared")
+os.environ["LD_LIBRARY_PATH"] = f"{MGC}/lib:{MGC}/shared/lib:" + os.environ.get("LD_LIBRARY_PATH", "")
+os.environ.setdefault("ALLO_COSIM_SYNTH_TIMEOUT", "54000")
+os.environ.setdefault("ALLO_COSIM_SIM_TIMEOUT", "14400")
+
+HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
+sys.path.insert(0, "/home/zsm9/allo_sup")
+sys.path.insert(0, os.path.join(ROOT, "chip"))
+sys.path.insert(0, os.path.join(ROOT, "designs", "from_verification"))
+
+VECROOT = os.environ.get("VECROOT", "/work/shared/users/zsm9/verification/vectors/Allo")
+CHIP = os.environ.get("CHIP", "eva_fp16_elastic")
+VEC  = os.environ.get("VEC",  "fp16_elastic")
+WL   = os.environ.get("WL",   "fft")
+MODE = os.environ.get("MODE", "csim")
+PRJ  = os.environ["PRJ"]
+H = os.path.join(VECROOT, VEC, WL, f"{WL}.h")
+assert os.path.exists(H), f"no vector header: {H}"
+
+src = open(H).read()
+def defint(name, default=None):
+    m = re.search(rf"^#define\s+{name}\s+(-?\d+)", src, re.M)
+    if m: return int(m.group(1))
+    if default is None: raise KeyError(name)
+    return default
+VM, VN, VL = defint("VM"), defint("VN"), defint("VL")
+VPC, VOUT  = defint("VPC"), defint("VOUT_IDX")
+VPRIME     = defint("VECTOR_PRIME", 0)          # skid only
+
+def arr(name):
+    """Parse `static const <ty> NAME[R][C] = { {..}, .. };` into an (R,C) int array."""
+    m = re.search(rf"static const [a-z0-9_ ]+{name}\[(\d+)\]\[(\d+)\]\s*=\s*\{{(.*?)\n\}};",
+                  src, re.S)
+    if not m: return None
+    R, C, body = int(m.group(1)), int(m.group(2)), m.group(3)
+    rows = re.findall(r"\{([^{}]*)\}", body)
+    assert len(rows) == R, f"{name}: {len(rows)} rows, expected {R}"
+    out = np.zeros((R, C), np.int64)
+    for i, r in enumerate(rows):
+        vals = [int(v, 0) for v in re.findall(r"-?(?:0[xX][0-9a-fA-F]+|\d+)", r)]
+        assert len(vals) == C, f"{name} row {i}: {len(vals)} vals, expected {C}"
+        out[i] = vals
+    return out
+
+f16 = lambda u: np.asarray(u, np.uint16).view(np.float16)
+INS  = [f16(arr(f"IN{i}"))  for i in range(4)]
+IVS  = [arr(f"IV{i}").astype(np.int32)  for i in range(4)]
+RINS = [arr(f"RIN{i}").astype(np.int32) for i in range(4)]
+EOUT = [arr(f"EOUT{i}") for i in range(4)]
+PRIMECFG = arr("PRIMECFG")
+
+e = importlib.import_module(CHIP); sys.modules["eva"] = e
+import allo.dataflow as df
+from allo.ir.types import float16
+e.M, e.N = VM, VN
+e.NSTEP = e.LANELEN = VL
+if hasattr(e, "RUN_BUDGET"):
+    e.RUN_BUDGET = int(os.environ.get("BUDGET", str(6 * VL)))
+_bud = getattr(e, "RUN_BUDGET", None)
+print(f"=== GOLDEN VECTORS  chip={CHIP}  vec={VEC}/{WL}  {VM}x{VN}  VL={VL}  VPC={VPC}  "
+      f"OUT_IDX={VOUT}  PRIME={VPRIME}  BUDGET={_bud}  MODE={MODE} ===", flush=True)
+
+# REPLAY=1 reuses an ALREADY-BUILT cosim project: rewrite input*.data, re-run ncsim,
+# read output*.data back. EVA is programmable (one_bitstream), so a second workload needs
+# no rebuild -- ~1 min instead of ~5 h. replay_cosim.py cannot be used here because it
+# assumes OUR port layout (leading prime_cfg); elastic has none.
+REPLAY = os.environ.get("REPLAY", "0") == "1"
+if not REPLAY:
+    os.system(f"rm -rf {PRJ}")
+top = e.get_eva_top_elastic(float16) if hasattr(e, "get_eva_top_elastic") else e.get_eva_top(float16)
+if not REPLAY:
+    mod = df.build(top, target="systemc", mode=("csim" if MODE == "csim" else MODE), project=PRJ)
+    print(f"emitted -> {PRJ}; running {MODE} ...", flush=True)
+
+# --- EXTRA_TCL: inject directives Catapult exposes only via TCL (e.g. the pipeline stall
+# --- mode, which has no source-pragma form). Applied after `go assembly`, before extract.
+_extra = os.environ.get("EXTRA_TCL", "")
+if _extra:
+    _tcl = os.path.join(PRJ, "run.tcl")
+    _s = open(_tcl).read()
+    _ins = "go assembly\n" + "".join(l + "\n" for l in _extra.split(";") if l.strip()) + "go architect\n"
+    assert "go assembly\n" in _s, "run.tcl has no `go assembly` anchor"
+    open(_tcl, "w").write(_s.replace("go assembly\n", _ins, 1))
+    print(f"EXTRA_TCL injected -> {_tcl}:\n  " + "\n  ".join(_extra.split(";")), flush=True)
+
+
+zf = lambda r, c: np.zeros((r, c), np.float16)
+zi = lambda r, c: np.zeros((r, c), np.int32)
+outs  = [zf(VM, VL), zf(VM, VL), zf(VN, VL), zf(VN, VL)]
+routs = [zi(VM, VL), zi(VM, VL), zi(VN, VL), zi(VN, VL)]
+call  = [INS[0], IVS[0], INS[1], IVS[1], INS[2], IVS[2], INS[3], IVS[3], *outs, *RINS, *routs]
+if PRIMECFG is not None:                      # skid carries a prime plane
+    call.insert(0, PRIMECFG.astype(np.int32))
+
+if REPLAY:
+    import subprocess
+    SYN = os.path.join(PRJ, "cosb")
+    ins_only = [a for a in call if a is not None][: (9 if PRIMECFG is not None else 8)] + list(RINS)
+    for i, a in enumerate(ins_only):
+        with open(f"{SYN}/input{i}.data", "w") as fh:
+            for v in np.asarray(a).reshape(-1):
+                fh.write(f"{float(v):.9g}\n" if np.asarray(a).dtype == np.float16 else f"{int(v)}\n")
+    print(f"wrote {len(ins_only)} input files -> {SYN}", flush=True)
+    mk = glob.glob(f"{SYN}/**/Verify_concat_sim_rtl_v_ncsim.mk", recursive=True)
+    assert mk, "no ncsim makefile -- was this project built with MODE=cosim?"
+    v1 = os.path.dirname(os.path.dirname(mk[0]))
+    for fp in glob.glob(f"{SYN}/output*.data"):
+        os.remove(fp)
+    NC = os.environ.get("NC_ROOT", "/opt/cadence/XCELIUM2403")
+    r = subprocess.run([f"{MGC}/bin/make", "-f", "./scverify/Verify_concat_sim_rtl_v_ncsim.mk",
+                        f"NC_ROOT={NC}", f"NCSim_NC_ROOT={NC}", "SIMTOOL=ncsim", "sim"],
+                       cwd=v1, capture_output=True, text=True, timeout=14400,
+                       env=dict(os.environ, NC_ROOT=NC, NCSim_NC_ROOT=NC))
+    open(f"{PRJ}/replay_{WL}.log", "w").write((r.stdout or "") + (r.stderr or ""))
+    print(f"ncsim rc={r.returncode}", flush=True)
+    dat = np.loadtxt(f"{SYN}/output{VOUT}.data").reshape(-1, VL)
+    for k in range(dat.shape[0]):
+        outs[VOUT][k] = dat[k]
+else:
+    mod(*call)
+
+# Compare lane-by-lane against EOUT<VOUT>: golden = its leading NONZERO entries.
+gold, got = EOUT[VOUT], outs[VOUT]
+rows_ok = tot = mism = 0
+nrows = 0
+for k in range(gold.shape[0]):
+    g = [v for v in gold[k] if v != 0]
+    if not g: continue
+    nrows += 1
+    mine = [int(np.float16(got[k, t]).view(np.uint16)) for t in range(len(g))]
+    bad  = [i for i, v in enumerate(mine) if v != g[i]]
+    ok = not bad
+    rows_ok += ok; tot += len(g); mism += len(bad)
+    print(f"  lane {k}: {'OK ' if ok else ' x '} n={len(g)} "
+          f"gold={[hex(v) for v in g[:2]]} got={[hex(v) for v in mine[:2]]}"
+          + ("" if ok else f"  [{len(bad)} mism]"))
+print(f"=== {VEC}/{WL} {MODE}: {rows_ok}/{nrows} lanes clean | {tot} outputs, {mism} mismatches ===")
+sys.exit(0 if nrows and rows_ok == nrows else 1)

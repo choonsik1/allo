@@ -1,0 +1,28 @@
+lane pad: 82 -> 282 (rtprime drain margin 200)
+=== EVA MMM SystemC: MODE=cosim  M=N=4  B=3  NSTEP=282  PROG_CYCLES=52  PRIME=6 ===
+emitted -> /scratch/zsm9/eva_runs/4x4_v6_cosim_mmm
+running cosim ...
+In file included from /opt/siemens/catapult/2024.2/Mgc_home/shared/include/mc_connections.h:60,
+                 from kernel.cpp:6:
+/opt/siemens/catapult/2024.2/Mgc_home/shared/include/connections/connections.h:82:2: warning: #warning "SC_INCLUDE_DYNAMIC_PROCESSES is being defined and reentrant <systemc> header included" [-Wcpp]
+   82 | #warning "SC_INCLUDE_DYNAMIC_PROCESSES is being defined and reentrant <systemc> header included"
+      |  ^~~~~~~
+
+        SystemC 2.3.3-Accellera --- Jun  7 2022 13:10:00
+        Copyright (c) 1996-2018 by all Contributors,
+        ALL RIGHTS RESERVED
+Connections Clock: t.clk Period: 1 ns
+[01:20:15] cosim: building software golden ...
+[01:20:26] cosim: synthesizing RTL (Catapult + SCVerify) ...
+[02:26:55] cosim: running RTL simulation (Xcelium) ...
+[02:27:17] cosim MATCH: RTL is bit-exact with the software golden (8 output array(s)).
+=== ROUTER-LOADED + LOOPING MMM 4x4 B=3 (INSTR_SIZE=4 ITER_SIZE=3) ===
+expected Y = X@W =
+ [[15. 13. 14. 15.]
+ [13. 18. 17. 13.]
+ [14. 17. 23. 14.]]
+got out_s      =
+ [[0. 0. 0. 0.]
+ [0. 0. 0. 0.]
+ [0. 0. 0. 0.]]
+=== MMM cosim : FAIL ===

@@ -1,0 +1,16 @@
+config: M=N=1 K=6 pc=15 NSTEP=215 PRIME_TOKENS=6
+rm: cannot remove '/home/zsm9/final_eva_systemc/generated/.nfs00000000c013200f000a3650': Device or resource busy
+=== built EVA systemc (cosim mode); driving workload ===
+
+        SystemC 2.3.3-Accellera --- Jun  7 2022 13:10:00
+        Copyright (c) 1996-2018 by all Contributors,
+        ALL RIGHTS RESERVED
+Connections Clock: t.clk Period: 1 ns
+[15:40:25] cosim: building software golden ...
+[15:40:34] cosim: synthesizing RTL (Catapult + SCVerify) ...
+[15:47:23] cosim: running RTL simulation (Xcelium) ...
+[15:47:40] cosim MATCH: RTL is bit-exact with the software golden (8 output array(s)).
+EXPECT ramp   : [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+SYSTEMC out_e : [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+RESULT        : PASS (bit-exact)
+PYEXIT=0

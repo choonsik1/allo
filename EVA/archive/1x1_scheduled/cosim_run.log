@@ -1,0 +1,22 @@
+=== EVA SystemC: MODE=cosim  M=N=1  NSTEP=215  SCHED=1 ===
+rm: cannot remove '/home/zsm9/final_eva_systemc/generated/.nfs00000000c013200f000a3650': Device or resource busy
+emitted -> /home/zsm9/final_eva_systemc/generated
+running cosim (K=6 ramp, pc=15) ...
+In file included from /opt/siemens/catapult/2024.2/Mgc_home/shared/include/mc_connections.h:60,
+                 from kernel.cpp:6:
+/opt/siemens/catapult/2024.2/Mgc_home/shared/include/connections/connections.h:82:2: warning: #warning "SC_INCLUDE_DYNAMIC_PROCESSES is being defined and reentrant <systemc> header included" [-Wcpp]
+   82 | #warning "SC_INCLUDE_DYNAMIC_PROCESSES is being defined and reentrant <systemc> header included"
+      |  ^~~~~~~
+
+        SystemC 2.3.3-Accellera --- Jun  7 2022 13:10:00
+        Copyright (c) 1996-2018 by all Contributors,
+        ALL RIGHTS RESERVED
+Connections Clock: t.clk Period: 1 ns
+[16:48:40] cosim: building software golden ...
+[16:48:49] cosim: synthesizing RTL (Catapult + SCVerify) ...
+[16:57:03] cosim: running RTL simulation (Xcelium) ...
+[16:57:20] cosim MATCH: RTL is bit-exact with the software golden (8 output array(s)).
+EXPECT ramp   : [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+EVA    out_e  : [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+=== cosim RESULT : PASS (bit-exact) ===
+PYEXIT=0

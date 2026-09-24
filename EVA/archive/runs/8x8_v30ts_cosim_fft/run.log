@@ -1,0 +1,27 @@
+=== GOLDEN REPLAY  WL=fft  CHIP=eva_v3_channel_ts  8x8  L=928  pc=112  in=lft out=rgt  PRIME=1  REPS=8  drf=[0, 1]  #inputs=16 ===
+  golden rows: 0:2, 1:2, 2:2, 3:2, 4:2, 5:2, 6:2, 7:2
+emitted -> /scratch/zsm9/eva_runs/8x8_v30ts_cosim_fft; running cosim ...
+In file included from /opt/siemens/catapult/2024.2/Mgc_home/shared/include/mc_connections.h:60,
+                 from kernel.cpp:6:
+/opt/siemens/catapult/2024.2/Mgc_home/shared/include/connections/connections.h:82:2: warning: #warning "SC_INCLUDE_DYNAMIC_PROCESSES is being defined and reentrant <systemc> header included" [-Wcpp]
+   82 | #warning "SC_INCLUDE_DYNAMIC_PROCESSES is being defined and reentrant <systemc> header included"
+      |  ^~~~~~~
+
+        SystemC 2.3.3-Accellera --- Jun  7 2022 13:10:00
+        Copyright (c) 1996-2018 by all Contributors,
+        ALL RIGHTS RESERVED
+Connections Clock: t.clk Period: 1 ns
+[03:24:06] cosim: building software golden ...
+[03:24:49] cosim: synthesizing RTL (Catapult + SCVerify) ...
+[10:23:23] cosim: running RTL simulation (Xcelium) ...
+[10:24:06] cosim MATCH: RTL is bit-exact with the software golden (12 output array(s)).
+  row 0: OK  out=16/16 golden=['0x365d', '0x9dc0'] got=['0x365d', '0x9dc0', '0x365d']
+  row 1: OK  out=16/16 golden=['0x356a', '0xacc0'] got=['0x356a', '0xacc0', '0x356a']
+  row 2: OK  out=16/16 golden=['0x2390', '0xae7a'] got=['0x2390', '0xae7a', '0x2390']
+  row 3: OK  out=16/16 golden=['0x2e7e', '0x1970'] got=['0x2e7e', '0x1970', '0x2e7e']
+  row 4: OK  out=16/16 golden=['0xada0', '0xaeba'] got=['0xada0', '0xaeba', '0xada0']
+  row 5: OK  out=16/16 golden=['0xaa16', '0x2e13'] got=['0xaa16', '0x2e13', '0xaa16']
+  row 6: OK  out=16/16 golden=['0x2e34', '0xa4e0'] got=['0x2e34', '0xa4e0', '0x2e34']
+  row 7: OK  out=16/16 golden=['0x3066', '0xaf88'] got=['0x3066', '0xaf88', '0x3066']
+=== fft cosim: 8/8 rows clean | 128 outputs, 0 mismatches (cyclic vs golden EVA) ===
+    throughput: 7.53 cyc/val (per-row span mean over 8 rows)

@@ -1,0 +1,13 @@
+=== GOLDEN REPLAY  WL=fft  CHIP=eva_v13  8x8  L=916  pc=112  in=lft out=rgt  PRIME=1  REPS=2  SCHED=0  drf=[0, 1]  #inputs=16 ===
+  golden rows: 0:2, 1:2, 2:2, 3:2, 4:2, 5:2, 6:2, 7:2
+emitted -> /tmp/claude-1838657/-home-zsm9-final-eva-systemc/9cec8437-a27a-47c2-a31b-141c9605081d/scratchpad/v13_8x8; running csim ...
+In file included from /opt/siemens/catapult/2024.2/Mgc_home/shared/include/mc_connections.h:60,
+                 from kernel.cpp:6:
+/opt/siemens/catapult/2024.2/Mgc_home/shared/include/connections/connections.h:82:2: warning: #warning "SC_INCLUDE_DYNAMIC_PROCESSES is being defined and reentrant <systemc> header included" [-Wcpp]
+   82 | #warning "SC_INCLUDE_DYNAMIC_PROCESSES is being defined and reentrant <systemc> header included"
+      |  ^~~~~~~
+
+        SystemC 2.3.3-Accellera --- Jun  7 2022 13:10:00
+        Copyright (c) 1996-2018 by all Contributors,
+        ALL RIGHTS RESERVED
+Connections Clock: t.clk Period: 1 ns

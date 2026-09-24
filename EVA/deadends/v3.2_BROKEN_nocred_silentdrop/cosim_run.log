@@ -1,0 +1,22 @@
+v3.2 cosim elapsed=5:08.41 cpu=91% maxrssMB=912416
+D=0 ===
+emitted -> /tmp/claude-1838657/-home-zsm9-final-eva-systemc/9cec8437-a27a-47c2-a31b-141c9605081d/scratchpad/v32_cosim
+running cosim (K=6 ramp, pc=15) ...
+In file included from /opt/siemens/catapult/2024.2/Mgc_home/shared/include/mc_connections.h:60,
+                 from kernel.cpp:6:
+/opt/siemens/catapult/2024.2/Mgc_home/shared/include/connections/connections.h:82:2: warning: #warning "SC_INCLUDE_DYNAMIC_PROCESSES is being defined and reentrant <systemc> header included" [-Wcpp]
+   82 | #warning "SC_INCLUDE_DYNAMIC_PROCESSES is being defined and reentrant <systemc> header included"
+      |  ^~~~~~~
+
+        SystemC 2.3.3-Accellera --- Jun  7 2022 13:10:00
+        Copyright (c) 1996-2018 by all Contributors,
+        ALL RIGHTS RESERVED
+Connections Clock: t.clk Period: 1 ns
+[21:40:15] cosim: building software golden ...
+[21:40:23] cosim: synthesizing RTL (Catapult + SCVerify) ...
+[21:45:02] cosim: running RTL simulation (Xcelium) ...
+[21:45:18] cosim MATCH: RTL is bit-exact with the software golden (8 output array(s)).
+EXPECT ramp   : [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+EVA    out_e  : [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+=== cosim RESULT : PASS (bit-exact) ===
+rc=0

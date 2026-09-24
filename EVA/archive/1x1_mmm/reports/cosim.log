@@ -1,0 +1,120 @@
+============================================
+Creating simulation directory 'scverify/concat_sim_rtl_v_ncsim'
+mkdir -p scverify/concat_sim_rtl_v_ncsim
+echo "include /opt/cadence/XCELIUM2403/tools/inca/files/cds.lib" >scverify/concat_sim_rtl_v_ncsim/cds.lib
+echo "define work worklib" >scverify/concat_sim_rtl_v_ncsim/hdl.var
+mkdir -p scverify/concat_sim_rtl_v_ncsim/work
+echo "define work ./work" >>scverify/concat_sim_rtl_v_ncsim/cds.lib
+============================================
+Compiling Verilog file: concat_sim_rtl.v
+xmvlog -work work -cdslib scverify/concat_sim_rtl_v_ncsim/cds.lib -hdlvar scverify/concat_sim_rtl_v_ncsim/hdl.var -linedebug    concat_sim_rtl.v
+xmvlog(64): 24.03-s005: (c) Copyright 1995-2024 Cadence Design Systems, Inc.
+============================================
+Compiling Verilog file: scverify/ccs_wrapper_top.v
+xmvlog -work work -cdslib scverify/concat_sim_rtl_v_ncsim/cds.lib -hdlvar scverify/concat_sim_rtl_v_ncsim/hdl.var -linedebug    scverify/ccs_wrapper_top.v
+xmvlog(64): 24.03-s005: (c) Copyright 1995-2024 Cadence Design Systems, Inc.
+============================================
+Compiling C++ file: ../../../kernel.cpp
+xmsc  -COMPILER /opt/cadence/XCELIUM2403/tools/cdsgcc/gcc/install/bin/g++ -cdslib scverify/concat_sim_rtl_v_ncsim/cds.lib -hdlvar scverify/concat_sim_rtl_v_ncsim/hdl.var  -CFLAGS " -fPIC -o scverify/concat_sim_rtl_v_ncsim/kernel.cpp.cxxts.o -I. -I./scverify -I. -I../.. -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I. -I./scverify -I. -I../.. -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I/opt/cadence/XCELIUM2403/tools/systemc/include -I/opt/cadence/XCELIUM2403/tools/systemc/include/tlm2 -I/opt/cadence/XCELIUM2403/tools/tbsc/include -I/opt/cadence/XCELIUM2403/tools/vic/include -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/hls_pkgs/src -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/siflibs -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/hls_pkgs/mgc_comps_src -DNCSC -DXMSC -c -x c++ -Wall -Wno-unknown-pragmas -Wno-deprecated -DCCS_DUT_RTL -DCCS_DUT_VERILOG  -DSC_INCLUDE_DYNAMIC_PROCESSES -DCCS_SYSC -DSC_USE_STD_STRING -DTOP_HDL_ENTITY=top -DDEADLOCK_DETECTION -std=gnu++11 " ../../../kernel.cpp
+xmsc(64): 24.03-s005: (c) Copyright 1995-2024 Cadence Design Systems, Inc.
+xmsc: /opt/cadence/XCELIUM2403/tools/cdsgcc/gcc/install/bin/g++ -DNCSC -DCADENCE  -DLNX86 -D_GLIBCXX_USE_CXX11_ABI=1 -I/opt/cadence/XCELIUM2403/tools/systemc/include_pch/64bit  -fPIC -o scverify/concat_sim_rtl_v_ncsim/kernel.cpp.cxxts.o -I. -I./scverify -I. -I../.. -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I. -I./scverify -I. -I../.. -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I/opt/cadence/XCELIUM2403/tools/systemc/include -I/opt/cadence/XCELIUM2403/tools/systemc/include/tlm2 -I/opt/cadence/XCELIUM2403/tools/tbsc/include -I/opt/cadence/XCELIUM2403/tools/vic/include -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/hls_pkgs/src -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/siflibs -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/hls_pkgs/mgc_comps_src -DNCSC -DXMSC -c -x c++ -Wall -Wno-unknown-pragmas -Wno-deprecated -DCCS_DUT_RTL -DCCS_DUT_VERILOG  -DSC_INCLUDE_DYNAMIC_PROCESSES -DCCS_SYSC -DSC_USE_STD_STRING -DTOP_HDL_ENTITY=top -DDEADLOCK_DETECTION -std=gnu++11  -DNCSC -DCADENCE  -DLNX86 -D_GLIBCXX_USE_CXX11_ABI=1 -I/opt/cadence/XCELIUM2403/tools/systemc/include_pch/64bit  -I/opt/cadence/XCELIUM2403/tools/systemc/include/tlm2 -I/opt/cadence/XCELIUM2403/tools/systemc/include/cci -I/opt/cadence/XCELIUM2403/tools/tbsc/include -I/opt/cadence/XCELIUM2403/tools/vic/include -c -Wall  ../../../kernel.cpp
+============================================
+Compiling C++ file: scverify/sysc_sim.cpp
+xmsc  -COMPILER /opt/cadence/XCELIUM2403/tools/cdsgcc/gcc/install/bin/g++ -cdslib scverify/concat_sim_rtl_v_ncsim/cds.lib -hdlvar scverify/concat_sim_rtl_v_ncsim/hdl.var  -CFLAGS " -fPIC -o scverify/concat_sim_rtl_v_ncsim/sysc_sim.cpp.cxxts.o -I. -I./scverify -I. -I../.. -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I. -I./scverify -I. -I../.. -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I/opt/cadence/XCELIUM2403/tools/systemc/include -I/opt/cadence/XCELIUM2403/tools/systemc/include/tlm2 -I/opt/cadence/XCELIUM2403/tools/tbsc/include -I/opt/cadence/XCELIUM2403/tools/vic/include -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/hls_pkgs/src -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/siflibs -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/hls_pkgs/mgc_comps_src -DNCSC -DXMSC -c -x c++ -Wall -Wno-unknown-pragmas -Wno-deprecated -DCCS_DUT_RTL -DCCS_DUT_VERILOG  -DSC_INCLUDE_DYNAMIC_PROCESSES -DCCS_SYSC -DSC_USE_STD_STRING -DTOP_HDL_ENTITY=top -DDEADLOCK_DETECTION -std=gnu++11 " scverify/sysc_sim.cpp
+xmsc(64): 24.03-s005: (c) Copyright 1995-2024 Cadence Design Systems, Inc.
+xmsc: /opt/cadence/XCELIUM2403/tools/cdsgcc/gcc/install/bin/g++ -DNCSC -DCADENCE  -DLNX86 -D_GLIBCXX_USE_CXX11_ABI=1 -I/opt/cadence/XCELIUM2403/tools/systemc/include_pch/64bit  -fPIC -o scverify/concat_sim_rtl_v_ncsim/sysc_sim.cpp.cxxts.o -I. -I./scverify -I. -I../.. -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I. -I./scverify -I. -I../.. -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I/opt/cadence/XCELIUM2403/tools/systemc/include -I/opt/cadence/XCELIUM2403/tools/systemc/include/tlm2 -I/opt/cadence/XCELIUM2403/tools/tbsc/include -I/opt/cadence/XCELIUM2403/tools/vic/include -I/opt/siemens/catapult/2024.2/Mgc_home/shared/include -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/hls_pkgs/src -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/siflibs -I/opt/siemens/catapult/2024.2/Mgc_home/pkgs/hls_pkgs/mgc_comps_src -DNCSC -DXMSC -c -x c++ -Wall -Wno-unknown-pragmas -Wno-deprecated -DCCS_DUT_RTL -DCCS_DUT_VERILOG  -DSC_INCLUDE_DYNAMIC_PROCESSES -DCCS_SYSC -DSC_USE_STD_STRING -DTOP_HDL_ENTITY=top -DDEADLOCK_DETECTION -std=gnu++11  -DNCSC -DCADENCE  -DLNX86 -D_GLIBCXX_USE_CXX11_ABI=1 -I/opt/cadence/XCELIUM2403/tools/systemc/include_pch/64bit  -I/opt/cadence/XCELIUM2403/tools/systemc/include/tlm2 -I/opt/cadence/XCELIUM2403/tools/systemc/include/cci -I/opt/cadence/XCELIUM2403/tools/tbsc/include -I/opt/cadence/XCELIUM2403/tools/vic/include -c -Wall  scverify/sysc_sim.cpp
+============================================
+Linking executable
+/opt/cadence/XCELIUM2403/tools/cdsgcc/gcc/install/bin/g++ scverify/concat_sim_rtl_v_ncsim/kernel.cpp.cxxts.o scverify/concat_sim_rtl_v_ncsim/sysc_sim.cpp.cxxts.o -Wl,-G  -shared   -L/opt/cadence/XCELIUM2403/tools/lib/64bit -L/opt/cadence/XCELIUM2403/tools/tbsc/lib/64bit -L/opt/cadence/XCELIUM2403/tools/tbsc/lib/64bit/gnu -ltbsc -lscv -L/opt/cadence/XCELIUM2403/tools/systemc/lib/64bit/gnu -lsystemc_sh -lxmscCoSim_sh -lxmscCoroutines_sh -lxmsctlm2_sh   -o scverify/concat_sim_rtl_v_ncsim/libsc_main.so
+============================================
+Elaborating design
+cd ../..; xmelab +tb_rc_dir+./Catapult/top.v1/scverify/concat_sim_rtl_v_ncsim +tb_run_dir+. +tb_trans_record -access +R  -log ./Catapult/top.v1/scverify/concat_sim_rtl_v_ncsim/ncelab.log  -work work  -cdslib ./Catapult/top.v1/scverify/concat_sim_rtl_v_ncsim/cds.lib -hdlvar ./Catapult/top.v1/scverify/concat_sim_rtl_v_ncsim/hdl.var -loadsc ./Catapult/top.v1/scverify/concat_sim_rtl_v_ncsim/libsc_main.so  sc_main
+xmelab(64): 24.03-s005: (c) Copyright 1995-2024 Cadence Design Systems, Inc.
+============================================
+Creating NCSim TCL file 'scverify/concat_sim_rtl_v_ncsim/scverify_ncsim_gui.tcl' from 'scverify/ccs_wave_signals.dat'
+/opt/siemens/catapult/2024.2/Mgc_home/bin/tclsh8.5 /opt/siemens/catapult/2024.2/Mgc_home/pkgs/sif/userware/En_na/flows/app_ncsim.flo create_ncsim_wave ./Catapult/top.v1/scverify/ccs_wave_signals.dat scverify/concat_sim_rtl_v_ncsim/scverify_ncsim_gui.tcl ./Catapult/top.v1/.dut_inst_info.tcl  0
+app_ncsim.flo - Executing command 'create_ncsim_wave ./Catapult/top.v1/scverify/ccs_wave_signals.dat scverify/concat_sim_rtl_v_ncsim/scverify_ncsim_gui.tcl ./Catapult/top.v1/.dut_inst_info.tcl 0'...
+Wrote NCSim waveform creation script to 'scverify/concat_sim_rtl_v_ncsim/scverify_ncsim_gui.tcl'
+============================================
+Simulating design entity: sc_main
+cd ../..; xmsim   -log ./Catapult/top.v1/scverify/concat_sim_rtl_v_ncsim/sim.log  +tb_rc_dir+./Catapult/top.v1/scverify/concat_sim_rtl_v_ncsim +tb_run_dir+. +tb_trans_record -input ./Catapult/top.v1/scverify/concat_sim_rtl_v_ncsim/scverify_ncsim_gui.tcl  -cdslib ./Catapult/top.v1/scverify/concat_sim_rtl_v_ncsim/cds.lib -hdlvar ./Catapult/top.v1/scverify/concat_sim_rtl_v_ncsim/hdl.var sc_main
+xmsim(64): 24.03-s005: (c) Copyright 1995-2024 Cadence Design Systems, Inc.
+
+The SystemC(r) Code included in this Product is Copyright  1996 - 2016 by all Contributors.  All rights reserved.
+
+The SystemC Code included in this Product has been modified by Cadence Design Systems, Inc. and CoWare, Inc. All such modifications are Copyright (c) 2004-2016 Cadence Design Systems, Inc. and Copyright (c) 2004 CoWare, Inc.  All Rights Reserved.
+
+SystemC(r) is a registered trademark of Accellera Systems Initiative, Inc. in the United States and other countries and is used with permission.
+
+xcelium> # Source static function file
+xcelium> global env
+xcelium> # Source the common TCL file (that also reads the wave database file)
+xcelium> source $env(MGC_HOME)/pkgs/sif/userware/En_na/flows/ncsim_funcs.tcl
+xcelium> read_ccs_wave ./Catapult/top.v1/scverify/ccs_wave_signals.dat
+Reading SCVerify waveform database './Catapult/top.v1/scverify/ccs_wave_signals.dat'
+xcelium> setup_vcd_file ./Catapult/top.v1/.dut_inst_info.tcl
+xcelium> 
+xcelium> populate_wave_window
+xcelium> 
+xcelium> if { ("0" != {}) && [file exists "0"] } {
+>    source "0"
+> }
+xcelium> # If not running in GUI mode, run the entire simulation
+xcelium> if { ![gui_is_active] } {
+>    do_simulation_run
+> }
+run
+Connections Clock: t.clk Period: 1 ns
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+/opt/siemens/catapult/2024.2/Mgc_home/shared/include/mkfiles/ccs_ncsim.mk:308: Warning: Applying the gcc option for the C++11 language standard
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+../../../kernel.cpp:419:13: warning: variable 'csd_vld' set but not used [-Wunused-but-set-variable]
+../../../kernel.cpp:489:13: warning: variable 'txp_r' set but not used [-Wunused-but-set-variable]
+../../../kernel.cpp:637:5: warning: label 'l_S_t_1_t' defined but not used [-Wunused-label]
+../../../kernel.cpp:718:7: warning: label 'l_S_d_1_d' defined but not used [-Wunused-label]
+../../../kernel.cpp:765:7: warning: label 'l_S_d_2_d1' defined but not used [-Wunused-label]
+../../../kernel.cpp:845:7: warning: label 'l_S_o_3_o' defined but not used [-Wunused-label]
+../../../kernel.cpp:893:7: warning: label 'l_S_d_4_d2' defined but not used [-Wunused-label]
+../../../kernel.cpp:897:11: warning: label 'l_S_sft_4_sft' defined but not used [-Wunused-label]
+../../../kernel.cpp:1032:7: warning: label 'l_S_d_6_d3' defined but not used [-Wunused-label]
+../../../kernel.cpp:1382:7: warning: label 'l_S_k_7_k' defined but not used [-Wunused-label]
+../../../kernel.cpp:1662:7: warning: label 'l_S_d_8_d4' defined but not used [-Wunused-label]
+../../../kernel.cpp:1809:9: warning: label 'l_S_k_9_k1' defined but not used [-Wunused-label]
+../../../kernel.cpp:2241:5: warning: label 'l_S_t_1_t1' defined but not used [-Wunused-label]
+../../../kernel.cpp:2365:5: warning: label 'l_S_t_1_t2' defined but not used [-Wunused-label]
+../../../kernel.cpp:2489:5: warning: label 'l_S_t_1_t3' defined but not used [-Wunused-label]
+../../../kernel.cpp:2613:5: warning: label 'l_S_t_1_t4' defined but not used [-Wunused-label]
+../../../kernel.cpp:2734:5: warning: label 'l_S_t_1_t5' defined but not used [-Wunused-label]
+../../../kernel.cpp:2822:5: warning: label 'l_S_t_1_t6' defined but not used [-Wunused-label]
+../../../kernel.cpp:2910:5: warning: label 'l_S_t_1_t7' defined but not used [-Wunused-label]
+../../../kernel.cpp:2998:5: warning: label 'l_S_t_1_t8' defined but not used [-Wunused-label]
+../../../kernel.cpp:3085:5: warning: label 'l_S_t_1_t9' defined but not used [-Wunused-label]
+../../../kernel.cpp:3199:5: warning: label 'l_S_t_1_t10' defined but not used [-Wunused-label]
+../../../kernel.cpp:3313:5: warning: label 'l_S_t_1_t11' defined but not used [-Wunused-label]
+../../../kernel.cpp:3427:5: warning: label 'l_S_t_1_t12' defined but not used [-Wunused-label]
+../../../kernel.cpp:3542:5: warning: label 'l_S_t_1_t13' defined but not used [-Wunused-label]
+../../../kernel.cpp:3628:5: warning: label 'l_S_t_1_t14' defined but not used [-Wunused-label]
+../../../kernel.cpp:3714:5: warning: label 'l_S_t_1_t15' defined but not used [-Wunused-label]
+../../../kernel.cpp:3800:5: warning: label 'l_S_t_1_t16' defined but not used [-Wunused-label]
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libtinfo.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
+ERROR: ld.so: object '/lib64/libncurses.so.5.9' from LD_PRELOAD cannot be preloaded (wrong ELF class: ELFCLASS64): ignored.
