@@ -94,3 +94,8 @@ sg_execution_times.rst
 tests/xlscc_tests/**/test.cpp
 tests/xlscc_tests/**/test_block.cpp
 tests/xlscc_tests/**/test
+
+# Catapult csim projects generated into the source tree by tests that pass a
+# relative `project=` to s.build(target="catapult"). The backend writes Makefile/
+# host.cpp/kernel.cpp/kernel.h/run.tcl there; none of it is source.
+tests/catpult_test_systolic_array/
