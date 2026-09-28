@@ -4,11 +4,11 @@
 # Recipe = build_val_sched (pipeline_node/partition_rf + dep-false + bind_op lat=2)
 # + _cosim chip (out_cyc ports) + tb_replay_nb_ts.cpp + B>1.
 #   CHIP=eva_sb_syscredit_fwd_cosim SZ=4 LFORCE=374 BATCH=4 \
-#     PYTHONPATH=/home/zsm9/allo_sup LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel \
+#     PYTHONPATH=/home/zsm9/allo LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel \
 #     python build_val_sched_ts.py
 import os, sys
-os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo_sup/mlir/build_xcel")
-sys.path.insert(0, "/home/zsm9/allo_sup")
+os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo/mlir/build_xcel")
+sys.path.insert(0, "/home/zsm9/allo")
 import re
 import numpy as np
 

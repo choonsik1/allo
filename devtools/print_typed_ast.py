@@ -6,8 +6,8 @@
 import ast
 import sys
 
-sys.path.insert(0, "/home/zsm9/allo_sup")
-sys.path.insert(0, "/home/zsm9/allo_sup/examples")
+sys.path.insert(0, "/home/zsm9/allo")
+sys.path.insert(0, "/home/zsm9/allo/examples")
 
 from allo._mlir.ir import Context
 from allo.ir.utils import parse_ast, get_global_vars

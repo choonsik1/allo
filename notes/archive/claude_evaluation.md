@@ -36,7 +36,7 @@ Three things to evaluate:
 
 ## 0. Ground rules (read before running anything)
 
-**Two-checkouts trap.** Always `PYTHONPATH=/home/zsm9/allo_sup`. A bare import grabs the
+**Two-checkouts trap.** Always `PYTHONPATH=/home/zsm9/allo`. A bare import grabs the
 installed `/home/zsm9/allo` and silently runs *stale* code.
 (`[[allo-two-checkouts-trap]]`)
 
@@ -470,7 +470,7 @@ that still fires in build-subdir runs.
 
 ## 5. Deliverables
 
-**Created 2026-08-02 at `/home/zsm9/evaluation/`** (same level as `allo_sup`, matching
+**Created 2026-08-02 at `/home/zsm9/evaluation/`** (same level as `allo`, matching
 `final_noc/`, `final_eva_performance/`). See its `README.md`.
 
 ```
@@ -490,7 +490,7 @@ sweep scratch go to `/scratch` (279 G free) or `/work/shared/users/zsh9` and are
 path. A full home quota makes every `df.build` fail with `Disk quota exceeded`.
 
 Rules: every number carries **commit hash + date + config**. Every table has a companion raw
-log archived. `final_noc/` gets either `git init` or is mirrored into `allo_sup/agents/noc/`
+log archived. `final_noc/` gets either `git init` or is mirrored into `allo/agents/noc/`
 — an unversioned results tree is not a deliverable.
 
 ---

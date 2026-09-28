@@ -4,7 +4,7 @@ PD=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_
 cd $PD
 PY=/home/zsm9/miniconda3/envs/allo/bin/python
 echo "=== [1/3] codegen 1x1 rtprime (prime_cfg runtime) $(date) ==="
-PYTHONPATH=/home/zsm9/allo_sup SZ=1 LFORCE=120 PRIME=6 $PY build_prime.py
+PYTHONPATH=/home/zsm9/allo SZ=1 LFORCE=120 PRIME=6 $PY build_prime.py
 INI=$PD/ci_prime_1x1.ini
 WD=/tmp/pnr_rtprime_1x1
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh

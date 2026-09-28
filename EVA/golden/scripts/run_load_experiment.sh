@@ -9,7 +9,7 @@ PRIMEDIR=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_all
 DEST=/home/zsm9/final_eva_performance/results/load_exp; mkdir -p $DEST
 SUM=$DEST/00_SUMMARY.txt; : > $SUM
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 PY=/home/zsm9/miniconda3/envs/allo/bin/python
 echo "== wait rsync ==" ; for i in $(seq 1 120); do grep -q RSYNC_LOAD_DONE $BASE/rsync_load.log 2>/dev/null && break; sleep 10; done
 grep -q RSYNC_LOAD_DONE $BASE/rsync_load.log || { echo "RSYNC FAIL"|tee $SUM; exit 1; }

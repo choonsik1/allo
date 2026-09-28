@@ -7,7 +7,7 @@ PY=/home/zsm9/miniconda3/envs/allo/bin/python
 LOGD=$SC/cosim4x4_logs; mkdir -p $LOGD
 SUM=$LOGD/SUMMARY.txt; : > $SUM
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup
+export PYTHONPATH=/home/zsm9/allo
 cd $SC
 
 # module:TAG  (standard signature only)

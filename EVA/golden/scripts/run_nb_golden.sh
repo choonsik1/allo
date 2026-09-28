@@ -19,7 +19,7 @@ for WL in mmm fft cordic_cr cordic_cv cordic_hr cordic_hv; do
   LOG=$LOGD/$WL.log; WD=/tmp/nbg_$WL
   { echo "==== NB-GOLD $WL START $(date) ===="
     if [ ! -f $SC/prj_nbgold_${WL}_8x8_L800/kernel.cpp ]; then
-      ( cd $SC && PYTHONPATH=/home/zsm9/allo_sup TAG=nbgold CHIP=eva_sb_nb TB=tb_replay_golden.cpp WL=$WL LFORCE=800 $PY $SC/build_golden_cosim.py )
+      ( cd $SC && PYTHONPATH=/home/zsm9/allo TAG=nbgold CHIP=eva_sb_nb TB=tb_replay_golden.cpp WL=$WL LFORCE=800 $PY $SC/build_golden_cosim.py )
     fi
     INI=$SC/ci_nbgold_${WL}_8x8.ini
     rm -rf $WD; mkdir -p $WD; cd $SC/prj_nbgold_${WL}_8x8_L800

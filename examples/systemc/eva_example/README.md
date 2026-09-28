@@ -27,7 +27,7 @@ SCH=<a dir with>: include -> $MGC_HOME/shared/include, lib -> $MGC_HOME/shared/l
 export SYSTEMC_HOME=$SCH
 export ALLO_CXX_EXTRA="-DSC_INCLUDE_DYNAMIC_PROCESSES -Wl,-rpath,$MGC_HOME/lib"
 export LD_LIBRARY_PATH=$MGC_HOME/lib:$SCH/lib:$LD_LIBRARY_PATH
-export PYTHONPATH=<allo checkout>          # e.g. /home/zsm9/allo_sup
+export PYTHONPATH=<allo checkout>          # e.g. /home/zsm9/allo
 
 # emit, then compile + run
 python build_eva_systemc.py

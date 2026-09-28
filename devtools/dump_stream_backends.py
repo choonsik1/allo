@@ -10,7 +10,7 @@ import os
 import subprocess
 import sys
 
-# Import the allo checkout we are EDITING (/home/zsm9/allo_sup), not whatever
+# Import the allo checkout we are EDITING (/home/zsm9/allo), not whatever
 # editable package happens to be installed (/home/zsm9/allo). Without this,
 # running from examples/ picks up the installed package, which is an older
 # checkout missing newer bindings like emit_systemc. Prepend repo root (for

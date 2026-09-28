@@ -37,10 +37,10 @@ Use a **local** `/tmp` work_dir (NFS triggers `.nfs busy` errors). DSP48 OPMODE
 warnings during sim are harmless fp16 noise.
 
 ## Regenerate the kernel from the .py (optional)
-Requires the supervisor Allo branch for the non-blocking emitter:
+Requires the non-blocking (NB) Allo branch for the non-blocking emitter:
 ```bash
-LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel \
-PYTHONPATH=/home/zsm9/allo_sup python -c "..."   # see final_runs/cosim_8x8/eva_sb_nb/build_nb.py
+LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel \
+PYTHONPATH=/home/zsm9/allo python -c "..."   # see final_runs/cosim_8x8/eva_sb_nb/build_nb.py
 ```
 
 ## Notes

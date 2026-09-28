@@ -3,7 +3,7 @@
         Copyright (c) 1996-2018 by all Contributors,
         ALL RIGHTS RESERVED
 Connections Clock: t.clk Period: 1 ns
-allo: /home/zsm9/allo_sup
+allo: /home/zsm9/allo
 config: M=N=1 K=6 pc=15 NSTEP=LANELEN=55
 === systemc build done, driving workload via run_eva ===
 [14:44:06] Compiling with g++ ...

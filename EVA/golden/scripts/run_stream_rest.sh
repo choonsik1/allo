@@ -8,7 +8,7 @@ PRIME=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_e
 DEST=/home/zsm9/final_eva_performance/results/allo_stream; mkdir -p $DEST
 SUM=$DEST/00_stream_summary.txt
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$PRIME LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo:$PRIME LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 cd $SC
 echo "==== Allo B=300 stream sweep (fft+cordic) START $(date) ====" | tee -a $SUM
 # WL:PRIME  (mmm already done; these all use prime=3)

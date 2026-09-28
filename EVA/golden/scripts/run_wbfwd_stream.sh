@@ -8,7 +8,7 @@ SC=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/final_runs/cosim_8x8
 PRIMEDIR=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/prime
 DEST=/home/zsm9/final_eva_performance/results/allo_stream/wbfwd_ii1; mkdir -p $DEST
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 cd $SC
 BATCH=${1:-300}; L=${2:-2000}; PR=${3:-6}; SCHED=${4:-0}   # SCHED=0 -> NOSCHED (correct base); 1 -> pipelined II=1 attempt
 echo "==== wbfwd mmm stream: build+csynth (SZ=4 B=$BATCH L=$L prime=$PR NOSCHED=$SCHED) START $(date) ====" | tee $DEST/00.log

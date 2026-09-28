@@ -153,7 +153,7 @@ full non-blocking (`try_get`/`empty`) works.** The demand chips prove "instructi
 *deadlocks*. So neither credit-free path is viable: one silently loses data, the other hangs. Only
 always-fire+credit is lossless AND deadlock-free at RTL. Logs: `eva_sb_nb/cosim4x4_logs/`. NOT cosim'd in
 this sweep (signature/emitter limits): demand/demand2/3 (need n_out/n_in tbs); the *current* eva_sb_nb.py
-(uses supervisor-branch `try_get`/`empty` — needs vhls-printer ext). BUT an EARLIER non-blocking EVA
+(uses NB-branch `try_get`/`empty` — needs vhls-printer ext). BUT an EARLIER non-blocking EVA
 using **`read_nb`/`write_nb`** (standard Vitis HLS, RTL-emittable) DID cosim and PASS at II=3 (mmm 4x4,
 rows [18,21,16,15]) — preserved verbatim at `final_runs/nonblocking_final/PASSING_II3_baseline/`
 (kernel_II3_PASSING.cpp). So a non-blocking EVA IS RTL-viable via `read_nb` (no emitter ext needed);

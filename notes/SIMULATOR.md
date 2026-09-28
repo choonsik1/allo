@@ -33,7 +33,7 @@ priority — see §4.1.
 ```bash
 source /home/zsm9/miniconda3/etc/profile.d/conda.sh && conda activate allo   # interactive!
 export LLVM_BUILD_DIR=/work/shared/common/llvm-project-main/build-rhel8      # build-rhel8 ONLY
-export PYTHONPATH=/home/zsm9/allo_sup && export OMP_NUM_THREADS=8
+export PYTHONPATH=/home/zsm9/allo && export OMP_NUM_THREADS=8
 python tests/dataflow/test_df_unit.py            # golden
 python tests/dataflow/test_region_stateful.py
 # the profiling harness now lives OUTSIDE the repo, at /home/zsm9/simulator_profiling

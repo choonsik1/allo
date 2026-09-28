@@ -25,7 +25,7 @@ source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
 for i in "${!WLS[@]}"; do
   WL=${WLS[$i]} P=${PRS[$i]}
   echo "-- gen vectors $WL (prime=$P) $(date)" | tee -a $LOGD/SUMMARY.txt
-  PYTHONPATH=/home/zsm9/allo_sup TAG=obs CHIP=eva_sb_syscredit_rtprime TB=tb_replay_golden_prime.cpp \
+  PYTHONPATH=/home/zsm9/allo TAG=obs CHIP=eva_sb_syscredit_rtprime TB=tb_replay_golden_prime.cpp \
     WL=$WL LFORCE=800 PRIME=$P $PY build_golden_cosim.py > $LOGD/gen_$WL.log 2>&1
 done
 

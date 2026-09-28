@@ -10,7 +10,7 @@ mkdir -p $TS/tmp; export TMPDIR=$TS/tmp
 NOSCHED=$TS/prj_ts_nosched; INJ=$TS/kernel_ts_sched.cpp; WD=$TS/wd
 cd $PRIME
 echo "== [0] codegen NOSCHED ts kernel 8x8 L=2000 $(date) =="
-LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel PYTHONPATH=/home/zsm9/allo_sup:$PRIME $PY - <<PYEOF
+LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel PYTHONPATH=/home/zsm9/allo:$PRIME $PY - <<PYEOF
 import os,sys
 sys.path.insert(0,"$PRIME")
 import eva_sb_syscredit_rtprime_ts as chip

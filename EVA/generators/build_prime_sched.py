@@ -5,11 +5,11 @@
 #   - kernel.cpp (scheduled+depfalse+bindop) = the HLS code deliverable
 #   - ci_prime_{M}x{N}_sched.ini  (syn.top=top)        -> full-top csim/csynth/cosim
 #   - ci_node_only_sched.ini      (syn.top=node_0_0)   -> isolated PE-core csynth/P&R
-# Run: SZ=1 LFORCE=120 PRIME=6 PYTHONPATH=/home/zsm9/allo_sup \
+# Run: SZ=1 LFORCE=120 PRIME=6 PYTHONPATH=/home/zsm9/allo \
 #        /home/zsm9/miniconda3/envs/allo/bin/python build_prime_sched.py
 import os, sys, re
-os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo_sup/mlir/build_xcel")
-sys.path.insert(0, "/home/zsm9/allo_sup")
+os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo/mlir/build_xcel")
+sys.path.insert(0, "/home/zsm9/allo")
 import numpy as np
 
 PRIME_DIR = os.path.dirname(os.path.abspath(__file__))

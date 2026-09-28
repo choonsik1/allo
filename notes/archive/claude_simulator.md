@@ -115,14 +115,14 @@ systolic 2×2 err ~0. The distributed timing layer works; details in memory
 ```bash
 source /home/zsm9/miniconda3/etc/profile.d/conda.sh && conda activate allo
 export LLVM_BUILD_DIR=/work/shared/common/llvm-project-main/build-rhel8   # build-rhel8 ONLY
-export PYTHONPATH=/home/zsm9/allo_sup && export OMP_NUM_THREADS=8
+export PYTHONPATH=/home/zsm9/allo && export OMP_NUM_THREADS=8
 python tests/dataflow/test_df_unit.py            # golden
 python tests/dataflow/test_region_stateful.py
 python simulator_profiling/nb_nondeterminism.py  # determinism metric (expect single outcome)
 python simulator_profiling/read_barrier_test.py  # expect [8]
 ```
 Gotchas (memory): interactive `conda activate` needed (plain `conda run` → "Unknown function
-top"; overriding LLVM_BUILD_DIR to `build/` → GLIBC abort). Force `PYTHONPATH=/home/zsm9/allo_sup`
+top"; overriding LLVM_BUILD_DIR to `build/` → GLIBC abort). Force `PYTHONPATH=/home/zsm9/allo`
 (import otherwise grabs installed `/home/zsm9/allo`). See [[simulator-llvm-build-dir-run]],
 [[allo-two-checkouts-trap]].
 
@@ -131,7 +131,7 @@ top"; overriding LLVM_BUILD_DIR to `build/` → GLIBC abort). Force `PYTHONPATH=
 1. **Cost model for DSE (the #1 join-point item).** The clock is all-ones today =
    a **logical** clock (deterministic ordering only, NOT real cycles). For DSE
    *performance numbers*, refine `_op_latency` in `simulator.py` toward real per-op /
-   II latencies. Supervisor stance is explicit: **correct, not cycle-accurate** — "try
+   II latencies. The design stance is explicit: **correct, not cycle-accurate** — "try
    many things." This is what lets a generated design be *scored*, so do it first.
 
 2. **Deadlock detection.** The sim currently **hangs forever** on deadlock with no
@@ -175,8 +175,8 @@ top"; overriding LLVM_BUILD_DIR to `build/` → GLIBC abort). Force `PYTHONPATH=
 
 ## Pointers
 - Memory: [[simulator-timing-layer-wip]] (resume doc), [[simulator-profiling-harness]],
-  [[wire-channel-dataflow-types]], [[sim-direction-wires-dse-agents]] (supervisor
-  direction), [[simulator-combinational-wire-design]].
+  [[wire-channel-dataflow-types]], [[sim-direction-wires-dse-agents]],
+  [[simulator-combinational-wire-design]].
 - Deep reference: the rest of THIS file (DAM-lite design; current-sim analysis; paper
   analysis incl. OmniSim/DAM). Profiling harness + findings: `simulator_profiling/`.
 - Notes: `notes/PITFALLS_DATAFLOW_REGION.md`, `STATE.md`, `BRANCHES.md`.

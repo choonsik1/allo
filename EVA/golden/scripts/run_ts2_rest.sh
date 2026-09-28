@@ -10,7 +10,7 @@ run_ts() {  # WL PRIME
   local WL=$1 PRIME=$2 LOG=$LOGD/$1.log WD=/tmp/wdts2_$1
   { echo "==== TS2-REST $WL (prime=$PRIME) START $(date) ===="; df -h /tmp | tail -1
     if [ ! -f $SC/prj_gcts_${WL}_8x8_L800/kernel.cpp ]; then
-      ( cd $SC && PYTHONPATH=/home/zsm9/allo_sup TAG=gcts CHIP=eva_sb_syscredit_fwd_cosim TB=tb_replay_golden_ts.cpp \
+      ( cd $SC && PYTHONPATH=/home/zsm9/allo TAG=gcts CHIP=eva_sb_syscredit_fwd_cosim TB=tb_replay_golden_ts.cpp \
         WL=$WL LFORCE=800 PRIME=$PRIME $PY $SC/build_golden_cosim.py )
     fi
     INI=$SC/ci_gcts_${WL}_8x8.ini

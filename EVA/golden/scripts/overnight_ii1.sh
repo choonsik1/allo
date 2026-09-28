@@ -32,7 +32,7 @@ run_wbfwd () {   # $1 = arg4 (0=SCHED, 1=NOSCHED)   $2 = label
 run_fwd_cosim () {   # $1=BATCH $2=L $3=NOSCHED(0/1)  $4=label
   local B=$1 L=$2 NS=$3 lbl=$4
   local D=$OUT/fwd_cosim_$lbl; mkdir -p $D
-  export PYTHONPATH=/home/zsm9/allo_sup:$FR LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+  export PYTHONPATH=/home/zsm9/allo:$FR LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
   echo "---- fwd_cosim ($lbl) B=$B L=$L START $(date) ----" | tee -a $SUM
   cd $SC
   CHIP=eva_sb_syscredit_fwd_cosim SZ=4 LFORCE=$L BATCH=$B NOSCHED=$NS $PY build_val_sched_ts.py > $D/build.log 2>&1

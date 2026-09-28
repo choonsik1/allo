@@ -6,7 +6,7 @@
 # results; node done-signal); (2) systolic ALSO NB (try_get +
 # PE data-driven stall), NOT blocking+credits (that fights NB —
 # see eva_sb_nb_credittry.bak); (3) RTL needs vhls printer ext
-# for StreamEmpty/Full/TryGet/TryPut. Run: allo_sup, host brg-
+# for StreamEmpty/Full/TryGet/TryPut. Run: allo, host brg-
 # zhang-xcel, LLVM_BUILD_DIR=/work/shared/common/llvm-project-
 # main/build. See memory 2026-07-10 for full context.
 # ============================================================
@@ -20,7 +20,7 @@
 #     with NO credit planes and NO priming (the syscredit machinery vanishes).
 #   * no read-before-write deadlock (NB reads never block on empty).
 #   * loop is free-running (bounded transaction count), not for t in NSTEP.
-# ⚠ REQUIRES the supervisor Allo branch (/home/zsh9/allo_sup): try_get/try_put/
+# ⚠ REQUIRES the non-blocking (NB) Allo branch (/home/zsh9/allo): try_get/try_put/
 #   empty/full live only there. ⚠ SIM-ONLY: the vhls HLS printer does NOT emit
 #   StreamEmpty/Full/nb ops yet -> csynth/cosim need a printer extension first
 #   (expressiveness datapoint next to bind_op / s.dependence).

@@ -19,7 +19,7 @@ run_one(){  # $1=WL $2=PRIME
   { echo "==== STREAM $WL (B=$B prime=$PRIME L=$L) START $(date) ===="; df -h /tmp|tail -1
     if [ ! -f $SC/prj_strm_${WL}_8x8_L${L}/kernel.cpp ]; then
       echo "-- codegen --"
-      ( cd $SC && PYTHONPATH=/home/zsm9/allo_sup TAG=strm CHIP=eva_sb_syscredit_fwd_cosim \
+      ( cd $SC && PYTHONPATH=/home/zsm9/allo TAG=strm CHIP=eva_sb_syscredit_fwd_cosim \
         TB=tb_replay_golden_stream.cpp WL=$WL LFORCE=$L B=$B PRIME=$PRIME $PY $SC/build_golden_cosim.py )
     fi
     INI=$SC/ci_strm_${WL}_8x8.ini

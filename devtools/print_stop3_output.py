@@ -7,8 +7,8 @@
 # Usage:  python print_stop3_output.py
 import sys
 
-sys.path.insert(0, "/home/zsm9/allo_sup")
-sys.path.insert(0, "/home/zsm9/allo_sup/examples")
+sys.path.insert(0, "/home/zsm9/allo")
+sys.path.insert(0, "/home/zsm9/allo/examples")
 
 from allo.dataflow import _customize          # the generic customize (Stop 3 only)
 from stream_producer_consumer import top

@@ -7,7 +7,7 @@ WD=/work/shared/users/zsm9/eva_sched8x8_rtl/buf4_wd
 cd $SC; mkdir -p $DEST; SUM=$DEST/00_SUMMARY.txt; : > $SUM
 PY=/home/zsm9/miniconda3/envs/allo/bin/python
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 declare -A PRIME=( [mmm]=6 [fft]=1 [cordic_cr]=1 )
 CHIP=eva_sb_syscredit_rtprime_buf4; TB=tb_replay_golden_prime.cpp; WLS="mmm fft cordic_cr"
 echo "==== BUF_DEPTH=4 II=2 8x8 START $(date) (CHIP=$CHIP) ====" | tee $SUM

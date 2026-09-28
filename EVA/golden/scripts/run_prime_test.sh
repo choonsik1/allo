@@ -8,7 +8,7 @@ BASE=/work/shared/users/zsm9/eva_leanfulldsp8x8_rtl; WD=$BASE/wd_load; KERN=$BAS
 PRIMEDIR=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/prime
 DEST=/home/zsm9/final_eva_performance/results/prime_test; mkdir -p $DEST; SUM=$DEST/00_SUMMARY.txt; : > $SUM
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 PY=/home/zsm9/miniconda3/envs/allo/bin/python
 # wait for the load experiment to release wd_load
 for i in $(seq 1 120); do grep -q LOAD_EXP_DONE /home/zsm9/final_eva_performance/results/load_exp/00_SUMMARY.txt 2>/dev/null && break; sleep 20; done

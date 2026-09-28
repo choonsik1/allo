@@ -9,8 +9,8 @@
 #         /home/zsm9/miniconda3/envs/allo/bin/python build_val_sched.py
 # =============================================================================
 import os, sys
-os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo_sup/mlir/build_xcel")
-sys.path.insert(0, "/home/zsm9/allo_sup")
+os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo/mlir/build_xcel")
+sys.path.insert(0, "/home/zsm9/allo")
 import re
 import numpy as np
 

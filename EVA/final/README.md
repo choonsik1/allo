@@ -42,7 +42,7 @@ at II=1); the array recovers throughput via N² columns in parallel.
 
 ## Reproduce
 ```bash
-# 1×1 gen (allo env):  PYTHONPATH=/home/zsm9/allo_sup LLVM_BUILD_DIR=.../build_xcel python <chip>_1x1/gen*.py
+# 1×1 gen (allo env):  PYTHONPATH=/home/zsm9/allo LLVM_BUILD_DIR=.../build_xcel python <chip>_1x1/gen*.py
 # csynth+P&R (Vitis 2025.1):  v++ -c --mode hls --config <ini> --work_dir top
 #                             vitis-run --mode hls --impl --config <ini> --work_dir top
 # 4x4 cosim + timestamped ts: final_runs/cosim_8x8/eva_sb_nb/{build_val.py, run_ts_sched.sh}

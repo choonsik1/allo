@@ -7,7 +7,7 @@ SC=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/final_runs/cosim_8x8
 PRIMEDIR=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/prime
 WD=/work/shared/users/zsm9/custom_fp16_1x1_wd
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 PY=/home/zsm9/miniconda3/envs/allo/bin/python
 cd $SC ; SUM=$DEST/00_SUMMARY.txt ; : > $SUM
 echo "== custom_fp16 1x1 START $(date) ==" | tee $SUM

@@ -4,10 +4,10 @@
 # with golden TB inputs and comparing the golden output edge vs eva_tb_logs/*.out.
 # Mirrors build_fft.py's emit path; per-workload config = generic replay's table.
 #   CHIP=eva_sb_syscredit_fwd WL=cordic_cr LFORCE=800 [PRIME=6] \
-#     PYTHONPATH=/home/zsm9/allo_sup python build_golden_cosim.py
+#     PYTHONPATH=/home/zsm9/allo python build_golden_cosim.py
 import os, sys, re, glob
-os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo_sup/mlir/build_xcel")
-sys.path.insert(0, "/home/zsm9/allo_sup")
+os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo/mlir/build_xcel")
+sys.path.insert(0, "/home/zsm9/allo")
 import numpy as np
 
 HERE  = os.path.dirname(os.path.abspath(__file__))

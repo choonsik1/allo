@@ -8,7 +8,7 @@ NFS=/work/shared/users/zsm9/eva_lean4x4_rtl; WD=$NFS/wd
 DEST=/home/zsm9/final_eva_performance/results/lean4x4_iso; mkdir -p $DEST; SUM=$DEST/00_SUMMARY.txt; : > $SUM
 export TMPDIR=$NFS/tmp
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 PY=/home/zsm9/miniconda3/envs/allo/bin/python
 LF=800
 cd $SC

@@ -34,7 +34,7 @@ import io
 import os
 import sys
 
-sys.path.insert(0, "/home/zsm9/allo_sup")   # edit-this-checkout, not the installed pkg
+sys.path.insert(0, "/home/zsm9/allo")   # edit-this-checkout, not the installed pkg
 os.environ.setdefault("OMP_NUM_THREADS", "8")
 
 import numpy as np

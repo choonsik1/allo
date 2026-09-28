@@ -34,12 +34,11 @@ Two things live **outside this repo**:
 
 Nothing here is current. Two kinds of thing:
 
-**Inherited from the `sup` fork** (`sunwookim028/allo`, hence the directory name
-`allo_sup`). These describe a *different project* (`allo-tpu`) and a branch topology that
-does not exist in this checkout, and were not re-verified — at least one claim in them is
-now wrong. Kept for provenance only: `STATE.sup.md`, `BRANCHES.sup.md`,
+**Inherited / superseded notes.** These describe an earlier, different project and a
+branch topology that does not exist in this checkout, and were not re-verified — at least
+one claim in them is now wrong. Kept for provenance only:
 `ALLO_SHORTCOMINGS.md`, `ALLO_LESSONS.md`, `PITFALLS_DATAFLOW_REGION.md`,
-`CATAPULT_QUICKSTART.md`, `HIERARCHY_DESIGN.md`.
+`CATAPULT_QUICKSTART.md`.
 
 **Our own sources, superseded by the merge above**: `claude_simulator.md` (keeps the dated
 session log and the full per-paper analysis, neither reproduced in `SIMULATOR.md`),

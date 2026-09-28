@@ -17,7 +17,7 @@ run_ts() {  # $1=WL  $2=PRIME
   { echo "==== TS2 $WL (prime=$PRIME) START $(date) ===="; df -h /tmp | tail -1
     if [ ! -f $SC/prj_gcts_${WL}_8x8_L800/kernel.cpp ]; then
       echo "-- codegen (prime=$PRIME) --"
-      ( cd $SC && PYTHONPATH=/home/zsm9/allo_sup TAG=gcts CHIP=eva_sb_syscredit_fwd_cosim TB=tb_replay_golden_ts.cpp \
+      ( cd $SC && PYTHONPATH=/home/zsm9/allo TAG=gcts CHIP=eva_sb_syscredit_fwd_cosim TB=tb_replay_golden_ts.cpp \
         WL=$WL LFORCE=800 PRIME=$PRIME $PY $SC/build_golden_cosim.py )
     else echo "-- kernel exists, skip codegen --"; fi
     INI=$SC/ci_gcts_${WL}_8x8.ini

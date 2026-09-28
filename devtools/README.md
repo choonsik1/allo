@@ -8,7 +8,7 @@ All of them assume:
 ```bash
 conda activate allo
 export OMP_NUM_THREADS=8
-export PYTHONPATH=/home/zsm9/allo_sup    # else the import grabs the installed allo
+export PYTHONPATH=/home/zsm9/allo    # else the import grabs the installed allo
 ```
 
 ## Pipeline introspection
@@ -46,6 +46,6 @@ python dump_stream_backends.py systemc
 
 ## Note
 
-These scripts hardcode `/home/zsm9/allo_sup`. That is deliberate — it defeats the
+These scripts hardcode `/home/zsm9/allo`. That is deliberate — it defeats the
 two-checkouts trap where `import allo` silently picks up the installed `/home/zsm9/allo`
 instead of this working tree. If you move the checkout, update the paths.

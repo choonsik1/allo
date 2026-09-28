@@ -3,7 +3,7 @@ set -o pipefail
 P=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/prime
 cd $P; PY=/home/zsm9/miniconda3/envs/allo/bin/python
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$P LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo:$P LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 DEST=$P/wbfwd_test; mkdir -p $DEST; SUM=$DEST/00_SUMMARY.txt; : > $SUM
 echo "== WB-only-forwarding variant (FWD=0, WB->DRF discipline = Vitis pe_core.cpp) + dep-false II=1, 1x1 == $(date)" | tee -a $SUM
 echo "== [0] generate scheduled+depfalse+bindop wbfwd kernel ==" | tee -a $SUM

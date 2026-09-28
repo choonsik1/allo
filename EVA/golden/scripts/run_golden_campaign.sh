@@ -14,7 +14,7 @@ one_wl() {
   { echo "==== $WL START $(date) ===="
     echo "-- [1/3] codegen --"
     if [ ! -f $SC/prj_gc_${WL}_8x8_L${LF}/kernel.cpp ]; then
-      PYTHONPATH=/home/zsm9/allo_sup CHIP=$CHIP WL=$WL LFORCE=$LF PRIME=$PRIME $PY build_golden_cosim.py
+      PYTHONPATH=/home/zsm9/allo CHIP=$CHIP WL=$WL LFORCE=$LF PRIME=$PRIME $PY build_golden_cosim.py
     else echo "  kernel exists, skip"; fi
     INI=$SC/ci_gc_${WL}_8x8.ini; WD=/tmp/gc_${WL}
     source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh

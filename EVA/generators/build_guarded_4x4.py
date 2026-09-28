@@ -3,8 +3,8 @@
 # Purpose: show the RTL-level DEADLOCK (HLS 200-742). Golden values are irrelevant
 # (it deadlocks before producing output), so EOUT arrays are left zero.
 import os, sys, numpy as np
-os.environ["LLVM_BUILD_DIR"] = "/home/zsm9/allo_sup/mlir/build_xcel"
-sys.path.insert(0, "/home/zsm9/allo_sup")
+os.environ["LLVM_BUILD_DIR"] = "/home/zsm9/allo/mlir/build_xcel"
+sys.path.insert(0, "/home/zsm9/allo")
 PRIME = "/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/prime"
 TESTS = "/home/zsm9/pe_core_implementation/Allo/EVA/archive/tests"
 SC    = "/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/final_runs/cosim_8x8/eva_sb_nb"

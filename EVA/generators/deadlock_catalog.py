@@ -2,10 +2,10 @@
 # exact outcome (PASS / all-zero / computes-0 / DEADLOCK + the stuck FIFO). Builds the
 # empirical justification table for DESIGN_RATIONALE.md §4. Allo-sim only (seconds/chip).
 #
-#   PYTHONPATH=/home/zsm9/allo_sup python deadlock_catalog.py [K] [L]
+#   PYTHONPATH=/home/zsm9/allo python deadlock_catalog.py [K] [L]
 import os, sys, importlib, traceback
 os.environ["LLVM_BUILD_DIR"] = "/home/zsm9/miniconda3/envs/allo"
-sys.path.insert(0, "/home/zsm9/allo_sup")
+sys.path.insert(0, "/home/zsm9/allo")
 import numpy as np
 PRIME = "/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/prime"
 FINAL = "/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final"

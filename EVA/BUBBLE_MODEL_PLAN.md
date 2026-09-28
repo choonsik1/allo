@@ -224,7 +224,7 @@ its original slot); collectors return credits (rclc pattern). All existing
 machinery kept (end-put prime incl. new scr planes, Option-A knobs,
 scoreboard, PMASK, narrowing). NB-reads were considered and REJECTED for
 this: loss happens at the sender's unconditional fire, NB read fixes
-nothing; NB primitives (supervisor branch) would enable the EVENT-DRIVEN
+nothing; NB primitives (non-blocking (NB) Allo branch) would enable the EVENT-DRIVEN
 model in Allo instead — a possible 4th chip, different model.
 VALIDATED (sim): flood-rate (1 word/cycle — the eva_sb killer) 4/4 PASS
 both debug kernels; **MMM PASSES with the ORIGINAL unmodified schedule**,

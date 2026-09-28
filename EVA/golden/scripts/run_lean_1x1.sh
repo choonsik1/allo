@@ -7,7 +7,7 @@ PRIMEDIR=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_all
 DEST=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/lean_1x1; mkdir -p $DEST
 WD=/work/shared/users/zsm9/lean_1x1_wd
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 PY=/home/zsm9/miniconda3/envs/allo/bin/python
 cd $SC; SUM=$DEST/00_SUMMARY.txt; : > $SUM
 echo "== LEAN 1x1 (leanalu #1 + fulldsp mul, clk_unc=0.9) START $(date) ==" | tee $SUM

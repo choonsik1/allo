@@ -36,11 +36,11 @@ ninja: Entering directory `mlir/build'
 [35/72] Building CXX object lib/Translation/CMakeFiles/obj.MLIRAlloEmitHLSCpp.dir/EmitXlsHLS.cpp.o
 [36/72] Building CXX object lib/CAPI/Translation/CMakeFiles/obj.MLIRAlloCAPIEmitHLSCpp.dir/EmitIntelHLS.cpp.o
 [37/72] Building CXX object lib/CAPI/Translation/CMakeFiles/obj.MLIRAlloCAPIEmitHLSCpp.dir/EmitTapaHLS.cpp.o
-[38/72] Building CXX object include/allo/Bindings/CMakeFiles/AlloMLIRPythonModules.extension._allo.dso.dir/home/zsm9/allo_sup/mlir/lib/Bindings/AlloTypes.cpp.o
+[38/72] Building CXX object include/allo/Bindings/CMakeFiles/AlloMLIRPythonModules.extension._allo.dso.dir/home/zsm9/allo/mlir/lib/Bindings/AlloTypes.cpp.o
 [39/72] Building CXX object lib/Translation/CMakeFiles/obj.MLIRAlloEmitHLSCpp.dir/EmitIntelHLS.cpp.o
 [40/72] Building CXX object lib/CAPI/Translation/CMakeFiles/obj.MLIRAlloCAPIEmitHLSCpp.dir/EmitXlsHLS.cpp.o
 [41/72] Building CXX object lib/Translation/CMakeFiles/obj.MLIRAlloEmitHLSCpp.dir/EmitTapaHLS.cpp.o
-[42/72] Building CXX object include/allo/Bindings/CMakeFiles/AlloMLIRPythonModules.extension._allo.dso.dir/home/zsm9/allo_sup/mlir/lib/Bindings/AlloModule.cpp.o
+[42/72] Building CXX object include/allo/Bindings/CMakeFiles/AlloMLIRPythonModules.extension._allo.dso.dir/home/zsm9/allo/mlir/lib/Bindings/AlloModule.cpp.o
 [43/72] Building CXX object lib/CAPI/Dialect/CMakeFiles/obj.MLIRAlloCAPI.dir/__/__/Transforms/LoopTransformations.cpp.o
 [44/72] Building CXX object lib/Translation/CMakeFiles/obj.MLIRAlloEmitHLSCpp.dir/EmitVivadoHLS.cpp.o
 [45/72] Linking CXX static library lib/Translation/libMLIRAlloEmitHLSCpp.a

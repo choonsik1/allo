@@ -13,7 +13,7 @@
 # (put_ok, got). If instead we see the values VARY across runs, that is the
 # non-determinism / timing-unfaithfulness we claimed.
 import sys
-sys.path.insert(0, "/home/zsm9/allo_sup")  # force the working checkout (two-checkouts trap)
+sys.path.insert(0, "/home/zsm9/allo")  # force the working checkout (two-checkouts trap)
 
 import numpy as np
 import allo

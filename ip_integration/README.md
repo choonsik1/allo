@@ -76,7 +76,7 @@ vitis-run --mode hls --cosim --config cosim_rv.ini --work_dir cosim_work
 ### 1. Allo gained stream-IP support, plus three bug fixes
 
 The upstream `vincent-yeet/allo` stream-IP feature was cherry-picked onto
-`allo_sup`. Three genuine bugs only surface once the IP meets a real mesh; each
+`allo`. Three genuine bugs only surface once the IP meets a real mesh; each
 was confirmed necessary by reverting it and rebuilding.
 
 | File | Bug | Without it |
@@ -360,7 +360,7 @@ rather than by a co-sim.
   `Allo_IPs/rv_stream_eva/` and `Allo_IPs/hl5_catapult/`; the Allo fixes live on
   branch `ip-stream-integration` of `choonsik1/allo`. The `allo/` worktree here is
   deliberately excluded — it has its own remote, and its `mlir/build` symlink
-  points into `allo_sup`.
+  points into `allo`.
 - **The two chip files stay separate on purpose.** 95% identical (85 differing
   lines of 1797), but the difference is in the region *graph*: the feed variant
   declares an extra `Stream` and an extra kernel, and a `Stream` declaration is an
@@ -370,7 +370,7 @@ rather than by a co-sim.
 - **`rvprog`'s `meta_if` handles M=1 and M=2 only.** 4x4 needs more branches or a
   generated call, and an IP with M output streams.
 - **`rv_eva_collector` is unused** — built and tested, never wired in.
-- **The CPU-sim shim fails** (`test_stream_ip_sim.py`, 4 tests): allo_sup's FIFO
+- **The CPU-sim shim fails** (`test_stream_ip_sim.py`, 4 tests): allo's FIFO
   struct has 7 fields against upstream's 3, so the shim's call-site lowering never
   fires. The HLS path was the deliverable.
 

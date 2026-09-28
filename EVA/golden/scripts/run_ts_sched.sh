@@ -7,7 +7,7 @@ SC=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/final_runs/cosim_8x8
 WD=/tmp/tssched_$CHIP
 cd $SC
 echo "=== [1/3] gen scheduled+ts kernel (SLOW codegen for 4x4) ==="
-PYTHONPATH=/home/zsm9/allo_sup LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel \
+PYTHONPATH=/home/zsm9/allo LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel \
   CHIP=$CHIP SZ=4 LFORCE=374 BATCH=4 \
   /home/zsm9/miniconda3/envs/allo/bin/python build_val_sched_ts.py
 PRJ=$SC/prj_ts_${CHIP}_4x4_L374_b4_sched

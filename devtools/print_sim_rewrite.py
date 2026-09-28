@@ -11,8 +11,8 @@
 # Usage:  OMP_NUM_THREADS=4 conda run -n allo python print_sim_rewrite.py
 import sys
 
-sys.path.insert(0, "/home/zsm9/allo_sup")
-sys.path.insert(0, "/home/zsm9/allo_sup/examples")
+sys.path.insert(0, "/home/zsm9/allo")
+sys.path.insert(0, "/home/zsm9/allo/examples")
 
 from allo._mlir.ir import Context, Module
 from allo._mlir.dialects import allo as allo_d

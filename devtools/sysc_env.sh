@@ -15,7 +15,7 @@ conda activate allo
 # --- this checkout ---------------------------------------------------------------------
 # WITHOUT this the import silently grabs the INSTALLED /home/zsm9/allo instead of the
 # working tree, and you debug an emitter you are not editing.
-export PYTHONPATH=/home/zsm9/allo_sup${PYTHONPATH:+:$PYTHONPATH}
+export PYTHONPATH=/home/zsm9/allo${PYTHONPATH:+:$PYTHONPATH}
 
 # --- LLVM (JIT simulator only) ---------------------------------------------------------
 # build-rhel8 ONLY. Overriding this with plain build/ aborts on GLIBC_2.33.

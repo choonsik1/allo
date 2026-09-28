@@ -129,7 +129,6 @@ The NoC evaluation itself lives in a **separate repo**, `final_noc`.
 | `tests/dataflow/` | the dataflow suite (24 of 30 designs also run cosim) |
 | `docs/` | user-facing backend and link-type docs |
 | `notes/` | project state, simulator, backend, gotchas — **start here** |
-| `agents/` | LLM/agent interface-IP experiments |
 | `devtools/` | compiler-pipeline introspection and sweep scripts |
 
 ## Documentation
@@ -143,7 +142,6 @@ The NoC evaluation itself lives in a **separate repo**, `final_noc`.
 | [`notes/BACKEND.md`](notes/BACKEND.md) | SystemC/Catapult backend design notes |
 | [`docs/SYSTEMC_BACKEND.md`](docs/SYSTEMC_BACKEND.md) | user-facing backend guide |
 | [`docs/DATAFLOW_LINKS.md`](docs/DATAFLOW_LINKS.md) | link types, with a runnable companion |
-| [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) | coding-agent instructions |
 
 **Read `notes/ALLO_GOTCHAS.md` before writing Allo code.** Several Allo constructs fail
 *silently* rather than erroring — e.g. `~x` is wrong (use `0 - x`), and `UInt(N)` locals read
@@ -164,8 +162,6 @@ Allo provides a unified abstraction for both **accelerator design and programmin
 Please check out the [Allo documentation](https://cornell-zhang.github.io/allo) for
 installation instructions and tutorials. If you encounter any problems, please open an
 [issue](https://github.com/cornell-zhang/allo/issues).
-
-**IMPORTANT:** If you are using a coding agent for our codebase, please import [AGENTS.md](AGENTS.md).
 
 ## Publications
 Please refer to our [PLDI'24 paper](https://dl.acm.org/doi/10.1145/3656401) for more details. If you use Allo in your research, please cite our paper:

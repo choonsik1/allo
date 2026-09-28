@@ -7,7 +7,7 @@ PD=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_
 cd $PD
 PY=/home/zsm9/miniconda3/envs/allo/bin/python
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 PRJ=$PD/prj_prime_1x1_L120_sched
 FULLINI=$PD/ci_prime_1x1_sched.ini
 NODEINI=$PD/ci_node_only_sched.ini

@@ -11,8 +11,8 @@ cd $SC
 LOGD=$SC/sched8x8_logs; mkdir -p $LOGD
 PY=/home/zsm9/miniconda3/envs/allo/bin/python
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup
-export LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo
+export LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 
 declare -A PRIME=( [mmm]=6 [fft]=1 [cordic_cr]=1 [cordic_cv]=1 [cordic_hr]=1 [cordic_hv]=1 )
 GENWL=mmm                                   # kernel is WL-independent; generate via mmm

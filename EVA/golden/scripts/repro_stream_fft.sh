@@ -6,7 +6,7 @@ PY=/home/zsm9/miniconda3/envs/allo/bin/python
 B=20; L=2000; WL=fft; PRIME=1; WD=/tmp/strm_fft_repro
 LOG=$SC/stream_logs/fft_repro.log; mkdir -p $SC/stream_logs
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$FR:$SC
+export PYTHONPATH=/home/zsm9/allo:$FR:$SC
 cd $SC
 {
   echo "==== STREAM fft repro (B=$B prime=$PRIME L=$L, chip=fwd_cosim) START $(date) ===="

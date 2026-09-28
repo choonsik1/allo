@@ -4,10 +4,10 @@
 # cosim analog of archive/tests/replay_golden_fft.py (which runs the functional sim);
 # here we emit vhls + vectors + tb_replay_fft.cpp for a cycle-accurate RTL cosim.
 #   PRIME/DEPTH via env (default = chip file); NOSCHED default (fast codegen).
-#   CHIP=eva_sb_syscredit_fwd LFORCE=400 PYTHONPATH=/home/zsh/allo_sup ... python build_fft.py
+#   CHIP=eva_sb_syscredit_fwd LFORCE=400 PYTHONPATH=/home/zsh/allo ... python build_fft.py
 import os, sys, re, glob
-os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo_sup/mlir/build_xcel")
-sys.path.insert(0, "/home/zsm9/allo_sup")
+os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo/mlir/build_xcel")
+sys.path.insert(0, "/home/zsm9/allo")
 import numpy as np
 
 HERE  = os.path.dirname(os.path.abspath(__file__))

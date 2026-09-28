@@ -20,8 +20,6 @@ below is pushed to `mine`.
 |---|---|---|
 | `mine` | `choonsik1/allo` | Your fork. Everything is pushed here. |
 | `origin` | `cornell-zhang/allo` | Upstream baseline. |
-| `sup` | `sunwookim028/allo` | The fork this checkout came from (hence the old name `allo_sup`). |
-| `fangtang`, `vincent` | collaborators' forks | Read-only reference. |
 
 ## Branches
 
@@ -33,7 +31,7 @@ below is pushed to `mine`.
 | `ip-stream-integration` | Vitis `hls::stream` IP line. Fully contained in `systemc-all`. |
 | `ext/x1-connections-backend` | External line + the `convert-math-to-llvm` fix. Forks from a **newer** `main` than `systemc-all`. |
 | `main` | Tracks `origin/main`, unmodified. |
-| `wire`, `fix/nb-stream-scalar`, `ext/sup-main` | Older lines, kept for reference. |
+| `wire`, `fix/nb-stream-scalar` | Older lines, kept for reference. |
 | `backup/pre-rebase-systemc-ip`, `backup-pre-docx-rewrite` | Safety snapshots. |
 
 ## What is on `systemc-all`
@@ -73,12 +71,12 @@ local flip neither shows as dirty nor can be committed. **To undo that marking:*
 ⚠️ `devtools/rebuild.sh` does `cd "$(dirname "$0")"`, which lands in `devtools/` where
 there is no `mlir/`. Run its steps from the repo root instead, or fix the `cd` to `..`.
 
-## ⚠️ `/home/zsm9/allo_sup` is a compatibility symlink
+## ⚠️ `/home/zsm9/allo` is a compatibility symlink
 
-The worktree was renamed `allo_sup` → `allo_final` on 2026-09-24. The compiled
-extensions bake an absolute `RUNPATH` (`$ORIGIN:/home/zsm9/allo_sup/mlir/build/...`) and
+The worktree was renamed `allo` → `allo_final` on 2026-09-24. The compiled
+extensions bake an absolute `RUNPATH` (`$ORIGIN:/home/zsm9/allo/mlir/build/...`) and
 the build tree holds four absolute symlinks into the old name, so
-`/home/zsm9/allo_sup` → `/home/zsm9/allo_final` was left in place. It is load-bearing
+`/home/zsm9/allo` → `/home/zsm9/allo_final` was left in place. It is load-bearing
 for any build tree configured before the rename, and it also keeps `EVA/archive/**`
 driver snapshots resolving. A rebuild regenerates those paths for the tree it rebuilds.
 
@@ -131,9 +129,3 @@ Headline NoC (Genus 20.1 high effort, Nangate 45nm, 2.0 ns, `concat_rtl.v`, 0 bl
 4. WHVCRouter II=1 — blocked by `popm → bhd`.
 5. Induction-variable width narrowing (see above) — a 34% area lever, and it would
    benefit every backend.
-
-## Provenance note
-
-`STATE.md` and `BRANCHES.md` as inherited from the `sup` fork described
-`sunwookim028/allo`'s branch topology and PR queue, none of which exists in this
-checkout. They are in `archive/` unchanged.

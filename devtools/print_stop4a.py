@@ -11,8 +11,8 @@
 # Usage:  conda run -n allo python print_stop4a.py
 import sys
 
-sys.path.insert(0, "/home/zsm9/allo_sup")
-sys.path.insert(0, "/home/zsm9/allo_sup/examples")
+sys.path.insert(0, "/home/zsm9/allo")
+sys.path.insert(0, "/home/zsm9/allo/examples")
 
 from allo.dataflow import _customize, move_stream_to_interface
 from stream_producer_consumer import top

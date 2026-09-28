@@ -113,7 +113,7 @@ writing a comparison harness that assumes it can.
 ### Renaming a worktree breaks the compiled extension
 
 The Python extensions bake an **absolute** `RUNPATH`
-(`$ORIGIN:/home/zsm9/allo_sup/mlir/build/tools/allo/_mlir:`) and the build tree holds
+(`$ORIGIN:/home/zsm9/allo/mlir/build/tools/allo/_mlir:`) and the build tree holds
 absolute symlinks into the same path, both fixed at configure time. Rename the worktree
 and `import allo` dies with
 
@@ -129,7 +129,7 @@ ImportError: cannot import name 'allo' from 'allo._mlir.dialects' (unknown locat
 
 The second is a symptom of the first, not a separate problem — the dialect bindings are
 present and fine. Fix by rebuilding that tree, or by leaving a symlink at the old name
-(`/home/zsm9/allo_sup` → `/home/zsm9/allo_final` is exactly that).
+(`/home/zsm9/allo` → `/home/zsm9/allo_final` is exactly that).
 
 ### `allo/_mlir` is tracked but host-specific
 

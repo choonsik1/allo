@@ -3,7 +3,7 @@
 # Run:  /home/zsm9/miniconda3/envs/allo/bin/python eva_test.py
 import sys, os
 # --- portability: point these at YOUR Allo install ---
-ALLO_HOME = os.environ.get("ALLO_HOME", os.path.expanduser("~/allo_sup"))
+ALLO_HOME = os.environ.get("ALLO_HOME", os.path.expanduser("~/allo"))
 sys.path.insert(0, ALLO_HOME)                       # the dir containing the `allo` package
 os.environ.setdefault("LLVM_BUILD_DIR",
                       os.environ.get("LLVM_BUILD_DIR", os.path.join(ALLO_HOME, "mlir/build_xcel")))

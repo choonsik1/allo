@@ -3,7 +3,7 @@ set -e
 SC=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/final_runs/cosim_8x8/eva_sb_nb
 cd $SC
 echo "=== [1/3] gen 8x8 FFT kernel PRIME=1 L=800 (re-codegen ~70min) === $(date)"
-PYTHONPATH=/home/zsm9/allo_sup LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel \
+PYTHONPATH=/home/zsm9/allo LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel \
   CHIP=eva_sb_syscredit_fwd LFORCE=800 PRIME=1 \
   /home/zsm9/miniconda3/envs/allo/bin/python build_fft.py
 INI=$SC/ci_fft_eva_sb_syscredit_fwd_8x8.ini

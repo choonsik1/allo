@@ -85,7 +85,7 @@ asterisk.
 |---|---|---|---|
 | `bind_op latency=0` | combinational fp (II=1 monolithic) | no primitive | comb arm inexpressible |
 | `s.dependence inter=false` | scoreboard ring → II=1 | **no primitive** | II=3→1 flips on exactly 2 hand-added pragmas (kernel.cpp:211/218) |
-| non-blocking streams | event-driven / elastic model | **sim-only** (HLS printer emits nothing) | `eva_sb_nb` runs in sim on `allo_sup`, cannot csynth |
+| non-blocking streams | event-driven / elastic model | **sim-only** (HLS printer emits nothing) | `eva_sb_nb` runs in sim on `allo`, cannot csynth |
 
 These three are the concrete motivating cases for extending the Allo backend.
 

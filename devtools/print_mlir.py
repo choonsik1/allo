@@ -2,12 +2,12 @@
 # Usage:  OMP_NUM_THREADS=4 python print_mlir.py [function_name]
 #   no arg      -> whole module
 #   producer_0  -> just that one function
-# Always imports allo from /home/zsm9/allo_sup (avoids the installed-package trap).
+# Always imports allo from /home/zsm9/allo (avoids the installed-package trap).
 import os
 import sys
 
-sys.path.insert(0, "/home/zsm9/allo_sup")
-sys.path.insert(0, "/home/zsm9/allo_sup/examples")  # the design lives in examples/
+sys.path.insert(0, "/home/zsm9/allo")
+sys.path.insert(0, "/home/zsm9/allo/examples")  # the design lives in examples/
 
 import allo.dataflow as df
 from stream_producer_consumer import top

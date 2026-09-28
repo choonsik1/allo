@@ -3,10 +3,10 @@
 # new per-tile input prime_cfg[M,N] (filled with $PRIME, default 6) and partitions
 # it. After codegen, inspect kernel.cpp's `void top(` to author tb_replay_prime.cpp.
 #   CHIP is fixed. Run: SZ=4 LFORCE=374 PRIME=6 \
-#     PYTHONPATH=/home/zsm9/allo_sup /home/zsm9/miniconda3/envs/allo/bin/python build_prime.py
+#     PYTHONPATH=/home/zsm9/allo /home/zsm9/miniconda3/envs/allo/bin/python build_prime.py
 import os, sys, re
-os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo_sup/mlir/build_xcel")
-sys.path.insert(0, "/home/zsm9/allo_sup")
+os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo/mlir/build_xcel")
+sys.path.insert(0, "/home/zsm9/allo")
 import numpy as np
 
 PRIME_DIR = os.path.dirname(os.path.abspath(__file__))

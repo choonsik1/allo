@@ -4,8 +4,8 @@
 # hangs), so the expected output is computed ANALYTICALLY (X@W) instead of by
 # the sim. We compare only out_s (the mmm result) in cosim.
 #
-# REQUIRES the supervisor branch (NB ops). Run:
-#   PYTHONPATH=/home/zsm9/allo_sup LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel \
+# REQUIRES the non-blocking (NB) Allo branch (NB ops). Run:
+#   PYTHONPATH=/home/zsm9/allo LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel \
 #     /home/zsm9/miniconda3/envs/allo/bin/python build_nb.py
 # env: SZ=4 (mesh/matrix size), LFORCE=374 (kernel length), NOSCHED=1 (default
 #      fast/correctness; NOSCHED=0 for II=1 -- slow codegen).
@@ -15,9 +15,9 @@
 #   vitis-run --mode hls --cosim --config ../ci_eva_sb_nb.ini --work_dir top
 # =============================================================================
 import os, sys
-# --- point at the supervisor branch (NB ops) BEFORE importing allo ---
-os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo_sup/mlir/build_xcel")
-sys.path.insert(0, "/home/zsm9/allo_sup")
+# --- point at the non-blocking (NB) Allo branch (NB ops) BEFORE importing allo ---
+os.environ.setdefault("LLVM_BUILD_DIR", "/home/zsm9/allo/mlir/build_xcel")
+sys.path.insert(0, "/home/zsm9/allo")
 import re
 import numpy as np
 
@@ -94,7 +94,7 @@ for i in range(4):
 hfile = os.path.join(HERE, f"vectors_{CHIP}_{M}x{N}{TAG}.h"); open(hfile, "w").write("".join(hdr))
 print(f"  wrote {os.path.basename(hfile)}")
 
-# ---- generate the NB kernel (allo_sup emits read_nb/write_nb) ---------------
+# ---- generate the NB kernel (allo emits read_nb/write_nb) ---------------
 prj = os.path.join(HERE, f"prj_{CHIP}_{M}x{N}_L{L}{TAG}")
 kp = os.path.join(prj, "kernel.cpp")
 if os.path.exists(kp):

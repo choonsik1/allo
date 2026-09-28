@@ -8,7 +8,7 @@ SC=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/final_runs/cosim_8x8
 PRIME=/home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/prime
 DEST=/home/zsm9/final_eva_performance/results/allo_stream/wbfwd; mkdir -p $DEST
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$PRIME LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo:$PRIME LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 cd $SC
 echo "==== ts_wbfwd 4x4 csynth (SCHED II=1) START $(date) ====" | tee $DEST/csynth.log
 CHIP=eva_sb_syscredit_rtprime_ts_wbfwd WL=mmm MESH=4 LFORCE=2000 TAG=wbf SCHED=1 PRIME=6 \

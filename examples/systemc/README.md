@@ -12,7 +12,7 @@ path.
 ```bash
 conda activate allo
 export OMP_NUM_THREADS=8
-export PYTHONPATH=/home/zsm9/allo_sup
+export PYTHONPATH=/home/zsm9/allo
 
 python pc_channel.py mlir      # the frontend MLIR
 python pc_channel.py systemc   # the generated SystemC

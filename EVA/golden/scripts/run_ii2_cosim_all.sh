@@ -22,7 +22,7 @@ DEST=/home/zsm9/final_eva_performance/results/ii2_cosim; mkdir -p $DEST
 SUM=$DEST/00_SUMMARY.txt
 BATCH=${1:-300}
 source /opt/xilinx/Vitis/2025.1/Vitis/settings64.sh
-export PYTHONPATH=/home/zsm9/allo_sup:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo_sup/mlir/build_xcel
+export PYTHONPATH=/home/zsm9/allo:$PRIMEDIR LLVM_BUILD_DIR=/home/zsm9/allo/mlir/build_xcel
 cd $SC
 
 if [ ! -d $TS/wd/hls/syn ]; then
