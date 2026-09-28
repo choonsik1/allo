@@ -1,0 +1,42 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
+| Date         : Thu Jul 23 16:24:34 2026
+| Host         : zhang-21.ece.cornell.edu running 64-bit Red Hat Enterprise Linux release 8.10 (Ootpa)
+| Command      : report_utilization -hierarchical -hierarchical_depth 6 -file ./report/node_0_0_utilization_hierarchical_synth.rpt
+| Design       : bd_0_wrapper
+| Device       : xczu7ev-ffvc1156-2-e
+| Speed File   : -2
+| Design State : Synthesized
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. Utilization by Hierarchy
+
+1. Utilization by Hierarchy
+---------------------------
+
++--------------------------------------------------------+-----------------------------------------------------------------+------------+------------+---------+------+------+--------+--------+------+------------+
+|                        Instance                        |                              Module                             | Total LUTs | Logic LUTs | LUTRAMs | SRLs |  FFs | RAMB36 | RAMB18 | URAM | DSP Blocks |
++--------------------------------------------------------+-----------------------------------------------------------------+------------+------------+---------+------+------+--------+--------+------+------------+
+| bd_0_wrapper                                           |                                                           (top) |       3371 |       3365 |       0 |    6 | 2681 |      0 |      0 |    0 |          2 |
+|   bd_0_i                                               |                                                            bd_0 |       3371 |       3365 |       0 |    6 | 2681 |      0 |      0 |    0 |          2 |
+|     hls_inst                                           |                                                 bd_0_hls_inst_0 |       3371 |       3365 |       0 |    6 | 2681 |      0 |      0 |    0 |          2 |
+|       inst                                             |                                        bd_0_hls_inst_0_node_0_0 |       3371 |       3365 |       0 |    6 | 2681 |      0 |      0 |    0 |          2 |
+|         (inst)                                         |                                        bd_0_hls_inst_0_node_0_0 |         53 |         53 |       0 |    0 |   68 |      0 |      0 |    0 |          0 |
+|         grp_node_0_0_Pipeline_l_S_t_1_t_fu_256         |            bd_0_hls_inst_0_node_0_0_node_0_0_Pipeline_l_S_t_1_t |       3318 |       3312 |       0 |    6 | 2613 |      0 |      0 |    0 |          2 |
+|           (grp_node_0_0_Pipeline_l_S_t_1_t_fu_256)     |            bd_0_hls_inst_0_node_0_0_node_0_0_Pipeline_l_S_t_1_t |       1869 |       1863 |       0 |    6 | 2443 |      0 |      0 |    0 |          0 |
+|           (hmul_16ns_16ns_16_3_max_dsp_1_U3)           |          bd_0_hls_inst_0_node_0_0_hmul_16ns_16ns_16_3_max_dsp_1 |         56 |         56 |       0 |    0 |   16 |      0 |      0 |    0 |          0 |
+|           hadd_16ns_16ns_16_3_no_dsp_1_U1              |           bd_0_hls_inst_0_node_0_0_hadd_16ns_16ns_16_3_no_dsp_1 |        967 |        967 |       0 |    0 |   66 |      0 |      0 |    0 |          0 |
+|             (hadd_16ns_16ns_16_3_no_dsp_1_U1)          |           bd_0_hls_inst_0_node_0_0_hadd_16ns_16ns_16_3_no_dsp_1 |        794 |        794 |       0 |    0 |   49 |      0 |      0 |    0 |          0 |
+|             node_0_0_hadd_16ns_16ns_16_3_no_dsp_1_ip_u |        bd_0_hls_inst_0_node_0_0_hadd_16ns_16ns_16_3_no_dsp_1_ip |        173 |        173 |       0 |    0 |   17 |      0 |      0 |    0 |          0 |
+|           hcmp_16ns_16ns_1_2_no_dsp_1_U4               | bd_0_hls_inst_0_node_0_0_hcmp_16ns_16ns_1_2_no_dsp_1__xdcDup__1 |        131 |        131 |       0 |    0 |   35 |      0 |      0 |    0 |          0 |
+|             (hcmp_16ns_16ns_1_2_no_dsp_1_U4)           | bd_0_hls_inst_0_node_0_0_hcmp_16ns_16ns_1_2_no_dsp_1__xdcDup__1 |        105 |        105 |       0 |    0 |   35 |      0 |      0 |    0 |          0 |
+|           hsub_16ns_16ns_16_3_no_dsp_1_U2              |           bd_0_hls_inst_0_node_0_0_hsub_16ns_16ns_16_3_no_dsp_1 |        197 |        197 |       0 |    0 |   33 |      0 |      0 |    0 |          0 |
+|             node_0_0_hsub_16ns_16ns_16_3_no_dsp_1_ip_u |        bd_0_hls_inst_0_node_0_0_hsub_16ns_16ns_16_3_no_dsp_1_ip |        182 |        182 |       0 |    0 |   17 |      0 |      0 |    0 |          0 |
++--------------------------------------------------------+-----------------------------------------------------------------+------------+------------+---------+------+------+--------+--------+------+------------+
+
+

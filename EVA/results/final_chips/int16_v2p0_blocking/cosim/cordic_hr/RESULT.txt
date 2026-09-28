@@ -1,0 +1,1 @@
+cordic_hr: PASS: cosim int16credit_cordic_hr_eva_int16_skid_8x8 (8/8 rows | rc_mon 240 stamps

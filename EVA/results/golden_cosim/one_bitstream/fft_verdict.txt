@@ -1,0 +1,13 @@
+# fft on the SHARED rtprime bitstream (one bitstream), prime_cfg=1, 8x8 RTL cosim
+
+  row 0: OK  golden 365d 9dc0  found @slot 0  (nz: 365d 9dc0 )
+  row 1: OK  golden 356a acc0  found @slot 0  (nz: 356a acc0 )
+  row 2: OK  golden 2390 ae7a  found @slot 0  (nz: 2390 ae7a )
+  row 3: OK  golden 2e7e 1970  found @slot 0  (nz: 2e7e 1970 )
+  row 4: OK  golden ada0 aeba  found @slot 0  (nz: ada0 aeba )
+  row 5: OK  golden aa16 2e13  found @slot 0  (nz: aa16 2e13 )
+  row 6: OK  golden 2e34 a4e0  found @slot 0  (nz: 2e34 a4e0 )
+  row 7: OK  golden 3066 af88  found @slot 0  (nz: 3066 af88 )
+--- RTL cosim verdict (authoritative) ---
+PASS: one-bitstream cosim obs_fft_eva_sb_syscredit_rtprime_8x8 prime=1 (8/8 rows bit-exact vs golden)
+INFO: [COSIM 212-1000] *** C/RTL co-simulation finished: PASS ***

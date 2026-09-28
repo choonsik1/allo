@@ -1,0 +1,11 @@
+# regenerable / large — not tracked
+**/rtl/
+**/logs/
+prj_*/
+*.log
+__pycache__/
+*.pyc
+# Vivado impl binary internals (human-readable .rpt are kept)
+*.xml
+*.pb
+*.rpx

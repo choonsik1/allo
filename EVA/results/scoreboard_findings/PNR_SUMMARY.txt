@@ -1,0 +1,19 @@
+Runtime-prime chip — PE CORE ONLY (node_0_0), synthesis + place-and-route.
+syn.top=node_0_0 (drivers/collectors excluded; neighbor links = top-level FIFO ports).
+Vitis 2025.1, xczu7ev-ffvc1156-2-e, clock 3.33 ns, fp16.
+
+POST-ROUTE (post-implementation):
+  CP achieved  : 2.924 ns  -> ~342 MHz   [Timing MET]
+  CP post-synth: 2.620 ns
+  LUT : 2548   FF : 3375   DSP : 6   CLB : 584   SRL : 0
+
+COMPARISON vs full top() at 1x1 (../pnr_1x1/):
+  metric        full-top-1x1    PE-core-only
+  CP post-route   2.962 ns        2.924 ns   (~same -> crit path is IN the core)
+  LUT             4627            2548       (~45% of full-top was driver/collector harness)
+  FF              5550            3375
+  DSP             6               6          (fp16 ALU DSPs, unchanged)
+
+=> The actual replicated compute tile is 2548 LUT / 3375 FF / 6 DSP @ ~342 MHz.
+   The critical path lives in the PE core (scoreboard + forwarding + fp16 ALU),
+   not the perimeter harness. Full Vivado impl report set in this folder.

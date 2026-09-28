@@ -1,0 +1,89 @@
+vcs -o sim -l sim.log -R +v2k +vc -sverilog -debug_acc+all -timescale="1ns/1ps" +vcs+lic+wait -full64 +neg_tchk -negdelay -kdb -nc -lca ../../tb/pe_array/mmm/tb_pe_array_mmm.sv -f ./filelist.f
+
+Warning-[LCA_FEATURES_ENABLED] Usage warning
+  LCA features enabled by '-lca' argument on the command line.  For more 
+  information regarding list of LCA features please refer to Chapter "LCA 
+  features" in the VCS Release Notes
+
+Parsing design file '../../tb/pe_array/mmm/tb_pe_array_mmm.sv'
+Parsing design file '../../rtl/components/defines.sv'
+Parsing design file '../../rtl/components/dw_fp16_addsub.sv'
+Parsing design file '../../rtl/components/dw_fp16_div.sv'
+Parsing design file '../../rtl/components/dw_fp16_mult.sv'
+Parsing design file '../../rtl/components/dw_fp16_sqrt.sv'
+Parsing design file '../../rtl/components/fp16_addsub_ppl.sv'
+Parsing design file '../../rtl/components/fp16_div_ppl.sv'
+Parsing design file '../../rtl/components/fp16_mult_ppl.sv'
+Parsing design file '../../rtl/components/fp16_sqrt_ppl.sv'
+Parsing design file '../../rtl/pe_core/data_register_file_entry.sv'
+Parsing design file '../../rtl/pe_core/data_register_file.sv'
+Parsing design file '../../rtl/pe_core/fpu_extended.sv'
+Parsing design file '../../rtl/pe_core/fpu.sv'
+Parsing design file '../../rtl/pe_core/instruction_control.sv'
+Parsing design file '../../rtl/pe_core/instruction_register_file_bank.sv'
+Parsing design file '../../rtl/pe_core/instruction_register_file.sv'
+Parsing design file '../../rtl/pe_core/pe_core_extended.sv'
+Parsing design file '../../rtl/pe_core/pe_core.sv'
+Parsing design file '../../rtl/pe_core/pe_pipeline_extended.sv'
+Parsing design file '../../rtl/pe_core/pe_pipeline.sv'
+Parsing design file '../../rtl/pe_core/router_register.sv'
+Parsing design file '../../rtl/pe_core/router.sv'
+Parsing design file '../../rtl/pe_core/sync_register.sv'
+Parsing design file '../../rtl/pe_core/systolic_rx.sv'
+Parsing design file '../../rtl/pe_core/systolic_tx.sv'
+Parsing design file '../../rtl/pe_group/pe_group_extended.sv'
+Parsing design file '../../rtl/pe_group/pe_group.sv'
+Parsing design file '../../rtl/pe_array/pe_array.sv'
+Parsing library file '/opt/synopsys/prime/W-2024.09-SP5/dw/sim_ver/DW_fp_addsub.v'
+Parsing library file '/opt/synopsys/prime/W-2024.09-SP5/dw/sim_ver/DW_fp_mult.v'
+Parsing library file '/opt/synopsys/prime/W-2024.09-SP5/dw/sim_ver/DW_fp_div.v'
+Parsing library file '/opt/synopsys/prime/W-2024.09-SP5/dw/sim_ver/DW_fp_sqrt.v'
+Parsing included file '/opt/synopsys/prime/W-2024.09-SP5/dw/sim_ver/DW_sqrt_function.inc'.
+Back to file '/opt/synopsys/prime/W-2024.09-SP5/dw/sim_ver/DW_fp_sqrt.v'.
+Top Level Modules:
+       tb_pe_array_mmm
+TimeScale is 1 ns / 1 ps
+Starting vcs inline pass...
+14 modules and 0 UDP read.
+recompiling module tb_pe_array_mmm
+	However, due to incremental compilation, only 1 module needs to be compiled. 
+make[1]: Entering directory '/home/zsm9/allo/EVA/EVA_org_claude/EVA/rsim/pe_array/csrc'
+make[1]: Leaving directory '/home/zsm9/allo/EVA/EVA_org_claude/EVA/rsim/pe_array/csrc'
+make[1]: Entering directory '/home/zsm9/allo/EVA/EVA_org_claude/EVA/rsim/pe_array/csrc'
+rm -f _cuarc*.so _csrc*.so pre_vcsobj_*.so share_vcsobj_*.so
+if [ -x ../sim ]; then chmod a-x ../sim; fi
+g++  -o ../sim      -rdynamic  -Wl,-rpath='$ORIGIN'/sim.daidir -Wl,-rpath=./sim.daidir -Wl,-rpath=/opt/synopsys/vcs/W-2024.09/linux64/lib -L/opt/synopsys/vcs/W-2024.09/linux64/lib  -Wl,-rpath-link=./  /usr/lib64/libnuma.so.1   objs/amcQw_d.o  _2609557_archive_1.so _prev_archive_1.so  SIM_l.o      rmapats_mop.o rmapats.o rmar.o rmar_nd.o  rmar_llvm_0_1.o rmar_llvm_0_0.o            -lvirsim -lerrorinf -lsnpsmalloc -lvfs    -lvcsnew -lsimprofile -luclinative /opt/synopsys/vcs/W-2024.09/linux64/lib/vcs_tls.o   -Wl,-whole-archive  -lvcsucli    -Wl,-no-whole-archive          /opt/synopsys/vcs/W-2024.09/linux64/lib/vcs_save_restore_new.o -ldl  -lc -lm -lpthread -ldl 
+../sim up to date
+make[1]: Leaving directory '/home/zsm9/allo/EVA/EVA_org_claude/EVA/rsim/pe_array/csrc'
+Info: [VCS_SAVE_RESTORE_INFO] ASLR (Address Space Layout Randomization) is detected on the machine. To enable $save functionality, ASLR will be switched off and simv re-executed.
+Please use '-no_save' simv switch to avoid re-execution or '-suppress=ASLR_DETECTED_INFO' to suppress this message.
+
+Warning-[LCA_FEATURES_ENABLED] Usage warning
+  LCA features enabled by '-lca' argument on the command line.  For more 
+  information regarding list of LCA features please refer to Chapter "LCA 
+  features" in the VCS Release Notes
+
+VCD+ Writer W-2024.09_Full64 Copyright (c) 1991-2024 by Synopsys Inc.
+sys_tx_btm_data[1] = 3fa1
+sys_tx_btm_data[0] = 3dff
+sys_tx_btm_data[0] = 3d69
+sys_tx_btm_data[2] = 40ad
+sys_tx_btm_data[1] = 3f85
+sys_tx_btm_data[3] = 4051
+sys_tx_btm_data[2] = 3fee
+sys_tx_btm_data[4] = 413c
+sys_tx_btm_data[3] = 3e0a
+sys_tx_btm_data[5] = 400e
+sys_tx_btm_data[4] = 40ed
+sys_tx_btm_data[6] = 40d1
+sys_tx_btm_data[7] = 4098
+sys_tx_btm_data[5] = 3fe4
+sys_tx_btm_data[6] = 3f62
+sys_tx_btm_data[7] = 3ff5
+$finish called from file "../../tb/pe_array/mmm/tb_pe_array_mmm.sv", line 384.
+$finish at simulation time              2000000
+           V C S   S i m u l a t i o n   R e p o r t 
+Time: 2000000 ps
+CPU Time:      0.510 seconds;       Data structure size:   3.4Mb
+Wed Apr 22 09:09:36 2026
+Verdi KDB elaboration done and the database successfully generated

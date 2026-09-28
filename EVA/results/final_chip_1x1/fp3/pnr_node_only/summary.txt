@@ -1,0 +1,12 @@
+LUT:              3593
+FF:               2604
+DSP:              2
+| Path   |                SLACK | STARTPOINT PIN                                                                                      | ENDPOINT PIN                                                                                                                                                                                      | LOGIC LEVELS | MAX FANOUT |      DATAPATH DELAY |      DATAPATH LOGIC |        DATAPATH NET |
+LUT:              3595
+FF:               2579
+DSP:              2
+| Path   |                SLACK | STARTPOINT PIN                                                                            | ENDPOINT PIN                                                                                                                                                                                       | LOGIC LEVELS | MAX FANOUT |      DATAPATH DELAY |      DATAPATH LOGIC |        DATAPATH NET |
+LUT:           3593
+FF:            2604
+DSP:              2
+CP achieved post-synthesis:      4.757

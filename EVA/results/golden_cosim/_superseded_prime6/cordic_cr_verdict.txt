@@ -1,0 +1,13 @@
+# cordic_cr — PRIME=6 (WRONG for east-drain) = 4/8, superseded by prime=1 rerun
+
+521434:  row 0: OK  golden e363 found @slot 0  (nz: e363 )
+521435:  row 1: OK  golden 9430 6582 found @slot 0  (nz: 9430 6582 )
+521436:  row 2: OK  golden 646f found @slot 0  (nz: 646f )
+521437:  row 3: OK  golden 1cf4 63ab found @slot 0  (nz: 1cf4 63ab )
+521438:  row 4: x   golden 5e53 NOT found  (nz: 1cf4 63ab )
+521439:  row 5: x   golden 9d9c 6087 NOT found  (nz: 9d9c )
+521440:  row 6: x   golden dcfc NOT found  (nz: 9d9c )
+521441:  row 7: x   golden 1dec 66bb NOT found  (nz: 9d9c )
+--- RTL cosim verdict (authoritative) ---
+FAIL: golden cosim gc_cordic_cr_eva_sb_syscredit_fwd_8x8 (4/8 rows bit-exact vs golden)
+INFO: [COSIM 212-1000] *** C/RTL co-simulation finished: PASS ***

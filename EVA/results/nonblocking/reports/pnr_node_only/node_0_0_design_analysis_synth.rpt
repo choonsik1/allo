@@ -1,0 +1,87 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
+| Date         : Wed Jul 22 12:57:26 2026
+| Host         : zhang-21.ece.cornell.edu running 64-bit Red Hat Enterprise Linux release 8.10 (Ootpa)
+| Command      : report_design_analysis -file ./report/node_0_0_design_analysis_synth.rpt
+| Design       : bd_0_wrapper
+| Device       : xczu7ev
+| Design State : Synthesized
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Report Design Analysis
+
+Table of Contents
+-----------------
+1. Setup Path Characteristics 1-1
+2. Logic Level Distribution
+3. Placer Final Level Congestion Reporting
+4. SLR Net Crossing Reporting
+
+1. Setup Path Characteristics 1-1
+---------------------------------
+
++---------------------------+----------------------------------------------------------------------------------------------------+
+|      Characteristics      |                                               Path #1                                              |
++---------------------------+----------------------------------------------------------------------------------------------------+
+| Requirement               | 3.330                                                                                              |
+| Path Delay                | 2.571                                                                                              |
+| Logic Delay               | 1.160(46%)                                                                                         |
+| Net Delay                 | 1.411(54%)                                                                                         |
+| Clock Skew                | -0.039                                                                                             |
+| Slack                     | 0.710                                                                                              |
+| Clock Uncertainty         | 0.035                                                                                              |
+| Clock Pair Classification | Timed                                                                                              |
+| Clock Delay Group         | Same Clock                                                                                         |
+| Logic Levels              | 9                                                                                                  |
+| Routes                    | NA                                                                                                 |
+| Logical Path              | DSP_OUTPUT/CLK-(9)-LUT5-(1)-CARRY8-LUT3-(3)-LUT6-(2)-LUT5-(3)-LUT6-CARRY8-LUT6-(2)-LUT2-(1)-FDRE/D |
+| Start Point Clock         | ap_clk                                                                                             |
+| End Point Clock           | ap_clk                                                                                             |
+| DSP Block                 | Seq                                                                                                |
+| RAM Registers             | None-None                                                                                          |
+| IO Crossings              | 0                                                                                                  |
+| SLR Crossings             | 0                                                                                                  |
+| PBlocks                   | 0                                                                                                  |
+| High Fanout               | 9                                                                                                  |
+| ASYNC REG                 | 0                                                                                                  |
+| Dont Touch                | 0                                                                                                  |
+| Mark Debug                | 0                                                                                                  |
+| Start Point Pin Primitive | DSP_OUTPUT/CLK                                                                                     |
+| End Point Pin Primitive   | FDRE/D                                                                                             |
+| Start Point Pin           | DSP_OUTPUT_INST/CLK                                                                                |
+| End Point Pin             | opt_has_pipe.first_q_reg[0]/D                                                                      |
++---------------------------+----------------------------------------------------------------------------------------------------+
+* Bounding box calculated as % of dimensions for the target device (2770, 746)
+
+
+2. Logic Level Distribution
+---------------------------
+
++-----------------+-------------+----+----+-----+-----+----+-----+-----+---+
+| End Point Clock | Requirement |  1 |  2 |  3  |  4  |  5 |  6  |  7  | 9 |
++-----------------+-------------+----+----+-----+-----+----+-----+-----+---+
+| ap_clk          | 3.330ns     | 38 | 12 | 248 | 358 | 51 | 172 | 115 | 6 |
++-----------------+-------------+----+----+-----+-----+----+-----+-----+---+
+* Columns represent the logic levels per end point clock
+** Distribution is for top worst 1000 paths
+
+
+3. Placer Final Level Congestion Reporting
+------------------------------------------
+
++-----------+------+-------+--------+---------------+----------------+-----+--------+------+------+------+------+-----+-------+-----+------------+
+| Direction | Type | Level | Window | Combined LUTs | Avg LUT Inputs | LUT | LUTRAM | Flop | MUXF | RAMB | URAM | DSP | CARRY | SRL | Cell Names |
++-----------+------+-------+--------+---------------+----------------+-----+--------+------+------+------+------+-----+-------+-----+------------+
+* The design has not been placed, hence congestion data is not available. The command report_design_analysis -congestion should be run only after place_design has completed.
+
+
+4. SLR Net Crossing Reporting
+-----------------------------
+
++------------+-----------------------------+
+| Cell Names | Number of Nets crossing SLR |
++------------+-----------------------------+
+* The current part is not an SSI device
+
+

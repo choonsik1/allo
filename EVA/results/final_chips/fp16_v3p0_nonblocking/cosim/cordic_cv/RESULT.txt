@@ -1,0 +1,1 @@
+cordic_cv: PASS: cosim elaststrm_cordic_cv_eva_sb_syscredit_fwd_8x8 (8/8 rows | rc_mon 240 stamps ✓

@@ -1,0 +1,15 @@
+  NODE-ONLY post-route:
+LUT:              3349
+FF:               2715
+DSP:              2
+| Path   |                SLACK | STARTPOINT PIN                                                                                    | ENDPOINT PIN                                                                                                                                                                                       | LOGIC LEVELS | MAX FANOUT |      DATAPATH DELAY |      DATAPATH LOGIC |        DATAPATH NET |
+LUT:              3371
+FF:               2681
+DSP:              2
+| Path   |                SLACK | STARTPOINT PIN                                                                            | ENDPOINT PIN                                                                                                                                                                                       | LOGIC LEVELS | MAX FANOUT |      DATAPATH DELAY |      DATAPATH LOGIC |        DATAPATH NET |
+LUT:           3349
+FF:            2715
+DSP:              2
+CP achieved post-synthesis:      4.760
+CP achieved post-implementation: 4.462
+Timing not met

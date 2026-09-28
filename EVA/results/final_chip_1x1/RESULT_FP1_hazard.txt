@@ -1,0 +1,11 @@
+# Scheduled rtprime 1x1, FP_LAT=1 (HAZARD case) — RESULTS
+
+## cosim (full-top) vs analytical X@W:
+FAIL: RUNTIME-PRIME replay primeSCHED_eva_sb_syscredit_rtprime_1x1 vs analytical X@W (prime=6, out_s: 1 mismatches)
+INFO: [COSIM 212-1000] *** C/RTL co-simulation finished: PASS ***
+  out_s[0][0]=0x0000 exp 0x3c00
+---- out_s (mmm result) ----
+  out_s seen[0] = 0
+
+## node loop II (scheduled):  l_S_t_1_t  II achieved = 1 (pipelined yes)
+## full-top Estimated Fmax: 80.80 MHz (timing slack -9.95ns @ 3.33 target)

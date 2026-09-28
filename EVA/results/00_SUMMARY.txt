@@ -1,0 +1,12 @@
+== LEAN 1x1 (leanalu #1 + fulldsp mul, clk_unc=0.9) START Tue  4 Aug 20:28:54 EDT 2026 ==
+  EXP: FPLAT=2 MULIMPL=fulldsp DEPFALSE=False depfalse_lines=0 bind_lat1=0
+  hsub instances in kernel (want 0 = #1 worked): 0
+  binds:       1 op=hadd impl=fabric       1 op=hmul impl=fulldsp 
+  csynth Tue  4 Aug 20:29:13 EDT 2026
+  csynth OK (77 verilog)
+  Final-II:      25 Final II = 1       9 Final II = 2 
+  node-loop-II: Final II = 2
+  impl Tue  4 Aug 20:40:52 EDT 2026
+  ROUTED lean+fulldsp: WNS=-0.606 -> 3.936 ns -> 254 MHz  (fulldsp-only=251; target 300)
+  crit-src: hadd_16ns_16ns_16_3_no_dsp_1_U18    Logic Levels: 18 (CARRY8=7 LUT3=1 LUT4=2 LUT5=1 LUT6=7)
+LEAN_1x1_DONE Tue  4 Aug 20:54:37 EDT 2026

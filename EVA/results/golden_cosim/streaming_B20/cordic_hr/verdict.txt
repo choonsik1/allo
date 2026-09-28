@@ -1,0 +1,2 @@
+# cordic_hr streaming B=20, prime=1, 8x8 timestamped RTL cosim
+

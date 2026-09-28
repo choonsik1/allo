@@ -1,0 +1,12 @@
+LUT:              6051
+FF:               6073
+DSP:              2
+| Path   |                SLACK | STARTPOINT PIN                                                                                                  | ENDPOINT PIN                                                                                                                                                                                             | LOGIC LEVELS | MAX FANOUT |      DATAPATH DELAY |      DATAPATH LOGIC |        DATAPATH NET |
+LUT:              6251
+FF:               6020
+DSP:              2
+| Path   |                SLACK | STARTPOINT PIN                                                                                        | ENDPOINT PIN                                                                                                                                                                                              | LOGIC LEVELS | MAX FANOUT |      DATAPATH DELAY |      DATAPATH LOGIC |        DATAPATH NET |
+LUT:           6051
+FF:            6073
+DSP:              2
+CP achieved post-synthesis:      4.757

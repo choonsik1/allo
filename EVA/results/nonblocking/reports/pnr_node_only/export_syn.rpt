@@ -1,0 +1,477 @@
+================================================================
+== Vivado RTL Synthesis Results
+================================================================
++ General Information:
+    * Date:            Wed Jul 22 13:00:51 EDT 2026
+    * Version:         2025.1 (Build 6135595 on May 21 2025)
+    * Project:         pnr_nb_node
+    * Solution:        hls (Vivado IP Flow Target)
+    * Product family:  zynquplus
+    * Target device:   xczu7ev-ffvc1156-2-e
+
+
+================================================================
+== Run Constraints & Options
+================================================================
++ Design Constraints & Options:
+    * RTL Synthesis target clock:  3.33 ns
+    * C-Synthesis target clock:    3.33 ns
+    * C-Synthesis uncertainty:     27%
+
++ RTL Synthesis Options:
+    * config_export -vivado_synth_strategy:     default
+    * config_export -vivado_synth_design_args:  -directive sdx_optimization_effort_high
+
++ Reporting Options:
+    * config_export -vivado_report_level:      2
+    * config_export -vivado_max_timing_paths:  10
+
+
+================================================================
+== RTL Synthesis Resource Summary
+================================================================
+LUT:              1694
+FF:               1600
+DSP:              6
+BRAM:             2
+URAM:             0
+SRL:              0
+
+
+================================================================
+== RTL Synthesis Timing Summary
+================================================================
+* Timing was met
++----------------+-------------+
+| Timing         | Period (ns) |
++----------------+-------------+
+| Target         | 3.330       |
+| Post-Synthesis | 2.620       |
++----------------+-------------+
+
+
+================================================================
+== RTL Synthesis Resources
+================================================================
++--------------------------------------------------+------+------+-----+------+------+-----+--------+------+---------+----------+--------+
+| Name                                             | LUT  | FF   | DSP | BRAM | URAM | SRL | Pragma | Impl | Latency | Variable | Source |
++--------------------------------------------------+------+------+-----+------+------+-----+--------+------+---------+----------+--------+
+| inst                                             | 1694 | 1600 | 6   | 2    |      |     |        |      |         |          |        |
+|   (inst)                                         | 533  | 1052 |     |      |      |     |        |      |         |          |        |
+|   cmpq_U                                         |      |      |     |      |      |     |        |      |         |          |        |
+|   drf_U                                          |      |      |     |      |      |     |        |      |         |          |        |
+|   drf_full_U                                     |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_115_10_fu_1500 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_119_11_fu_1506 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_123_12_fu_1512 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_127_13_fu_1518 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_131_14_fu_1524 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_135_15_fu_1530 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_139_16_fu_1536 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_143_17_fu_1542 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_147_18_fu_1548 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_151_19_fu_1554 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_155_20_fu_1560 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_273_22_fu_1583 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_277_23_fu_1591 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_281_24_fu_1599 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_352_26_fu_1607 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_37_1_fu_1454   |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_41_2_fu_1460   |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_45_3_fu_1466   |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_534_27_fu_1649 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_538_28_fu_1657 |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_79_4_fu_1472   |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_85_6_fu_1478   |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_93_7_fu_1486   |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_VITIS_LOOP_99_9_fu_1492   |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_l_S_d_0_d_fu_1566         | 59   | 37   |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_l_S_d_1_d1_fu_1615        |      |      |     |      |      |     |        |      |         |          |        |
+|   grp_node_0_0_Outline_l_S_d_2_d2_fu_1636        |      |      |     |      |      |     |        |      |         |          |        |
+|   hadd_16ns_16ns_16_5_full_dsp_1_U93             | 112  | 96   | 2   |      |      |     |        |      |         |          |        |
+|   hcmp_16ns_16ns_1_2_no_dsp_1_U96                |      |      |     |      |      |     |        |      |         |          |        |
+|   hcmp_16ns_16ns_1_2_no_dsp_1_U97                |      |      |     |      |      |     |        |      |         |          |        |
+|   hmul_16ns_16ns_16_4_max_dsp_1_U95              |      |      |     |      |      |     |        |      |         |          |        |
+|   hold_v_U                                       | 106  | 32   |     |      |      |     |        |      |         |          |        |
+|   hsub_16ns_16ns_16_5_full_dsp_1_U94             | 112  | 64   | 2   |      |      |     |        |      |         |          |        |
+|   irf_U                                          | 55   | 16   |     |      |      |     |        |      |         |          |        |
+|   rbuf_U                                         | 53   | 26   |     |      |      |     |        |      |         |          |        |
+|   resq_U                                         |      |      |     |      |      |     |        |      |         |          |        |
+|   sb_cmp_U                                       |      |      |     |      |      |     |        |      |         |          |        |
+|   sb_dir_U                                       |      |      |     |      |      |     |        |      |         |          |        |
+|   sb_dst_U                                       |      |      |     |      |      |     |        |      |         |          |        |
+|   sb_id_U                                        |      |      |     |      |      |     |        |      |         |          |        |
+|   sb_inj_U                                       |      |      |     |      |      |     |        |      |         |          |        |
+|   sb_ix_U                                        |      |      |     |      |      |     |        |      |         |          |        |
+|   sb_rtr_U                                       |      |      |     |      |      |     |        |      |         |          |        |
+|   sb_rvld_U                                      |      |      |     |      |      |     |        |      |         |          |        |
+|   sb_v_U                                         |      |      |     |      |      |     |        |      |         |          |        |
++--------------------------------------------------+------+------+-----+------+------+-----+--------+------+---------+----------+--------+
+
+
+================================================================
+== RTL Synthesis Fail Fast
+================================================================
++-----------------------------------------------------------+-----------+--------+--------+
+| Criteria                                                  | Guideline | Actual | Status |
++-----------------------------------------------------------+-----------+--------+--------+
+| LUT                                                       | 70%       | 0.74%  | OK     |
+| FD                                                        | 50%       | 0.35%  | OK     |
+| LUTRAM+SRL                                                | 25%       | 0.11%  | OK     |
+| CARRY8                                                    | 25%       | 0.11%  | OK     |
+| MUXF7                                                     | 15%       | 0.00%  | OK     |
+| DSP                                                       | 80%       | 0.35%  | OK     |
+| RAMB/FIFO                                                 | 80%       | 0.32%  | OK     |
+| URAM                                                      | 80%       | 0.00%  | OK     |
+| DSP+RAMB+URAM (Avg)                                       | 70%       | 0.33%  | OK     |
+| BUFGCE* + BUFGCTRL                                        | 24        | 0      | OK     |
+| DONT_TOUCH (cells/nets)                                   | 0         | 0      | OK     |
+| MARK_DEBUG (nets)                                         | 0         | 0      | OK     |
+| Control Sets                                              | 4320      | 130    | OK     |
+| Average Fanout for modules > 100k cells                   | 4         | 1.96   | OK     |
+| Max Average Fanout for modules > 100k cells               | 4         | 0      | OK     |
+| Non-FD high fanout nets > 10k loads                       | 0         | 0      | OK     |
++-----------------------------------------------------------+-----------+--------+--------+
+| TIMING-6 (No common primary clock between related clocks) | 0         | 0      | OK     |
+| TIMING-7 (No common node between related clocks)          | 0         | 0      | OK     |
+| TIMING-8 (No common period between related clocks)        | 0         | 0      | OK     |
+| TIMING-14 (LUT on the clock tree)                         | 0         | 0      | OK     |
+| TIMING-35 (No common node in paths with the same clock)   | 0         | 0      | OK     |
++-----------------------------------------------------------+-----------+--------+--------+
+| Number of paths above max LUT budgeting (0.300ns)         | 0         | 0      | OK     |
+| Number of paths above max Net budgeting (0.208ns)         | 0         | 0      | OK     |
++-----------------------------------------------------------+-----------+--------+--------+
+
+
+================================================================
+== RTL Synthesis Timing Paths
+================================================================
+* Timing was met
++-------+---------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------+------------+---------------------+---------------------+---------------------+
+| Path  |               SLACK | STARTPOINT PIN                                                                                                                                                                                       | ENDPOINT PIN                                                                                                                                                                                                   | LOGIC LEVELS | MAX FANOUT |      DATAPATH DELAY |      DATAPATH LOGIC |        DATAPATH NET |
+|       |                     |                                                                                                                                                                                                      |                                                                                                                                                                                                                |              |            |                     |               DELAY |               DELAY |
++-------+---------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------+------------+---------------------+---------------------+---------------------+
+| Path1 | 0.70964431762695312 | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST/CLK | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]/D |            9 |          9 | 2.57100033760070801 | 1.16000008583068848 | 1.41100013256072998 |
+| Path2 | 0.70964431762695312 | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST/CLK | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]/D |            9 |          9 | 2.57100033760070801 | 1.16000008583068848 | 1.41100013256072998 |
+| Path3 | 0.70964431762695312 | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST/CLK | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]/D |            9 |          9 | 2.57100033760070801 | 1.16000008583068848 | 1.41100013256072998 |
+| Path4 | 0.70964431762695312 | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST/CLK | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]/D |            9 |          9 | 2.57100033760070801 | 1.16000008583068848 | 1.41100013256072998 |
+| Path5 | 0.79464435577392578 | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST/CLK | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[3]/D |            9 |          9 | 2.48600029945373535 | 1.04200017452239990 | 1.44400000572204590 |
++-------+---------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------+------------+---------------------+---------------------+---------------------+
+
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+    | Path1 Cells                                                                                                                                                                                                                  | Primitive Type         |
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[0]_i_1__6                   | CLB.LUT.LUT2           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]                 | REGISTER.SDR.FDRE      |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_1                      | CLB.LUT.LUT2           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]                 | REGISTER.SDR.FDRE      |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[0]_i_1__6                   | CLB.LUT.LUT2           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]                 | REGISTER.SDR.FDRE      |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_1                      | CLB.LUT.LUT2           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]                 | REGISTER.SDR.FDRE      |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[3]_i_2                      | CLB.LUT.LUT4           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[3]_i_1                      | CLB.LUT.LUT4           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[3]                 | REGISTER.SDR.FDRE      |
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+    | Path2 Cells                                                                                                                                                                                                                  | Primitive Type         |
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[0]_i_1__6                   | CLB.LUT.LUT2           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]                 | REGISTER.SDR.FDRE      |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_1                      | CLB.LUT.LUT2           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]                 | REGISTER.SDR.FDRE      |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[0]_i_1__6                   | CLB.LUT.LUT2           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]                 | REGISTER.SDR.FDRE      |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_1                      | CLB.LUT.LUT2           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]                 | REGISTER.SDR.FDRE      |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[3]_i_2                      | CLB.LUT.LUT4           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[3]_i_1                      | CLB.LUT.LUT4           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[3]                 | REGISTER.SDR.FDRE      |
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+    | Path3 Cells                                                                                                                                                                                                                  | Primitive Type         |
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[0]_i_1__6                   | CLB.LUT.LUT2           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]                 | REGISTER.SDR.FDRE      |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_1                      | CLB.LUT.LUT2           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]                 | REGISTER.SDR.FDRE      |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[0]_i_1__6                   | CLB.LUT.LUT2           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]                 | REGISTER.SDR.FDRE      |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_1                      | CLB.LUT.LUT2           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]                 | REGISTER.SDR.FDRE      |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[3]_i_2                      | CLB.LUT.LUT4           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[3]_i_1                      | CLB.LUT.LUT4           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[3]                 | REGISTER.SDR.FDRE      |
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+    | Path4 Cells                                                                                                                                                                                                                  | Primitive Type         |
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[0]_i_1__6                   | CLB.LUT.LUT2           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]                 | REGISTER.SDR.FDRE      |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_1                      | CLB.LUT.LUT2           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]                 | REGISTER.SDR.FDRE      |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[0]_i_1__6                   | CLB.LUT.LUT2           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]                 | REGISTER.SDR.FDRE      |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_1                      | CLB.LUT.LUT2           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]                 | REGISTER.SDR.FDRE      |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[3]_i_2                      | CLB.LUT.LUT4           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[3]_i_1                      | CLB.LUT.LUT4           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[3]                 | REGISTER.SDR.FDRE      |
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+    | Path5 Cells                                                                                                                                                                                                                  | Primitive Type         |
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[0]_i_1__6                   | CLB.LUT.LUT2           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]                 | REGISTER.SDR.FDRE      |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_1                      | CLB.LUT.LUT2           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]                 | REGISTER.SDR.FDRE      |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[0]_i_1__6                   | CLB.LUT.LUT2           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[0]                 | REGISTER.SDR.FDRE      |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_2                      | CLB.LUT.LUT6           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[2]_i_1                      | CLB.LUT.LUT2           |
+    | hsub_16ns_16ns_16_5_full_dsp_1_U94/node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[2]                 | REGISTER.SDR.FDRE      |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.ALIGN_ADD/DSP2/i_no_versal_es1_workaround.DSP/DSP_OUTPUT_INST                             | ARITHMETIC.DSP.DSP48E2 |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DIST_ENC[0].i_det_lut1                                        | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/DET_GEN[0].CARRY_MUX_CARRY4_CARRY8                            | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/gen_lut_pairs[2].lutpairmode1.lutXo6_i_1                      | CLB.LUT.LUT3           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.NORM_RND/FULL_USAGE_DSP.LOD/LSBaddmode1.lut0o6_i_1                                        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/LSBaddmode1.lut0o6/LUT5                          | CLB.LUT.LUT5           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_lut_pairs[1].lutpairmode1.lutXo6/LUT6        | CLB.LUT.LUT6           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/gen_carry4s[0].gen_carry4.y0.mcy00_CARRY4_CARRY8 | CLB.CARRY.CARRY8       |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[3]_i_2                      | CLB.LUT.LUT4           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.STRUCT_ADD/opt_has_pipe.first_q[3]_i_1                      | CLB.LUT.LUT4           |
+    | hadd_16ns_16ns_16_5_full_dsp_1_U93/node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u/U0/i_synth/ADDSUB_OP.ADDSUB/DSP.OP/DSP48E1_BODY_HP.EXP/NOT_LOW_LATENCY_NORM_DIST.SIGDELAY/i_pipe/opt_has_pipe.first_q_reg[3]                 | REGISTER.SDR.FDRE      |
+    +------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------+
+
+
+================================================================
+== RTL Synthesis Vivado Reports
+================================================================
++--------------------------+-----------------------------------------------------------------+
+| Report Type              | Report Location                                                 |
++--------------------------+-----------------------------------------------------------------+
+| design_analysis          | impl/verilog/report/node_0_0_design_analysis_synth.rpt          |
+| failfast                 | impl/verilog/report/node_0_0_failfast_synth.rpt                 |
+| power                    | impl/verilog/report/node_0_0_power_synth.rpt                    |
+| timing                   | impl/verilog/report/node_0_0_timing_synth.rpt                   |
+| timing_paths             | impl/verilog/report/node_0_0_timing_paths_synth.rpt             |
+| utilization              | impl/verilog/report/node_0_0_utilization_synth.rpt              |
+| utilization_hierarchical | impl/verilog/report/node_0_0_utilization_hierarchical_synth.rpt |
++--------------------------+-----------------------------------------------------------------+
+
+

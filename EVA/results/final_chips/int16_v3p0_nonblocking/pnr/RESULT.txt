@@ -1,0 +1,1 @@
+int16_elastic 1x1 (top=node_0_0): Fmax=215.2MHz WNS=-1.317ns | LUT=1766 FF=1004 DSP=1 BRAM=0

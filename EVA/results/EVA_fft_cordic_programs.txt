@@ -1,0 +1,591 @@
+EVA golden programs decoded into human-readable EVA-ISA ops.
+Regs r0..r7 = local DRF; IN_x/OUT_x = systolic input/output to neighbor dir x (N/S/W/E).
+ROUTE = router packet send. Each PE runs its short program every activation (systolic dataflow).
+
+======================================================================
+FFT (radix butterflies)   (fft)
+======================================================================
+PEs with a program: 64 ; distinct program templates: 21
+
+--- template #0  used by 7 PE(s): (0,0), (0,2), (0,4), (2,0), (4,0), (4,2), (6,0) ---
+  loaded constants: r0=1, r1=-0
+    [0] r2 = IN_W
+    [1] r3 = IN_W
+    [2] r4 = r0 * r3
+    [3] r5 = r1 * r3
+    [4] OUT_S = r5
+    [5] r6 = r4 - IN_S
+    [6] OUT_E = r2 + r6
+    [7] OUT_E = r2 - r6
+
+--- template #1  used by 1 PE(s): (0,1) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=S: send r1 (id 2)
+    [3] r1 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #2  used by 1 PE(s): (0,3) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=S: send r1 (id 4)
+    [3] r1 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #3  used by 24 PE(s): (0,5), (0,6), (0,7), (1,5), (1,6), (1,7), (2,5), (2,6) ... ---
+    [0] OUT_E = IN_W
+    [1] OUT_E = IN_W
+
+--- template #4  used by 7 PE(s): (1,0), (1,2), (1,4), (3,0), (5,0), (5,2), (7,0) ---
+  loaded constants: r0=1, r1=-0
+    [0] r2 = IN_W
+    [1] r3 = IN_W
+    [2] r4 = r0 * r3
+    [3] r5 = r1 * r3
+    [4] OUT_N = r5
+    [5] r6 = r4 + IN_N
+    [6] OUT_E = r2 + r6
+    [7] OUT_E = r2 - r6
+
+--- template #5  used by 1 PE(s): (1,1) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=S: send r1 (id 3)
+    [3] r1 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #6  used by 1 PE(s): (1,3) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=S: send r1 (id 5)
+    [3] r1 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #7  used by 2 PE(s): (2,1), (4,3) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=N: send r0 (id 0)
+    [3] r0 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #8  used by 3 PE(s): (2,2), (4,4), (6,2) ---
+  loaded constants: r0=0, r1=-1
+    [0] r2 = IN_W
+    [1] r3 = IN_W
+    [2] r4 = r0 * r3
+    [3] r5 = r1 * r3
+    [4] OUT_S = r5
+    [5] r6 = r4 - IN_S
+    [6] OUT_E = r2 + r6
+    [7] OUT_E = r2 - r6
+
+--- template #9  used by 2 PE(s): (2,3), (4,1) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=S: send r1 (id 6)
+    [3] r1 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #10  used by 1 PE(s): (2,4) ---
+  loaded constants: r0=0.707, r1=-0.707
+    [0] r2 = IN_W
+    [1] r3 = IN_W
+    [2] r4 = r0 * r3
+    [3] r5 = r1 * r3
+    [4] OUT_S = r5
+    [5] r6 = r4 - IN_S
+    [6] OUT_E = r2 + r6
+    [7] OUT_E = r2 - r6
+
+--- template #11  used by 2 PE(s): (3,1), (5,3) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=N: send r0 (id 1)
+    [3] r0 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #12  used by 3 PE(s): (3,2), (5,4), (7,2) ---
+  loaded constants: r0=0, r1=-1
+    [0] r2 = IN_W
+    [1] r3 = IN_W
+    [2] r4 = r0 * r3
+    [3] r5 = r1 * r3
+    [4] OUT_N = r5
+    [5] r6 = r4 + IN_N
+    [6] OUT_E = r2 + r6
+    [7] OUT_E = r2 - r6
+
+--- template #13  used by 2 PE(s): (3,3), (5,1) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=S: send r1 (id 7)
+    [3] r1 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #14  used by 1 PE(s): (3,4) ---
+  loaded constants: r0=0.707, r1=-0.707
+    [0] r2 = IN_W
+    [1] r3 = IN_W
+    [2] r4 = r0 * r3
+    [3] r5 = r1 * r3
+    [4] OUT_N = r5
+    [5] r6 = r4 + IN_N
+    [6] OUT_E = r2 + r6
+    [7] OUT_E = r2 - r6
+
+--- template #15  used by 1 PE(s): (6,1) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=N: send r0 (id 4)
+    [3] r0 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #16  used by 1 PE(s): (6,3) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=N: send r0 (id 2)
+    [3] r0 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #17  used by 1 PE(s): (6,4) ---
+  loaded constants: r0=-0.707, r1=-0.707
+    [0] r2 = IN_W
+    [1] r3 = IN_W
+    [2] r4 = r0 * r3
+    [3] r5 = r1 * r3
+    [4] OUT_S = r5
+    [5] r6 = r4 - IN_S
+    [6] OUT_E = r2 + r6
+    [7] OUT_E = r2 - r6
+
+--- template #18  used by 1 PE(s): (7,1) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=N: send r0 (id 5)
+    [3] r0 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #19  used by 1 PE(s): (7,3) ---
+    [0] r0 = IN_W
+    [1] r1 = IN_W
+    [2] ROUTE dir=N: send r0 (id 3)
+    [3] r0 = r7
+    [4] OUT_E = r0
+    [5] OUT_E = r1
+
+--- template #20  used by 1 PE(s): (7,4) ---
+  loaded constants: r0=-0.707, r1=-0.707
+    [0] r2 = IN_W
+    [1] r3 = IN_W
+    [2] r4 = r0 * r3
+    [3] r5 = r1 * r3
+    [4] OUT_N = r5
+    [5] r6 = r4 + IN_N
+    [6] OUT_E = r2 + r6
+    [7] OUT_E = r2 - r6
+
+======================================================================
+CORDIC circular rotation (cos/sin)   (cordic_circular_rotation)
+======================================================================
+PEs with a program: 64 ; distinct program templates: 9
+
+--- template #0  used by 32 PE(s): (0,0), (0,1), (0,2), (0,3), (0,4), (0,5), (0,6), (0,7) ... ---
+    [0] r4 = IN_W
+    [1] r5 = IN_S
+    [2] r2 = IN_S
+    [3] r3 = r2 * r4
+    [4] r2 = r2 * r5
+    [5] OUT_E = r4 - r2
+    [6] OUT_S = r5 + r3
+
+--- template #1  used by 4 PE(s): (1,0), (3,0), (5,0), (7,0) ---
+  loaded constants: r0=-0, r1=1, r2=0.7852
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #2  used by 4 PE(s): (1,1), (3,1), (5,1), (7,1) ---
+  loaded constants: r0=-0, r1=0.5, r2=0.4636
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #3  used by 4 PE(s): (1,2), (3,2), (5,2), (7,2) ---
+  loaded constants: r0=-0, r1=0.25, r2=0.245
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #4  used by 4 PE(s): (1,3), (3,3), (5,3), (7,3) ---
+  loaded constants: r0=-0, r1=0.125, r2=0.1243
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #5  used by 4 PE(s): (1,4), (3,4), (5,4), (7,4) ---
+  loaded constants: r0=-0, r1=0.0625, r2=0.0624
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #6  used by 4 PE(s): (1,5), (3,5), (5,5), (7,5) ---
+  loaded constants: r0=-0, r1=0.0312, r2=0.0312
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #7  used by 4 PE(s): (1,6), (3,6), (5,6), (7,6) ---
+  loaded constants: r0=-0, r1=0.0156, r2=0.0156
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #8  used by 4 PE(s): (1,7), (3,7), (5,7), (7,7) ---
+  loaded constants: r0=-0, r1=0.0078, r2=0.0078
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+======================================================================
+CORDIC circular vectoring (atan/magnitude)   (cordic_circular_vectoring)
+======================================================================
+PEs with a program: 64 ; distinct program templates: 9
+
+--- template #0  used by 32 PE(s): (0,0), (0,1), (0,2), (0,3), (0,4), (0,5), (0,6), (0,7) ... ---
+    [0] r4 = IN_W
+    [1] r5 = IN_S
+    [2] r2 = IN_S
+    [3] r3 = r2 * r4
+    [4] r2 = r2 * r5
+    [5] OUT_E = r4 - r2
+    [6] OUT_S = r5 + r3
+
+--- template #1  used by 4 PE(s): (1,0), (3,0), (5,0), (7,0) ---
+  loaded constants: r0=-0, r1=1, r2=0.7852
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #2  used by 4 PE(s): (1,1), (3,1), (5,1), (7,1) ---
+  loaded constants: r0=-0, r1=0.5, r2=0.4636
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #3  used by 4 PE(s): (1,2), (3,2), (5,2), (7,2) ---
+  loaded constants: r0=-0, r1=0.25, r2=0.245
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #4  used by 4 PE(s): (1,3), (3,3), (5,3), (7,3) ---
+  loaded constants: r0=-0, r1=0.125, r2=0.1243
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #5  used by 4 PE(s): (1,4), (3,4), (5,4), (7,4) ---
+  loaded constants: r0=-0, r1=0.0625, r2=0.0624
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #6  used by 4 PE(s): (1,5), (3,5), (5,5), (7,5) ---
+  loaded constants: r0=-0, r1=0.0312, r2=0.0312
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #7  used by 4 PE(s): (1,6), (3,6), (5,6), (7,6) ---
+  loaded constants: r0=-0, r1=0.0156, r2=0.0156
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #8  used by 4 PE(s): (1,7), (3,7), (5,7), (7,7) ---
+  loaded constants: r0=-0, r1=0.0078, r2=0.0078
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+======================================================================
+CORDIC hyperbolic rotation (cosh/sinh)   (cordic_hyperbolic_rotation)
+======================================================================
+PEs with a program: 64 ; distinct program templates: 8
+
+--- template #0  used by 32 PE(s): (0,0), (0,1), (0,2), (0,3), (0,4), (0,5), (0,6), (0,7) ... ---
+    [0] r4 = IN_W
+    [1] r5 = IN_S
+    [2] r2 = IN_S
+    [3] r3 = r2 * r4
+    [4] r2 = r2 * r5
+    [5] OUT_E = r4 + r2
+    [6] OUT_S = r5 + r3
+
+--- template #1  used by 4 PE(s): (1,0), (3,0), (5,0), (7,0) ---
+  loaded constants: r0=-0, r1=0.5, r2=0.5493
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #2  used by 4 PE(s): (1,1), (3,1), (5,1), (7,1) ---
+  loaded constants: r0=-0, r1=0.25, r2=0.2554
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #3  used by 4 PE(s): (1,2), (3,2), (5,2), (7,2) ---
+  loaded constants: r0=-0, r1=0.125, r2=0.1256
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #4  used by 8 PE(s): (1,3), (1,4), (3,3), (3,4), (5,3), (5,4), (7,3), (7,4) ---
+  loaded constants: r0=-0, r1=0.0625, r2=0.0626
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #5  used by 4 PE(s): (1,5), (3,5), (5,5), (7,5) ---
+  loaded constants: r0=-0, r1=0.0312, r2=0.0312
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #6  used by 4 PE(s): (1,6), (3,6), (5,6), (7,6) ---
+  loaded constants: r0=-0, r1=0.0156, r2=0.0156
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #7  used by 4 PE(s): (1,7), (3,7), (5,7), (7,7) ---
+  loaded constants: r0=-0, r1=0.0078, r2=0.0078
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r4 >= r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+======================================================================
+CORDIC hyperbolic vectoring (atanh)   (cordic_hyperbolic_vectoring)
+======================================================================
+PEs with a program: 64 ; distinct program templates: 9
+
+--- template #0  used by 16 PE(s): (0,0), (0,1), (0,2), (0,7), (2,0), (2,1), (2,2), (2,7) ... ---
+    [0] r4 = IN_W
+    [1] r5 = IN_S
+    [2] r2 = IN_S
+    [3] r3 = r2 * r4
+    [4] r2 = r2 * r5
+    [5] OUT_E = r4 + r2
+    [6] OUT_S = r5 + r3
+
+--- template #1  used by 16 PE(s): (0,3), (0,4), (0,5), (0,6), (2,3), (2,4), (2,5), (2,6) ... ---
+    [0] r4 = IN_W
+    [1] r5 = IN_S
+    [2] r2 = IN_S
+    [3] r3 = r2 * r4
+    [4] r2 = r2 * r5
+    [5] OUT_E = r4 - r2
+    [6] OUT_S = r5 + r3
+
+--- template #2  used by 4 PE(s): (1,0), (3,0), (5,0), (7,0) ---
+  loaded constants: r0=-0, r1=0.5, r2=0.5493
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #3  used by 4 PE(s): (1,1), (3,1), (5,1), (7,1) ---
+  loaded constants: r0=-0, r1=0.25, r2=0.2554
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #4  used by 4 PE(s): (1,2), (3,2), (5,2), (7,2) ---
+  loaded constants: r0=-0, r1=0.125, r2=0.1256
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #5  used by 8 PE(s): (1,3), (1,4), (3,3), (3,4), (5,3), (5,4), (7,3), (7,4) ---
+  loaded constants: r0=-0, r1=0.0625, r2=0.0626
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #6  used by 4 PE(s): (1,5), (3,5), (5,5), (7,5) ---
+  loaded constants: r0=-0, r1=0.0312, r2=0.0312
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #7  used by 4 PE(s): (1,6), (3,6), (5,6), (7,6) ---
+  loaded constants: r0=-0, r1=0.0156, r2=0.0156
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N
+
+--- template #8  used by 4 PE(s): (1,7), (3,7), (5,7), (7,7) ---
+  loaded constants: r0=-0, r1=0.0078, r2=0.0078
+    [0] r4 = IN_W
+    [1] r5 = IN_W
+    [2] OUT_N = r5
+    [3] r3 = (r5 <  r0) ? 1 : -1
+    [4] r7 = r3 * r2
+    [5] OUT_N = r3 * r1
+    [6] OUT_E = r4 - r7
+    [7] OUT_E = IN_N

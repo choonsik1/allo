@@ -1,0 +1,11 @@
+# 2x2 pe_group FFT — NO usable golden output at this size.
+#
+# The program .mem files (cols 2,3) are here for completeness, but the FFT is a
+# recirculating (iter=Inf) workload whose butterflies span the full 8x8 mesh. At
+# 2x2 (cols 2,3 only) the golden RTL produces NOTHING on any output edge — verified
+# by adding an output monitor to tb_pe_group_fft.sv and running VCS with windows up
+# to 3000 cycles: zero writes on router AND systolic edges. This is STRUCTURAL, not a
+# capture miss: a 2x2 slice cannot complete the FFT dataflow.
+#
+# => Use MMM for the 2x2 correctness oracle. For FFT, use the 8x8 pe_array golden
+#    (../../pe_array_8x8/pe_array_fft.out), which IS captured and reliable.

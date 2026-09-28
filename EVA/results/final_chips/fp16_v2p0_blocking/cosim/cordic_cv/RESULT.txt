@@ -1,0 +1,1 @@
+cordic_cv_ap: PASS: cosim cordic_cv_ap_skid (8/8 rows | rc_mon 240 stamps

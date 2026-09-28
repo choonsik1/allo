@@ -1,0 +1,1 @@
+fp16_elastic 1x1 (top=node_0_0): Fmax=232.0MHz WNS=-0.981ns | LUT=2186 FF=1115 DSP=2 BRAM=0

@@ -1,0 +1,6 @@
+id = 0, mode = 1, addr = 8, data = 300E
+id = 0, mode = 1, addr = 9, data = 310E
+id = 0, mode = 1, addr = 0, data = 8100
+id = 1, mode = 1, addr = 8, data = 300E
+id = 1, mode = 1, addr = 9, data = 310E
+id = 1, mode = 1, addr = 0, data = 8100

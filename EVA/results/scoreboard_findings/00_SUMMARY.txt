@@ -1,0 +1,11 @@
+==== INT16 NARROW (bitwidth sweep) START Thu  6 Aug 13:04:20 EDT 2026 ====
+-- [1] build SCHED narrow kernel --
+  kernel: /home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/eva_int16/prj_int16_1x1_L120_sched/kernel.cpp
+  half converters (want 0=int16 clean): 0
+  int16 sched pipeline: 1
+-- [2] csynth+P&R node_0_0 (II check + Fmax) Thu  6 Aug 13:04:22 EDT 2026 --
+  node Final II:       1 Final II = 1 
+  200-880 (want 0 for honest II=1): 0
+  NODE narrow: WNS=-1.169 -> 4.499ns -> 222 MHz  LUT=? FF=?  (int16 base 223MHz/2681LUT)
+==== INT16 NARROW DONE Thu  6 Aug 13:25:47 EDT 2026 ====
+I16_NARROW_COMPLETE

@@ -1,0 +1,1 @@
+cordic_cv_i16: PASS: cosim INT16_elaststrm_cordic_cv_eva_sb_syscredit_fwd_8x8 (8/8 rows | rc_mon 240 stamps — OVER expected 0 (verify)

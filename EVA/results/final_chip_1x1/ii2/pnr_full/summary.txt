@@ -1,0 +1,15 @@
+  FULL-TOP post-route:
+LUT:              6037
+FF:               6244
+DSP:              2
+| Path   |                SLACK | STARTPOINT PIN                                                                                        | ENDPOINT PIN                                                                                                                                                                                              | LOGIC LEVELS | MAX FANOUT |      DATAPATH DELAY |      DATAPATH LOGIC |        DATAPATH NET |
+LUT:              6290
+FF:               6238
+DSP:              2
+| Path   |                SLACK | STARTPOINT PIN                                                                                        | ENDPOINT PIN                                                                                                                                                                                              | LOGIC LEVELS | MAX FANOUT |      DATAPATH DELAY |      DATAPATH LOGIC |        DATAPATH NET |
+LUT:           6037
+FF:            6244
+DSP:              2
+CP achieved post-synthesis:      4.760
+CP achieved post-implementation: 4.287
+Timing not met

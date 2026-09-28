@@ -1,0 +1,183 @@
+------ Core 0 ------
+
+Instructions:
+
+MOV r2, syslft      // take in in0.r
+MOV r3, syslft      // take in in1.r
+MULT r4, r0, r3     // prod.rr = w.r * in1.r
+MULT r5, r1, r3     // prod.ir = w.i * in1.r
+MOV sysbtm, r5      // send prod.ir
+SUB r6, r4, sysbtm  // prod.r = prod.rr - prod.ii
+ADD sysrgt, r2, r6  // out0.r = in0.r + prod.r
+SUB sysrgt, r2, r6  // out1.r = in0.r - prod.r
+
+Data:
+
+r0: 1.0  // 
+r1: -0.0 // 
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 1 ------
+
+Instructions:
+
+MOV r2, syslft      // take in in0.i
+MOV r3, syslft      // take in in1.i
+MULT r4, r0, r3     // prod.ri = w.r * in1.i
+MULT r5, r1, r3     // prod.ii = w.i * in1.i
+MOV systop, r5      // send prod.ii
+ADD r6, r4, systop  // prod.i = prod.ri + prod.ir
+ADD sysrgt, r2, r6  // out0.i = in0.i + prod.i
+SUB sysrgt, r2, r6  // out1.i = in0.i - prod.i
+
+Data:
+
+r0: 1.0  // 
+r1: -0.0 // 
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 2 ------
+
+Instructions:
+
+MOV r2, syslft      // take in in0.r
+MOV r3, syslft      // take in in1.r
+MULT r4, r0, r3     // prod.rr = w.r * in1.r
+MULT r5, r1, r3     // prod.ir = w.i * in1.r
+MOV sysbtm, r5      // send prod.ir
+SUB r6, r4, sysbtm  // prod.r = prod.rr - prod.ii
+ADD sysrgt, r2, r6  // out0.r = in0.r + prod.r
+SUB sysrgt, r2, r6  // out1.r = in0.r - prod.r
+
+Data:
+
+r0: 1.0  // 
+r1: -0.0 // 
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 3 ------
+
+Instructions:
+
+MOV r2, syslft      // take in in0.i
+MOV r3, syslft      // take in in1.i
+MULT r4, r0, r3     // prod.ri = w.r * in1.i
+MULT r5, r1, r3     // prod.ii = w.i * in1.i
+MOV systop, r5      // send prod.ii
+ADD r6, r4, systop  // prod.i = prod.ri + prod.ir
+ADD sysrgt, r2, r6  // out0.i = in0.i + prod.i
+SUB sysrgt, r2, r6  // out1.i = in0.i - prod.i
+
+Data:
+
+r0: 1.0  // 
+r1: -0.0 // 
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 4 ------
+
+Instructions:
+
+MOV r2, syslft      // take in in0.r
+MOV r3, syslft      // take in in1.r
+MULT r4, r0, r3     // prod.rr = w.r * in1.r
+MULT r5, r1, r3     // prod.ir = w.i * in1.r
+MOV sysbtm, r5      // send prod.ir
+SUB r6, r4, sysbtm  // prod.r = prod.rr - prod.ii
+ADD sysrgt, r2, r6  // out0.r = in0.r + prod.r
+SUB sysrgt, r2, r6  // out1.r = in0.r - prod.r
+
+Data:
+
+r0: 1.0  // 
+r1: -0.0 // 
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 5 ------
+
+Instructions:
+
+MOV r2, syslft      // take in in0.i
+MOV r3, syslft      // take in in1.i
+MULT r4, r0, r3     // prod.ri = w.r * in1.i
+MULT r5, r1, r3     // prod.ii = w.i * in1.i
+MOV systop, r5      // send prod.ii
+ADD r6, r4, systop  // prod.i = prod.ri + prod.ir
+ADD sysrgt, r2, r6  // out0.i = in0.i + prod.i
+SUB sysrgt, r2, r6  // out1.i = in0.i - prod.i
+
+Data:
+
+r0: 1.0  // 
+r1: -0.0 // 
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 6 ------
+
+Instructions:
+
+MOV r2, syslft      // take in in0.r
+MOV r3, syslft      // take in in1.r
+MULT r4, r0, r3     // prod.rr = w.r * in1.r
+MULT r5, r1, r3     // prod.ir = w.i * in1.r
+MOV sysbtm, r5      // send prod.ir
+SUB r6, r4, sysbtm  // prod.r = prod.rr - prod.ii
+ADD sysrgt, r2, r6  // out0.r = in0.r + prod.r
+SUB sysrgt, r2, r6  // out1.r = in0.r - prod.r
+
+Data:
+
+r0: 1.0  // 
+r1: -0.0 // 
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 7 ------
+
+Instructions:
+
+MOV r2, syslft      // take in in0.i
+MOV r3, syslft      // take in in1.i
+MULT r4, r0, r3     // prod.ri = w.r * in1.i
+MULT r5, r1, r3     // prod.ii = w.i * in1.i
+MOV systop, r5      // send prod.ii
+ADD r6, r4, systop  // prod.i = prod.ri + prod.ir
+ADD sysrgt, r2, r6  // out0.i = in0.i + prod.i
+SUB sysrgt, r2, r6  // out1.i = in0.i - prod.i
+
+Data:
+
+r0: 1.0  // 
+r1: -0.0 // 
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000

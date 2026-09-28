@@ -1,0 +1,143 @@
+------ Core 0 ------
+
+Instructions:
+
+MOV r1, syslft
+MULT r2, r0, r1
+MOV sysrgt, r1
+MOV sysbtm, r2
+
+Data:
+
+r0: 0.650934  // weight w02
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 1 ------
+
+Instructions:
+
+MOV r1, syslft
+MULT r2, r0, r1
+MOV sysrgt, r1
+ADD sysbtm, r2, systop
+
+Data:
+
+r0: 0.0698554  // weight w12
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 2 ------
+
+Instructions:
+
+MOV r1, syslft
+MULT r2, r0, r1
+MOV sysrgt, r1
+ADD sysbtm, r2, systop
+
+Data:
+
+r0: 0.577103  // weight w22
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 3 ------
+
+Instructions:
+
+MOV r1, syslft
+MULT r2, r0, r1
+MOV sysrgt, r1
+ADD sysbtm, r2, systop
+
+Data:
+
+r0: 0.308482  // weight w32
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 4 ------
+
+Instructions:
+
+MOV r1, syslft
+MULT r2, r0, r1
+MOV sysrgt, r1
+ADD sysbtm, r2, systop
+
+Data:
+
+r0: 0.0596012  // weight w42
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 5 ------
+
+Instructions:
+
+MOV r1, syslft
+MULT r2, r0, r1
+MOV sysrgt, r1
+ADD sysbtm, r2, systop
+
+Data:
+
+r0: 0.794379  // weight w52
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 6 ------
+
+Instructions:
+
+MOV r1, syslft
+MULT r2, r0, r1
+MOV sysrgt, r1
+ADD sysbtm, r2, systop
+
+Data:
+
+r0: 0.980175  // weight w62
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000
+
+------ Core 7 ------
+
+Instructions:
+
+MOV r1, syslft
+MULT r2, r0, r1
+MOV sysrgt, r1
+ADD sysbtm, r2, systop
+
+Data:
+
+r0: 0.764571  // weight w72
+
+Configuration:
+
+iteration: Inf
+data_rf_sync_mask: 00000000

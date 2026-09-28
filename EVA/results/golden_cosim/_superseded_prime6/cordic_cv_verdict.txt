@@ -1,0 +1,13 @@
+# cordic_cv — PRIME=6 (WRONG) = 4/8, superseded by prime=1 rerun
+
+521433:  row 0: OK  golden 66a2 found @slot 0  (nz: 66a2 )
+521434:  row 1: OK  golden 4056 ca4a found @slot 0  (nz: 4056 ca4a )
+521435:  row 2: OK  golden 65dd found @slot 0  (nz: 65dd )
+521436:  row 3: OK  golden 39ab 49b5 found @slot 0  (nz: 39ab 49b5 )
+521437:  row 4: x   golden 6186 NOT found  (nz: 39ab 49b5 )
+521438:  row 5: x   golden 3b96 449a NOT found  (nz: 3b96 )
+521439:  row 6: x   golden 66d9 NOT found  (nz: 3b96 )
+521440:  row 7: x   golden 3f0d c7aa NOT found  (nz: 3b96 )
+--- RTL cosim verdict (authoritative) ---
+FAIL: golden cosim gc_cordic_cv_eva_sb_syscredit_fwd_8x8 (4/8 rows bit-exact vs golden)
+INFO: [COSIM 212-1000] *** C/RTL co-simulation finished: PASS ***

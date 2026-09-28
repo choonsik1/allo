@@ -1,0 +1,14 @@
+# 2x2 pe_group MMM — activation stream (WEST edge), hardcoded in the golden tb
+#   EVA_untouched/EVA/tb/pe_group/mmm/tb_pe_group_mmm.sv  (lines 413-441)
+# Driven on sys_rx_lft_0 (row 0) and sys_rx_lft_2 (row 1); top edge = 0.
+# fp16 hex -> value:
+#
+# row 0 (sys_rx_lft_0):
+16'h4000   # 2.0
+16'h4600   # 6.0
+# row 1 (sys_rx_lft_2):
+16'h4400   # 4.0
+16'h4800   # 8.0
+#
+# i.e. two MMM batches: batch0 = (row0=2, row1=4), batch1 = (row0=6, row1=8).
+# For a steady-state stream the generator repeats these REPS times (default 10).

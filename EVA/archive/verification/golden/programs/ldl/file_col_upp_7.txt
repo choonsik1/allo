@@ -1,0 +1,87 @@
+------ Core 0 ------
+
+Instructions:
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 1 ------
+
+Instructions:
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 2 ------
+
+Instructions:
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 3 ------
+
+Instructions:
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 4 ------
+
+Instructions:
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 5 ------
+
+Instructions:
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 6 ------
+
+Instructions:
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 7 ------
+
+Instructions:
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf

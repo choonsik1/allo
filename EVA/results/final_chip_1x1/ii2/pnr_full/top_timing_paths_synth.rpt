@@ -1,0 +1,969 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+--------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
+| Date              : Thu Jul 23 16:49:45 2026
+| Host              : zhang-21.ece.cornell.edu running 64-bit Red Hat Enterprise Linux release 8.10 (Ootpa)
+| Command           : report_timing -max_paths 10 -file ./report/top_timing_paths_synth.rpt
+| Design            : bd_0_wrapper
+| Device            : xczu7ev-ffvc1156
+| Speed File        : -2  PRODUCTION 1.30 05-15-2022
+| Design State      : Synthesized
+| Temperature Grade : E
+--------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Report
+
+Slack (VIOLATED) :        -1.430ns  (required time - arrival time)
+  Source:                 bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Destination:            <hidden>
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Path Group:             ap_clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            3.330ns  (ap_clk rise@3.330ns - ap_clk rise@0.000ns)
+  Data Path Delay:        4.741ns  (logic 1.695ns (35.752%)  route 3.046ns (64.248%))
+  Logic Levels:           22  (CARRY8=8 LUT4=3 LUT5=5 LUT6=6)
+  Clock Path Skew:        -0.009ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.021ns = ( 3.351 - 3.330 ) 
+    Source Clock Delay      (SCD):    0.030ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock ap_clk rise edge)     0.000     0.000 r  
+                                                      0.000     0.000 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.030     0.030    bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/ap_clk
+                         FDRE                                         r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.077     0.107 r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/Q
+                         net (fo=21, unplaced)        0.142     0.249    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.139     0.388 r  <hidden>
+                         net (fo=1, unplaced)         0.260     0.648    <hidden>
+                         CARRY8 (Prop_CARRY8_DI[0]_CO[7])
+                                                      0.140     0.788 r  <hidden>
+                         net (fo=29, unplaced)        0.173     0.961    <hidden>
+                         LUT6 (Prop_LUT6_I4_O)        0.038     0.999 f  <hidden>
+                         net (fo=4, unplaced)         0.153     1.152    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     1.252 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.275    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[1])
+                                                      0.091     1.366 r  <hidden>
+                         net (fo=1, unplaced)         0.184     1.550    <hidden>
+                         LUT5 (Prop_LUT5_I1_O)        0.038     1.588 r  <hidden>
+                         net (fo=1, unplaced)         0.186     1.774    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     1.812 r  <hidden>
+                         net (fo=2, unplaced)         0.186     1.998    <hidden>
+                         LUT6 (Prop_LUT6_I0_O)        0.037     2.035 r  <hidden>
+                         net (fo=1, unplaced)         0.023     2.058    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.197     2.255 r  <hidden>
+                         net (fo=1, unplaced)         0.005     2.260    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[4])
+                                                      0.086     2.346 f  <hidden>
+                         net (fo=4, unplaced)         0.196     2.542    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     2.642 r  <hidden>
+                         net (fo=1, unplaced)         0.020     2.662    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[0])
+                                                      0.071     2.733 r  <hidden>
+                         net (fo=24, unplaced)        0.239     2.972    <hidden>
+                         LUT5 (Prop_LUT5_I3_O)        0.038     3.010 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.196    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.234 f  <hidden>
+                         net (fo=21, unplaced)        0.236     3.470    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.508 r  <hidden>
+                         net (fo=1, unplaced)         0.186     3.694    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.732 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.918    <hidden>
+                         LUT5 (Prop_LUT5_I2_O)        0.038     3.956 r  <hidden>
+                         net (fo=1, unplaced)         0.020     3.976    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[7])
+                                                      0.199     4.175 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.180    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.022     4.202 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.207    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.056     4.263 r  <hidden>
+                         net (fo=4, unplaced)         0.198     4.461    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     4.499 r  <hidden>
+                         net (fo=2, unplaced)         0.186     4.685    <hidden>
+                         LUT6 (Prop_LUT6_I0_O)        0.038     4.723 r  <hidden>
+                         net (fo=1, unplaced)         0.048     4.771    <hidden>
+                         FDRE                                         r  <hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock ap_clk rise edge)     3.330     3.330 r  
+                                                      0.000     3.330 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.021     3.351    <hidden>
+                         FDRE                                         r  <hidden>
+                         clock pessimism              0.000     3.351    
+                         clock uncertainty           -0.035     3.316    
+                         FDRE (Setup_FDRE_C_D)        0.025     3.341    <hidden>
+  -------------------------------------------------------------------
+                         required time                          3.341    
+                         arrival time                          -4.771    
+  -------------------------------------------------------------------
+                         slack                                 -1.430    
+
+Slack (VIOLATED) :        -1.430ns  (required time - arrival time)
+  Source:                 bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Destination:            <hidden>
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Path Group:             ap_clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            3.330ns  (ap_clk rise@3.330ns - ap_clk rise@0.000ns)
+  Data Path Delay:        4.741ns  (logic 1.695ns (35.752%)  route 3.046ns (64.248%))
+  Logic Levels:           22  (CARRY8=8 LUT4=3 LUT5=5 LUT6=6)
+  Clock Path Skew:        -0.009ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.021ns = ( 3.351 - 3.330 ) 
+    Source Clock Delay      (SCD):    0.030ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock ap_clk rise edge)     0.000     0.000 r  
+                                                      0.000     0.000 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.030     0.030    bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/ap_clk
+                         FDRE                                         r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.077     0.107 r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/Q
+                         net (fo=21, unplaced)        0.142     0.249    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.139     0.388 r  <hidden>
+                         net (fo=1, unplaced)         0.260     0.648    <hidden>
+                         CARRY8 (Prop_CARRY8_DI[0]_CO[7])
+                                                      0.140     0.788 r  <hidden>
+                         net (fo=29, unplaced)        0.173     0.961    <hidden>
+                         LUT6 (Prop_LUT6_I4_O)        0.038     0.999 f  <hidden>
+                         net (fo=4, unplaced)         0.153     1.152    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     1.252 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.275    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[1])
+                                                      0.091     1.366 r  <hidden>
+                         net (fo=1, unplaced)         0.184     1.550    <hidden>
+                         LUT5 (Prop_LUT5_I1_O)        0.038     1.588 r  <hidden>
+                         net (fo=1, unplaced)         0.186     1.774    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     1.812 r  <hidden>
+                         net (fo=2, unplaced)         0.186     1.998    <hidden>
+                         LUT6 (Prop_LUT6_I0_O)        0.037     2.035 r  <hidden>
+                         net (fo=1, unplaced)         0.023     2.058    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.197     2.255 r  <hidden>
+                         net (fo=1, unplaced)         0.005     2.260    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[4])
+                                                      0.086     2.346 f  <hidden>
+                         net (fo=4, unplaced)         0.196     2.542    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     2.642 r  <hidden>
+                         net (fo=1, unplaced)         0.020     2.662    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[0])
+                                                      0.071     2.733 r  <hidden>
+                         net (fo=24, unplaced)        0.239     2.972    <hidden>
+                         LUT5 (Prop_LUT5_I3_O)        0.038     3.010 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.196    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.234 f  <hidden>
+                         net (fo=21, unplaced)        0.236     3.470    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.508 r  <hidden>
+                         net (fo=1, unplaced)         0.186     3.694    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.732 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.918    <hidden>
+                         LUT5 (Prop_LUT5_I2_O)        0.038     3.956 r  <hidden>
+                         net (fo=1, unplaced)         0.020     3.976    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[7])
+                                                      0.199     4.175 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.180    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.022     4.202 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.207    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.056     4.263 r  <hidden>
+                         net (fo=4, unplaced)         0.198     4.461    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     4.499 r  <hidden>
+                         net (fo=2, unplaced)         0.186     4.685    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     4.723 r  <hidden>
+                         net (fo=1, unplaced)         0.048     4.771    <hidden>
+                         FDRE                                         r  <hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock ap_clk rise edge)     3.330     3.330 r  
+                                                      0.000     3.330 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.021     3.351    <hidden>
+                         FDRE                                         r  <hidden>
+                         clock pessimism              0.000     3.351    
+                         clock uncertainty           -0.035     3.316    
+                         FDRE (Setup_FDRE_C_D)        0.025     3.341    <hidden>
+  -------------------------------------------------------------------
+                         required time                          3.341    
+                         arrival time                          -4.771    
+  -------------------------------------------------------------------
+                         slack                                 -1.430    
+
+Slack (VIOLATED) :        -1.251ns  (required time - arrival time)
+  Source:                 bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Destination:            <hidden>
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Path Group:             ap_clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            3.330ns  (ap_clk rise@3.330ns - ap_clk rise@0.000ns)
+  Data Path Delay:        4.562ns  (logic 1.692ns (37.089%)  route 2.870ns (62.911%))
+  Logic Levels:           21  (CARRY8=8 LUT4=3 LUT5=2 LUT6=8)
+  Clock Path Skew:        -0.009ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.021ns = ( 3.351 - 3.330 ) 
+    Source Clock Delay      (SCD):    0.030ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock ap_clk rise edge)     0.000     0.000 r  
+                                                      0.000     0.000 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.030     0.030    bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/ap_clk
+                         FDRE                                         r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.077     0.107 r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/Q
+                         net (fo=21, unplaced)        0.142     0.249    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.139     0.388 r  <hidden>
+                         net (fo=1, unplaced)         0.260     0.648    <hidden>
+                         CARRY8 (Prop_CARRY8_DI[0]_CO[7])
+                                                      0.140     0.788 r  <hidden>
+                         net (fo=29, unplaced)        0.173     0.961    <hidden>
+                         LUT6 (Prop_LUT6_I4_O)        0.038     0.999 f  <hidden>
+                         net (fo=4, unplaced)         0.153     1.152    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     1.252 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.275    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[2])
+                                                      0.098     1.373 r  <hidden>
+                         net (fo=1, unplaced)         0.186     1.559    <hidden>
+                         LUT5 (Prop_LUT5_I0_O)        0.038     1.597 f  <hidden>
+                         net (fo=2, unplaced)         0.186     1.783    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.037     1.820 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.843    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.197     2.040 r  <hidden>
+                         net (fo=1, unplaced)         0.005     2.045    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[4])
+                                                      0.086     2.131 f  <hidden>
+                         net (fo=4, unplaced)         0.198     2.329    <hidden>
+                         LUT4 (Prop_LUT4_I1_O)        0.090     2.419 r  <hidden>
+                         net (fo=1, unplaced)         0.020     2.439    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[1])
+                                                      0.109     2.548 r  <hidden>
+                         net (fo=33, unplaced)        0.244     2.792    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     2.830 r  <hidden>
+                         net (fo=1, unplaced)         0.186     3.016    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.054 f  <hidden>
+                         net (fo=22, unplaced)        0.237     3.291    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.329 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.515    <hidden>
+                         LUT6 (Prop_LUT6_I2_O)        0.038     3.553 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.739    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.777 r  <hidden>
+                         net (fo=1, unplaced)         0.020     3.797    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[7])
+                                                      0.199     3.996 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.001    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.022     4.023 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.028    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.056     4.084 r  <hidden>
+                         net (fo=4, unplaced)         0.198     4.282    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     4.320 r  <hidden>
+                         net (fo=1, unplaced)         0.186     4.506    <hidden>
+                         LUT6 (Prop_LUT6_I0_O)        0.038     4.544 r  <hidden>
+                         net (fo=1, unplaced)         0.048     4.592    <hidden>
+                         FDRE                                         r  <hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock ap_clk rise edge)     3.330     3.330 r  
+                                                      0.000     3.330 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.021     3.351    <hidden>
+                         FDRE                                         r  <hidden>
+                         clock pessimism              0.000     3.351    
+                         clock uncertainty           -0.035     3.316    
+                         FDRE (Setup_FDRE_C_D)        0.025     3.341    <hidden>
+  -------------------------------------------------------------------
+                         required time                          3.341    
+                         arrival time                          -4.592    
+  -------------------------------------------------------------------
+                         slack                                 -1.251    
+
+Slack (VIOLATED) :        -1.251ns  (required time - arrival time)
+  Source:                 bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Destination:            <hidden>
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Path Group:             ap_clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            3.330ns  (ap_clk rise@3.330ns - ap_clk rise@0.000ns)
+  Data Path Delay:        4.562ns  (logic 1.692ns (37.089%)  route 2.870ns (62.911%))
+  Logic Levels:           21  (CARRY8=8 LUT4=3 LUT5=3 LUT6=7)
+  Clock Path Skew:        -0.009ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.021ns = ( 3.351 - 3.330 ) 
+    Source Clock Delay      (SCD):    0.030ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock ap_clk rise edge)     0.000     0.000 r  
+                                                      0.000     0.000 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.030     0.030    bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/ap_clk
+                         FDRE                                         r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.077     0.107 r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/Q
+                         net (fo=21, unplaced)        0.142     0.249    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.139     0.388 r  <hidden>
+                         net (fo=1, unplaced)         0.260     0.648    <hidden>
+                         CARRY8 (Prop_CARRY8_DI[0]_CO[7])
+                                                      0.140     0.788 r  <hidden>
+                         net (fo=29, unplaced)        0.173     0.961    <hidden>
+                         LUT6 (Prop_LUT6_I4_O)        0.038     0.999 f  <hidden>
+                         net (fo=4, unplaced)         0.153     1.152    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     1.252 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.275    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[2])
+                                                      0.098     1.373 r  <hidden>
+                         net (fo=1, unplaced)         0.186     1.559    <hidden>
+                         LUT5 (Prop_LUT5_I0_O)        0.038     1.597 f  <hidden>
+                         net (fo=2, unplaced)         0.186     1.783    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.037     1.820 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.843    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.197     2.040 r  <hidden>
+                         net (fo=1, unplaced)         0.005     2.045    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[4])
+                                                      0.086     2.131 f  <hidden>
+                         net (fo=4, unplaced)         0.198     2.329    <hidden>
+                         LUT4 (Prop_LUT4_I1_O)        0.090     2.419 r  <hidden>
+                         net (fo=1, unplaced)         0.020     2.439    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[1])
+                                                      0.109     2.548 r  <hidden>
+                         net (fo=33, unplaced)        0.244     2.792    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     2.830 r  <hidden>
+                         net (fo=1, unplaced)         0.186     3.016    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.054 f  <hidden>
+                         net (fo=22, unplaced)        0.237     3.291    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.329 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.515    <hidden>
+                         LUT6 (Prop_LUT6_I2_O)        0.038     3.553 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.739    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.777 r  <hidden>
+                         net (fo=1, unplaced)         0.020     3.797    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[7])
+                                                      0.199     3.996 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.001    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.022     4.023 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.028    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.056     4.084 r  <hidden>
+                         net (fo=4, unplaced)         0.198     4.282    <hidden>
+                         LUT5 (Prop_LUT5_I0_O)        0.038     4.320 f  <hidden>
+                         net (fo=1, unplaced)         0.186     4.506    <hidden>
+                         LUT6 (Prop_LUT6_I0_O)        0.038     4.544 r  <hidden>
+                         net (fo=1, unplaced)         0.048     4.592    <hidden>
+                         FDRE                                         r  <hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock ap_clk rise edge)     3.330     3.330 r  
+                                                      0.000     3.330 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.021     3.351    <hidden>
+                         FDRE                                         r  <hidden>
+                         clock pessimism              0.000     3.351    
+                         clock uncertainty           -0.035     3.316    
+                         FDRE (Setup_FDRE_C_D)        0.025     3.341    <hidden>
+  -------------------------------------------------------------------
+                         required time                          3.341    
+                         arrival time                          -4.592    
+  -------------------------------------------------------------------
+                         slack                                 -1.251    
+
+Slack (VIOLATED) :        -1.251ns  (required time - arrival time)
+  Source:                 bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Destination:            <hidden>
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Path Group:             ap_clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            3.330ns  (ap_clk rise@3.330ns - ap_clk rise@0.000ns)
+  Data Path Delay:        4.562ns  (logic 1.692ns (37.089%)  route 2.870ns (62.911%))
+  Logic Levels:           21  (CARRY8=8 LUT4=3 LUT5=2 LUT6=8)
+  Clock Path Skew:        -0.009ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.021ns = ( 3.351 - 3.330 ) 
+    Source Clock Delay      (SCD):    0.030ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock ap_clk rise edge)     0.000     0.000 r  
+                                                      0.000     0.000 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.030     0.030    bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/ap_clk
+                         FDRE                                         r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.077     0.107 r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/Q
+                         net (fo=21, unplaced)        0.142     0.249    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.139     0.388 r  <hidden>
+                         net (fo=1, unplaced)         0.260     0.648    <hidden>
+                         CARRY8 (Prop_CARRY8_DI[0]_CO[7])
+                                                      0.140     0.788 r  <hidden>
+                         net (fo=29, unplaced)        0.173     0.961    <hidden>
+                         LUT6 (Prop_LUT6_I4_O)        0.038     0.999 f  <hidden>
+                         net (fo=4, unplaced)         0.153     1.152    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     1.252 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.275    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[2])
+                                                      0.098     1.373 r  <hidden>
+                         net (fo=1, unplaced)         0.186     1.559    <hidden>
+                         LUT5 (Prop_LUT5_I0_O)        0.038     1.597 f  <hidden>
+                         net (fo=2, unplaced)         0.186     1.783    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.037     1.820 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.843    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.197     2.040 r  <hidden>
+                         net (fo=1, unplaced)         0.005     2.045    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[4])
+                                                      0.086     2.131 f  <hidden>
+                         net (fo=4, unplaced)         0.198     2.329    <hidden>
+                         LUT4 (Prop_LUT4_I1_O)        0.090     2.419 r  <hidden>
+                         net (fo=1, unplaced)         0.020     2.439    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[1])
+                                                      0.109     2.548 r  <hidden>
+                         net (fo=33, unplaced)        0.244     2.792    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     2.830 r  <hidden>
+                         net (fo=1, unplaced)         0.186     3.016    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.054 f  <hidden>
+                         net (fo=22, unplaced)        0.237     3.291    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.329 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.515    <hidden>
+                         LUT6 (Prop_LUT6_I2_O)        0.038     3.553 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.739    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.777 r  <hidden>
+                         net (fo=1, unplaced)         0.020     3.797    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[7])
+                                                      0.199     3.996 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.001    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.022     4.023 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.028    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.056     4.084 r  <hidden>
+                         net (fo=4, unplaced)         0.198     4.282    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     4.320 r  <hidden>
+                         net (fo=1, unplaced)         0.186     4.506    <hidden>
+                         LUT6 (Prop_LUT6_I0_O)        0.038     4.544 r  <hidden>
+                         net (fo=1, unplaced)         0.048     4.592    <hidden>
+                         FDRE                                         r  <hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock ap_clk rise edge)     3.330     3.330 r  
+                                                      0.000     3.330 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.021     3.351    <hidden>
+                         FDRE                                         r  <hidden>
+                         clock pessimism              0.000     3.351    
+                         clock uncertainty           -0.035     3.316    
+                         FDRE (Setup_FDRE_C_D)        0.025     3.341    <hidden>
+  -------------------------------------------------------------------
+                         required time                          3.341    
+                         arrival time                          -4.592    
+  -------------------------------------------------------------------
+                         slack                                 -1.251    
+
+Slack (VIOLATED) :        -1.251ns  (required time - arrival time)
+  Source:                 bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Destination:            <hidden>
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Path Group:             ap_clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            3.330ns  (ap_clk rise@3.330ns - ap_clk rise@0.000ns)
+  Data Path Delay:        4.562ns  (logic 1.692ns (37.089%)  route 2.870ns (62.911%))
+  Logic Levels:           21  (CARRY8=8 LUT4=3 LUT5=2 LUT6=8)
+  Clock Path Skew:        -0.009ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.021ns = ( 3.351 - 3.330 ) 
+    Source Clock Delay      (SCD):    0.030ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock ap_clk rise edge)     0.000     0.000 r  
+                                                      0.000     0.000 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.030     0.030    bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/ap_clk
+                         FDRE                                         r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.077     0.107 r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/Q
+                         net (fo=21, unplaced)        0.142     0.249    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.139     0.388 r  <hidden>
+                         net (fo=1, unplaced)         0.260     0.648    <hidden>
+                         CARRY8 (Prop_CARRY8_DI[0]_CO[7])
+                                                      0.140     0.788 r  <hidden>
+                         net (fo=29, unplaced)        0.173     0.961    <hidden>
+                         LUT6 (Prop_LUT6_I4_O)        0.038     0.999 f  <hidden>
+                         net (fo=4, unplaced)         0.153     1.152    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     1.252 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.275    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[2])
+                                                      0.098     1.373 r  <hidden>
+                         net (fo=1, unplaced)         0.186     1.559    <hidden>
+                         LUT5 (Prop_LUT5_I0_O)        0.038     1.597 f  <hidden>
+                         net (fo=2, unplaced)         0.186     1.783    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.037     1.820 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.843    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.197     2.040 r  <hidden>
+                         net (fo=1, unplaced)         0.005     2.045    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[4])
+                                                      0.086     2.131 f  <hidden>
+                         net (fo=4, unplaced)         0.198     2.329    <hidden>
+                         LUT4 (Prop_LUT4_I1_O)        0.090     2.419 r  <hidden>
+                         net (fo=1, unplaced)         0.020     2.439    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[1])
+                                                      0.109     2.548 r  <hidden>
+                         net (fo=33, unplaced)        0.244     2.792    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     2.830 r  <hidden>
+                         net (fo=1, unplaced)         0.186     3.016    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.054 f  <hidden>
+                         net (fo=22, unplaced)        0.237     3.291    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.329 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.515    <hidden>
+                         LUT6 (Prop_LUT6_I2_O)        0.038     3.553 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.739    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.777 r  <hidden>
+                         net (fo=1, unplaced)         0.020     3.797    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[7])
+                                                      0.199     3.996 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.001    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.022     4.023 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.028    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.056     4.084 r  <hidden>
+                         net (fo=4, unplaced)         0.198     4.282    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     4.320 r  <hidden>
+                         net (fo=2, unplaced)         0.186     4.506    <hidden>
+                         LUT6 (Prop_LUT6_I0_O)        0.038     4.544 r  <hidden>
+                         net (fo=1, unplaced)         0.048     4.592    <hidden>
+                         FDRE                                         r  <hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock ap_clk rise edge)     3.330     3.330 r  
+                                                      0.000     3.330 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.021     3.351    <hidden>
+                         FDRE                                         r  <hidden>
+                         clock pessimism              0.000     3.351    
+                         clock uncertainty           -0.035     3.316    
+                         FDRE (Setup_FDRE_C_D)        0.025     3.341    <hidden>
+  -------------------------------------------------------------------
+                         required time                          3.341    
+                         arrival time                          -4.592    
+  -------------------------------------------------------------------
+                         slack                                 -1.251    
+
+Slack (VIOLATED) :        -1.251ns  (required time - arrival time)
+  Source:                 bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Destination:            <hidden>
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Path Group:             ap_clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            3.330ns  (ap_clk rise@3.330ns - ap_clk rise@0.000ns)
+  Data Path Delay:        4.562ns  (logic 1.692ns (37.089%)  route 2.870ns (62.911%))
+  Logic Levels:           21  (CARRY8=8 LUT4=3 LUT5=2 LUT6=8)
+  Clock Path Skew:        -0.009ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.021ns = ( 3.351 - 3.330 ) 
+    Source Clock Delay      (SCD):    0.030ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock ap_clk rise edge)     0.000     0.000 r  
+                                                      0.000     0.000 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.030     0.030    bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/ap_clk
+                         FDRE                                         r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.077     0.107 r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/Q
+                         net (fo=21, unplaced)        0.142     0.249    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.139     0.388 r  <hidden>
+                         net (fo=1, unplaced)         0.260     0.648    <hidden>
+                         CARRY8 (Prop_CARRY8_DI[0]_CO[7])
+                                                      0.140     0.788 r  <hidden>
+                         net (fo=29, unplaced)        0.173     0.961    <hidden>
+                         LUT6 (Prop_LUT6_I4_O)        0.038     0.999 f  <hidden>
+                         net (fo=4, unplaced)         0.153     1.152    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     1.252 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.275    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[2])
+                                                      0.098     1.373 r  <hidden>
+                         net (fo=1, unplaced)         0.186     1.559    <hidden>
+                         LUT5 (Prop_LUT5_I0_O)        0.038     1.597 f  <hidden>
+                         net (fo=2, unplaced)         0.186     1.783    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.037     1.820 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.843    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.197     2.040 r  <hidden>
+                         net (fo=1, unplaced)         0.005     2.045    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[4])
+                                                      0.086     2.131 f  <hidden>
+                         net (fo=4, unplaced)         0.198     2.329    <hidden>
+                         LUT4 (Prop_LUT4_I1_O)        0.090     2.419 r  <hidden>
+                         net (fo=1, unplaced)         0.020     2.439    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[1])
+                                                      0.109     2.548 r  <hidden>
+                         net (fo=33, unplaced)        0.244     2.792    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     2.830 r  <hidden>
+                         net (fo=1, unplaced)         0.186     3.016    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.054 f  <hidden>
+                         net (fo=22, unplaced)        0.237     3.291    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.329 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.515    <hidden>
+                         LUT6 (Prop_LUT6_I2_O)        0.038     3.553 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.739    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.777 r  <hidden>
+                         net (fo=1, unplaced)         0.020     3.797    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[7])
+                                                      0.199     3.996 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.001    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.022     4.023 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.028    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.056     4.084 r  <hidden>
+                         net (fo=4, unplaced)         0.198     4.282    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     4.320 r  <hidden>
+                         net (fo=2, unplaced)         0.186     4.506    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     4.544 r  <hidden>
+                         net (fo=1, unplaced)         0.048     4.592    <hidden>
+                         FDRE                                         r  <hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock ap_clk rise edge)     3.330     3.330 r  
+                                                      0.000     3.330 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.021     3.351    <hidden>
+                         FDRE                                         r  <hidden>
+                         clock pessimism              0.000     3.351    
+                         clock uncertainty           -0.035     3.316    
+                         FDRE (Setup_FDRE_C_D)        0.025     3.341    <hidden>
+  -------------------------------------------------------------------
+                         required time                          3.341    
+                         arrival time                          -4.592    
+  -------------------------------------------------------------------
+                         slack                                 -1.251    
+
+Slack (VIOLATED) :        -1.224ns  (required time - arrival time)
+  Source:                 bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Destination:            <hidden>
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Path Group:             ap_clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            3.330ns  (ap_clk rise@3.330ns - ap_clk rise@0.000ns)
+  Data Path Delay:        4.535ns  (logic 1.730ns (38.148%)  route 2.805ns (61.852%))
+  Logic Levels:           20  (CARRY8=7 LUT3=1 LUT4=3 LUT5=2 LUT6=7)
+  Clock Path Skew:        -0.009ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.021ns = ( 3.351 - 3.330 ) 
+    Source Clock Delay      (SCD):    0.030ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock ap_clk rise edge)     0.000     0.000 r  
+                                                      0.000     0.000 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.030     0.030    bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/ap_clk
+                         FDRE                                         r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.077     0.107 r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/Q
+                         net (fo=21, unplaced)        0.142     0.249    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.139     0.388 r  <hidden>
+                         net (fo=1, unplaced)         0.260     0.648    <hidden>
+                         CARRY8 (Prop_CARRY8_DI[0]_CO[7])
+                                                      0.140     0.788 r  <hidden>
+                         net (fo=29, unplaced)        0.173     0.961    <hidden>
+                         LUT6 (Prop_LUT6_I4_O)        0.038     0.999 f  <hidden>
+                         net (fo=4, unplaced)         0.153     1.152    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     1.252 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.275    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[2])
+                                                      0.098     1.373 r  <hidden>
+                         net (fo=1, unplaced)         0.186     1.559    <hidden>
+                         LUT5 (Prop_LUT5_I0_O)        0.038     1.597 f  <hidden>
+                         net (fo=2, unplaced)         0.186     1.783    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.037     1.820 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.843    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.197     2.040 r  <hidden>
+                         net (fo=1, unplaced)         0.005     2.045    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[4])
+                                                      0.086     2.131 f  <hidden>
+                         net (fo=4, unplaced)         0.198     2.329    <hidden>
+                         LUT4 (Prop_LUT4_I1_O)        0.090     2.419 r  <hidden>
+                         net (fo=1, unplaced)         0.020     2.439    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[1])
+                                                      0.109     2.548 r  <hidden>
+                         net (fo=33, unplaced)        0.244     2.792    <hidden>
+                         LUT6 (Prop_LUT6_I1_O)        0.038     2.830 r  <hidden>
+                         net (fo=1, unplaced)         0.186     3.016    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.054 f  <hidden>
+                         net (fo=22, unplaced)        0.237     3.291    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.329 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.515    <hidden>
+                         LUT6 (Prop_LUT6_I2_O)        0.038     3.553 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.739    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.777 r  <hidden>
+                         net (fo=1, unplaced)         0.020     3.797    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[7])
+                                                      0.199     3.996 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.001    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[7])
+                                                      0.116     4.117 r  <hidden>
+                         net (fo=1, unplaced)         0.138     4.255    <hidden>
+                         LUT3 (Prop_LUT3_I0_O)        0.038     4.293 r  <hidden>
+                         net (fo=1, unplaced)         0.186     4.479    <hidden>
+                         LUT6 (Prop_LUT6_I0_O)        0.038     4.517 r  <hidden>
+                         net (fo=1, unplaced)         0.048     4.565    <hidden>
+                         FDRE                                         r  <hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock ap_clk rise edge)     3.330     3.330 r  
+                                                      0.000     3.330 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.021     3.351    <hidden>
+                         FDRE                                         r  <hidden>
+                         clock pessimism              0.000     3.351    
+                         clock uncertainty           -0.035     3.316    
+                         FDRE (Setup_FDRE_C_D)        0.025     3.341    <hidden>
+  -------------------------------------------------------------------
+                         required time                          3.341    
+                         arrival time                          -4.565    
+  -------------------------------------------------------------------
+                         slack                                 -1.224    
+
+Slack (VIOLATED) :        -1.206ns  (required time - arrival time)
+  Source:                 bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Destination:            <hidden>
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Path Group:             ap_clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            3.330ns  (ap_clk rise@3.330ns - ap_clk rise@0.000ns)
+  Data Path Delay:        4.517ns  (logic 1.657ns (36.684%)  route 2.860ns (63.316%))
+  Logic Levels:           21  (CARRY8=8 LUT4=3 LUT5=6 LUT6=4)
+  Clock Path Skew:        -0.009ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.021ns = ( 3.351 - 3.330 ) 
+    Source Clock Delay      (SCD):    0.030ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock ap_clk rise edge)     0.000     0.000 r  
+                                                      0.000     0.000 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.030     0.030    bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/ap_clk
+                         FDRE                                         r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.077     0.107 r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/Q
+                         net (fo=21, unplaced)        0.142     0.249    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.139     0.388 r  <hidden>
+                         net (fo=1, unplaced)         0.260     0.648    <hidden>
+                         CARRY8 (Prop_CARRY8_DI[0]_CO[7])
+                                                      0.140     0.788 r  <hidden>
+                         net (fo=29, unplaced)        0.173     0.961    <hidden>
+                         LUT6 (Prop_LUT6_I4_O)        0.038     0.999 f  <hidden>
+                         net (fo=4, unplaced)         0.153     1.152    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     1.252 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.275    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[1])
+                                                      0.091     1.366 r  <hidden>
+                         net (fo=1, unplaced)         0.184     1.550    <hidden>
+                         LUT5 (Prop_LUT5_I1_O)        0.038     1.588 r  <hidden>
+                         net (fo=1, unplaced)         0.186     1.774    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     1.812 r  <hidden>
+                         net (fo=2, unplaced)         0.186     1.998    <hidden>
+                         LUT6 (Prop_LUT6_I0_O)        0.037     2.035 r  <hidden>
+                         net (fo=1, unplaced)         0.023     2.058    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.197     2.255 r  <hidden>
+                         net (fo=1, unplaced)         0.005     2.260    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[4])
+                                                      0.086     2.346 f  <hidden>
+                         net (fo=4, unplaced)         0.196     2.542    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     2.642 r  <hidden>
+                         net (fo=1, unplaced)         0.020     2.662    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[0])
+                                                      0.071     2.733 r  <hidden>
+                         net (fo=24, unplaced)        0.239     2.972    <hidden>
+                         LUT5 (Prop_LUT5_I3_O)        0.038     3.010 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.196    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.234 f  <hidden>
+                         net (fo=21, unplaced)        0.236     3.470    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.508 r  <hidden>
+                         net (fo=1, unplaced)         0.186     3.694    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.732 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.918    <hidden>
+                         LUT5 (Prop_LUT5_I2_O)        0.038     3.956 r  <hidden>
+                         net (fo=1, unplaced)         0.020     3.976    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[7])
+                                                      0.199     4.175 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.180    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.022     4.202 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.207    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.056     4.263 r  <hidden>
+                         net (fo=4, unplaced)         0.198     4.461    <hidden>
+                         LUT5 (Prop_LUT5_I3_O)        0.038     4.499 r  <hidden>
+                         net (fo=1, unplaced)         0.048     4.547    <hidden>
+                         FDRE                                         r  <hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock ap_clk rise edge)     3.330     3.330 r  
+                                                      0.000     3.330 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.021     3.351    <hidden>
+                         FDRE                                         r  <hidden>
+                         clock pessimism              0.000     3.351    
+                         clock uncertainty           -0.035     3.316    
+                         FDRE (Setup_FDRE_C_D)        0.025     3.341    <hidden>
+  -------------------------------------------------------------------
+                         required time                          3.341    
+                         arrival time                          -4.547    
+  -------------------------------------------------------------------
+                         slack                                 -1.206    
+
+Slack (VIOLATED) :        -1.206ns  (required time - arrival time)
+  Source:                 bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Destination:            <hidden>
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@1.665ns period=3.330ns})
+  Path Group:             ap_clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            3.330ns  (ap_clk rise@3.330ns - ap_clk rise@0.000ns)
+  Data Path Delay:        4.517ns  (logic 1.657ns (36.684%)  route 2.860ns (63.316%))
+  Logic Levels:           21  (CARRY8=8 LUT4=3 LUT5=5 LUT6=5)
+  Clock Path Skew:        -0.009ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.021ns = ( 3.351 - 3.330 ) 
+    Source Clock Delay      (SCD):    0.030ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock ap_clk rise edge)     0.000     0.000 r  
+                                                      0.000     0.000 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.030     0.030    bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/ap_clk
+                         FDRE                                         r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_FDRE_C_Q)         0.077     0.107 r  bd_0_i/hls_inst/inst/node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/hadd_16ns_16ns_16_3_no_dsp_1_U1/din1_buf1_reg[0]/Q
+                         net (fo=21, unplaced)        0.142     0.249    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.139     0.388 r  <hidden>
+                         net (fo=1, unplaced)         0.260     0.648    <hidden>
+                         CARRY8 (Prop_CARRY8_DI[0]_CO[7])
+                                                      0.140     0.788 r  <hidden>
+                         net (fo=29, unplaced)        0.173     0.961    <hidden>
+                         LUT6 (Prop_LUT6_I4_O)        0.038     0.999 f  <hidden>
+                         net (fo=4, unplaced)         0.153     1.152    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     1.252 r  <hidden>
+                         net (fo=1, unplaced)         0.023     1.275    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[1])
+                                                      0.091     1.366 r  <hidden>
+                         net (fo=1, unplaced)         0.184     1.550    <hidden>
+                         LUT5 (Prop_LUT5_I1_O)        0.038     1.588 r  <hidden>
+                         net (fo=1, unplaced)         0.186     1.774    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     1.812 r  <hidden>
+                         net (fo=2, unplaced)         0.186     1.998    <hidden>
+                         LUT6 (Prop_LUT6_I0_O)        0.037     2.035 r  <hidden>
+                         net (fo=1, unplaced)         0.023     2.058    <hidden>
+                         CARRY8 (Prop_CARRY8_S[1]_CO[7])
+                                                      0.197     2.255 r  <hidden>
+                         net (fo=1, unplaced)         0.005     2.260    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[4])
+                                                      0.086     2.346 f  <hidden>
+                         net (fo=4, unplaced)         0.196     2.542    <hidden>
+                         LUT4 (Prop_LUT4_I0_O)        0.100     2.642 r  <hidden>
+                         net (fo=1, unplaced)         0.020     2.662    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[0])
+                                                      0.071     2.733 r  <hidden>
+                         net (fo=24, unplaced)        0.239     2.972    <hidden>
+                         LUT5 (Prop_LUT5_I3_O)        0.038     3.010 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.196    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.234 f  <hidden>
+                         net (fo=21, unplaced)        0.236     3.470    <hidden>
+                         LUT5 (Prop_LUT5_I4_O)        0.038     3.508 r  <hidden>
+                         net (fo=1, unplaced)         0.186     3.694    <hidden>
+                         LUT6 (Prop_LUT6_I5_O)        0.038     3.732 r  <hidden>
+                         net (fo=2, unplaced)         0.186     3.918    <hidden>
+                         LUT5 (Prop_LUT5_I2_O)        0.038     3.956 r  <hidden>
+                         net (fo=1, unplaced)         0.020     3.976    <hidden>
+                         CARRY8 (Prop_CARRY8_S[0]_CO[7])
+                                                      0.199     4.175 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.180    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_CO[7])
+                                                      0.022     4.202 r  <hidden>
+                         net (fo=1, unplaced)         0.005     4.207    <hidden>
+                         CARRY8 (Prop_CARRY8_CI_O[0])
+                                                      0.056     4.263 r  <hidden>
+                         net (fo=4, unplaced)         0.198     4.461    <hidden>
+                         LUT6 (Prop_LUT6_I0_O)        0.038     4.499 r  <hidden>
+                         net (fo=1, unplaced)         0.048     4.547    <hidden>
+                         FDRE                                         r  <hidden>
+  -------------------------------------------------------------------    -------------------
+
+                         (clock ap_clk rise edge)     3.330     3.330 r  
+                                                      0.000     3.330 r  ap_clk (IN)
+                         net (fo=6631, unset)         0.021     3.351    <hidden>
+                         FDRE                                         r  <hidden>
+                         clock pessimism              0.000     3.351    
+                         clock uncertainty           -0.035     3.316    
+                         FDRE (Setup_FDRE_C_D)        0.025     3.341    <hidden>
+  -------------------------------------------------------------------
+                         required time                          3.341    
+                         arrival time                          -4.547    
+  -------------------------------------------------------------------
+                         slack                                 -1.206    
+
+
+
+

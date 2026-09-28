@@ -1,0 +1,13 @@
+# cordic_cv on the SHARED rtprime bitstream (one bitstream), prime_cfg=1, 8x8 RTL cosim
+
+  row 0: OK  golden 66a2  found @slot 0  (nz: 66a2 )
+  row 1: OK  golden 4056 ca4a  found @slot 0  (nz: 4056 ca4a )
+  row 2: OK  golden 65dd  found @slot 0  (nz: 65dd )
+  row 3: OK  golden 39ab 49b5  found @slot 0  (nz: 39ab 49b5 )
+  row 4: OK  golden 6186  found @slot 0  (nz: 6186 )
+  row 5: OK  golden 3b96 449a  found @slot 0  (nz: 3b96 449a )
+  row 6: OK  golden 66d9  found @slot 0  (nz: 66d9 )
+  row 7: OK  golden 3f0d c7aa  found @slot 0  (nz: 3f0d c7aa )
+--- RTL cosim verdict (authoritative) ---
+PASS: one-bitstream cosim obs_cordic_cv_eva_sb_syscredit_rtprime_8x8 prime=1 (8/8 rows bit-exact vs golden)
+INFO: [COSIM 212-1000] *** C/RTL co-simulation finished: PASS ***

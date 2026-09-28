@@ -1,0 +1,641 @@
+
+
+================================================================
+== Synthesis Summary Report of 'top'
+================================================================
++ General Information: 
+    * Date:           Mon Jul  6 20:40:29 2026
+    * Version:        2023.2 (Build 4023990 on Oct 11 2023)
+    * Project:        out.prj
+    * Solution:       solution1 (Vivado IP Flow Target)
+    * Product family: virtexuplusHBM
+    * Target device:  xcu280-fsvh2892-2L-e
+    
+
++ Performance & Resource Estimates: 
+    
+    PS: '+' for module; 'o' for loop; '*' for dataflow
+    +-----------------------------------+--------+-------+---------+---------+----------+---------+------+----------+------+----+------------+-------------+-----+
+    |              Modules              |  Issue |       | Latency | Latency | Iteration|         | Trip |          |      |    |            |             |     |
+    |              & Loops              |  Type  | Slack | (cycles)|   (ns)  |  Latency | Interval| Count| Pipelined| BRAM | DSP|     FF     |     LUT     | URAM|
+    +-----------------------------------+--------+-------+---------+---------+----------+---------+------+----------+------+----+------------+-------------+-----+
+    |+ top*                             |  Timing|  -3.25|       36|  204.578|         -|       37|     -|  dataflow|     -|   -|  7542 (~0%)|   15848 (1%)|    -|
+    | + node_0_0                        |  Timing|  -3.25|       36|  204.578|         -|       36|     -|        no|     -|   -|  4777 (~0%)|  10743 (~0%)|    -|
+    |  + node_0_0_Pipeline_l_S_t_0_t    |  Timing|  -3.25|       34|  193.213|         -|       34|     -|        no|     -|   -|  4771 (~0%)|  10211 (~0%)|    -|
+    |   o l_S_t_0_t                     |      II|   2.43|       32|  181.848|         5|        3|    10|       yes|     -|   -|           -|            -|    -|
+    | + drv_w_0                         |       -|   0.53|       13|   43.290|         -|       13|     -|        no|     -|   -|    14 (~0%)|    114 (~0%)|    -|
+    |  o l_S_t_0_t1                     |       -|   2.43|       11|   36.630|         3|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + drv_e_0                         |       -|   0.53|       13|   43.290|         -|       13|     -|        no|     -|   -|    14 (~0%)|    114 (~0%)|    -|
+    |  o l_S_t_0_t2                     |       -|   2.43|       11|   36.630|         3|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + drv_n_0                         |       -|   0.53|       13|   43.290|         -|       13|     -|        no|     -|   -|    14 (~0%)|    114 (~0%)|    -|
+    |  o l_S_t_0_t3                     |       -|   2.43|       11|   36.630|         3|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + drv_s_0                         |       -|   0.53|       13|   43.290|         -|       13|     -|        no|     -|   -|    14 (~0%)|    114 (~0%)|    -|
+    |  o l_S_t_0_t4                     |       -|   2.43|       11|   36.630|         3|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + col_w_0                         |       -|   0.36|       13|   43.290|         -|       13|     -|        no|     -|   -|    42 (~0%)|    177 (~0%)|    -|
+    |  o l_S_t_0_t5                     |       -|   2.43|       11|   36.630|         2|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + col_e_0                         |       -|   0.36|       13|   43.290|         -|       13|     -|        no|     -|   -|    42 (~0%)|    177 (~0%)|    -|
+    |  o l_S_t_0_t6                     |       -|   2.43|       11|   36.630|         2|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + col_n_0                         |       -|   0.36|       13|   43.290|         -|       13|     -|        no|     -|   -|    42 (~0%)|    177 (~0%)|    -|
+    |  o l_S_t_0_t7                     |       -|   2.43|       11|   36.630|         2|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + col_s_0                         |       -|   0.36|       13|   43.290|         -|       13|     -|        no|     -|   -|    42 (~0%)|    177 (~0%)|    -|
+    |  o l_S_t_0_t8                     |       -|   2.43|       11|   36.630|         2|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + rdrv_w_0                        |       -|   0.05|       14|   46.620|         -|       14|     -|        no|     -|   -|   176 (~0%)|    455 (~0%)|    -|
+    |  o l_S_t_0_t9                     |       -|   2.43|       12|   39.960|         4|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + rdrv_e_0                        |       -|   0.05|       14|   46.620|         -|       14|     -|        no|     -|   -|   176 (~0%)|    455 (~0%)|    -|
+    |  o l_S_t_0_t10                    |       -|   2.43|       12|   39.960|         4|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + rdrv_n_0                        |       -|   0.05|       14|   46.620|         -|       14|     -|        no|     -|   -|   176 (~0%)|    455 (~0%)|    -|
+    |  o l_S_t_0_t11                    |       -|   2.43|       12|   39.960|         4|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + rdrv_s_0                        |       -|   0.05|       14|   46.620|         -|       14|     -|        no|     -|   -|   176 (~0%)|    455 (~0%)|    -|
+    |  o l_S_t_0_t12                    |       -|   2.43|       12|   39.960|         4|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + rclc_w_0                        |       -|   0.52|       15|   49.950|         -|       15|     -|        no|     -|   -|    49 (~0%)|    259 (~0%)|    -|
+    |  + rclc_w_0_Pipeline_l_S_t_0_t13  |       -|   0.52|       13|   43.290|         -|       13|     -|        no|     -|   -|    44 (~0%)|    187 (~0%)|    -|
+    |   o l_S_t_0_t13                   |       -|   2.43|       11|   36.630|         3|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + rclc_e_0                        |       -|   0.52|       15|   49.950|         -|       15|     -|        no|     -|   -|    49 (~0%)|    259 (~0%)|    -|
+    |  + rclc_e_0_Pipeline_l_S_t_0_t14  |       -|   0.52|       13|   43.290|         -|       13|     -|        no|     -|   -|    44 (~0%)|    187 (~0%)|    -|
+    |   o l_S_t_0_t14                   |       -|   2.43|       11|   36.630|         3|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + rclc_n_0                        |       -|   0.52|       15|   49.950|         -|       15|     -|        no|     -|   -|    49 (~0%)|    259 (~0%)|    -|
+    |  + rclc_n_0_Pipeline_l_S_t_0_t15  |       -|   0.52|       13|   43.290|         -|       13|     -|        no|     -|   -|    44 (~0%)|    187 (~0%)|    -|
+    |   o l_S_t_0_t15                   |       -|   2.43|       11|   36.630|         3|        1|    10|       yes|     -|   -|           -|            -|    -|
+    | + rclc_s_0                        |       -|   0.52|       15|   49.950|         -|       15|     -|        no|     -|   -|    49 (~0%)|    259 (~0%)|    -|
+    |  + rclc_s_0_Pipeline_l_S_t_0_t16  |       -|   0.52|       13|   43.290|         -|       13|     -|        no|     -|   -|    44 (~0%)|    187 (~0%)|    -|
+    |   o l_S_t_0_t16                   |       -|   2.43|       11|   36.630|         3|        1|    10|       yes|     -|   -|           -|            -|    -|
+    +-----------------------------------+--------+-------+---------+---------+----------+---------+------+----------+------+----+------------+-------------+-----+
+
+
+================================================================
+== HW Interfaces
+================================================================
+* AP_MEMORY
++----------------+-----------+----------+
+| Port           | Direction | Bitwidth |
++----------------+-----------+----------+
+| v1261_address0 | out       | 4        |
+| v1261_address1 | out       | 4        |
+| v1261_d0       | out       | 16       |
+| v1261_d1       | out       | 16       |
+| v1261_q0       | in        | 16       |
+| v1261_q1       | in        | 16       |
+| v1262_address0 | out       | 4        |
+| v1262_address1 | out       | 4        |
+| v1262_d0       | out       | 32       |
+| v1262_d1       | out       | 32       |
+| v1262_q0       | in        | 32       |
+| v1262_q1       | in        | 32       |
+| v1263_address0 | out       | 4        |
+| v1263_address1 | out       | 4        |
+| v1263_d0       | out       | 16       |
+| v1263_d1       | out       | 16       |
+| v1263_q0       | in        | 16       |
+| v1263_q1       | in        | 16       |
+| v1264_address0 | out       | 4        |
+| v1264_address1 | out       | 4        |
+| v1264_d0       | out       | 32       |
+| v1264_d1       | out       | 32       |
+| v1264_q0       | in        | 32       |
+| v1264_q1       | in        | 32       |
+| v1265_address0 | out       | 4        |
+| v1265_address1 | out       | 4        |
+| v1265_d0       | out       | 16       |
+| v1265_d1       | out       | 16       |
+| v1265_q0       | in        | 16       |
+| v1265_q1       | in        | 16       |
+| v1266_address0 | out       | 4        |
+| v1266_address1 | out       | 4        |
+| v1266_d0       | out       | 32       |
+| v1266_d1       | out       | 32       |
+| v1266_q0       | in        | 32       |
+| v1266_q1       | in        | 32       |
+| v1267_address0 | out       | 4        |
+| v1267_address1 | out       | 4        |
+| v1267_d0       | out       | 16       |
+| v1267_d1       | out       | 16       |
+| v1267_q0       | in        | 16       |
+| v1267_q1       | in        | 16       |
+| v1268_address0 | out       | 4        |
+| v1268_address1 | out       | 4        |
+| v1268_d0       | out       | 32       |
+| v1268_d1       | out       | 32       |
+| v1268_q0       | in        | 32       |
+| v1268_q1       | in        | 32       |
+| v1269_address0 | out       | 4        |
+| v1269_address1 | out       | 4        |
+| v1269_d0       | out       | 16       |
+| v1269_d1       | out       | 16       |
+| v1269_q0       | in        | 16       |
+| v1269_q1       | in        | 16       |
+| v1270_address0 | out       | 4        |
+| v1270_address1 | out       | 4        |
+| v1270_d0       | out       | 16       |
+| v1270_d1       | out       | 16       |
+| v1270_q0       | in        | 16       |
+| v1270_q1       | in        | 16       |
+| v1271_address0 | out       | 4        |
+| v1271_address1 | out       | 4        |
+| v1271_d0       | out       | 16       |
+| v1271_d1       | out       | 16       |
+| v1271_q0       | in        | 16       |
+| v1271_q1       | in        | 16       |
+| v1272_address0 | out       | 4        |
+| v1272_address1 | out       | 4        |
+| v1272_d0       | out       | 16       |
+| v1272_d1       | out       | 16       |
+| v1272_q0       | in        | 16       |
+| v1272_q1       | in        | 16       |
+| v1273_address0 | out       | 4        |
+| v1273_address1 | out       | 4        |
+| v1273_d0       | out       | 32       |
+| v1273_d1       | out       | 32       |
+| v1273_q0       | in        | 32       |
+| v1273_q1       | in        | 32       |
+| v1274_address0 | out       | 4        |
+| v1274_address1 | out       | 4        |
+| v1274_d0       | out       | 32       |
+| v1274_d1       | out       | 32       |
+| v1274_q0       | in        | 32       |
+| v1274_q1       | in        | 32       |
+| v1275_address0 | out       | 4        |
+| v1275_address1 | out       | 4        |
+| v1275_d0       | out       | 32       |
+| v1275_d1       | out       | 32       |
+| v1275_q0       | in        | 32       |
+| v1275_q1       | in        | 32       |
+| v1276_address0 | out       | 4        |
+| v1276_address1 | out       | 4        |
+| v1276_d0       | out       | 32       |
+| v1276_d1       | out       | 32       |
+| v1276_q0       | in        | 32       |
+| v1276_q1       | in        | 32       |
+| v1277_address0 | out       | 4        |
+| v1277_address1 | out       | 4        |
+| v1277_d0       | out       | 32       |
+| v1277_d1       | out       | 32       |
+| v1277_q0       | in        | 32       |
+| v1277_q1       | in        | 32       |
+| v1278_address0 | out       | 4        |
+| v1278_address1 | out       | 4        |
+| v1278_d0       | out       | 32       |
+| v1278_d1       | out       | 32       |
+| v1278_q0       | in        | 32       |
+| v1278_q1       | in        | 32       |
+| v1279_address0 | out       | 4        |
+| v1279_address1 | out       | 4        |
+| v1279_d0       | out       | 32       |
+| v1279_d1       | out       | 32       |
+| v1279_q0       | in        | 32       |
+| v1279_q1       | in        | 32       |
+| v1280_address0 | out       | 4        |
+| v1280_address1 | out       | 4        |
+| v1280_d0       | out       | 32       |
+| v1280_d1       | out       | 32       |
+| v1280_q0       | in        | 32       |
+| v1280_q1       | in        | 32       |
++----------------+-----------+----------+
+
+* TOP LEVEL CONTROL
++-----------+------------+-----------------------------------+
+| Interface | Type       | Ports                             |
++-----------+------------+-----------------------------------+
+| ap_clk    | clock      | ap_clk                            |
+| ap_rst    | reset      | ap_rst                            |
+| ap_ctrl   | ap_ctrl_hs | ap_done ap_idle ap_ready ap_start |
++-----------+------------+-----------------------------------+
+
+
+================================================================
+== SW I/O Information
+================================================================
+* Top Function Arguments
++----------+-----------+----------+
+| Argument | Direction | Datatype |
++----------+-----------+----------+
+| v1261    | in        | __fp16*  |
+| v1262    | in        | int*     |
+| v1263    | in        | __fp16*  |
+| v1264    | in        | int*     |
+| v1265    | in        | __fp16*  |
+| v1266    | in        | int*     |
+| v1267    | in        | __fp16*  |
+| v1268    | in        | int*     |
+| v1269    | out       | __fp16*  |
+| v1270    | out       | __fp16*  |
+| v1271    | out       | __fp16*  |
+| v1272    | out       | __fp16*  |
+| v1273    | in        | int*     |
+| v1274    | in        | int*     |
+| v1275    | in        | int*     |
+| v1276    | in        | int*     |
+| v1277    | out       | int*     |
+| v1278    | out       | int*     |
+| v1279    | out       | int*     |
+| v1280    | out       | int*     |
++----------+-----------+----------+
+
+* SW-to-HW Mapping
++----------+----------------+---------+----------+
+| Argument | HW Interface   | HW Type | HW Usage |
++----------+----------------+---------+----------+
+| v1261    | v1261_address0 | port    | offset   |
+| v1261    | v1261_ce0      | port    |          |
+| v1261    | v1261_d0       | port    |          |
+| v1261    | v1261_q0       | port    |          |
+| v1261    | v1261_we0      | port    |          |
+| v1261    | v1261_address1 | port    | offset   |
+| v1261    | v1261_ce1      | port    |          |
+| v1261    | v1261_d1       | port    |          |
+| v1261    | v1261_q1       | port    |          |
+| v1261    | v1261_we1      | port    |          |
+| v1262    | v1262_address0 | port    | offset   |
+| v1262    | v1262_ce0      | port    |          |
+| v1262    | v1262_d0       | port    |          |
+| v1262    | v1262_q0       | port    |          |
+| v1262    | v1262_we0      | port    |          |
+| v1262    | v1262_address1 | port    | offset   |
+| v1262    | v1262_ce1      | port    |          |
+| v1262    | v1262_d1       | port    |          |
+| v1262    | v1262_q1       | port    |          |
+| v1262    | v1262_we1      | port    |          |
+| v1263    | v1263_address0 | port    | offset   |
+| v1263    | v1263_ce0      | port    |          |
+| v1263    | v1263_d0       | port    |          |
+| v1263    | v1263_q0       | port    |          |
+| v1263    | v1263_we0      | port    |          |
+| v1263    | v1263_address1 | port    | offset   |
+| v1263    | v1263_ce1      | port    |          |
+| v1263    | v1263_d1       | port    |          |
+| v1263    | v1263_q1       | port    |          |
+| v1263    | v1263_we1      | port    |          |
+| v1264    | v1264_address0 | port    | offset   |
+| v1264    | v1264_ce0      | port    |          |
+| v1264    | v1264_d0       | port    |          |
+| v1264    | v1264_q0       | port    |          |
+| v1264    | v1264_we0      | port    |          |
+| v1264    | v1264_address1 | port    | offset   |
+| v1264    | v1264_ce1      | port    |          |
+| v1264    | v1264_d1       | port    |          |
+| v1264    | v1264_q1       | port    |          |
+| v1264    | v1264_we1      | port    |          |
+| v1265    | v1265_address0 | port    | offset   |
+| v1265    | v1265_ce0      | port    |          |
+| v1265    | v1265_d0       | port    |          |
+| v1265    | v1265_q0       | port    |          |
+| v1265    | v1265_we0      | port    |          |
+| v1265    | v1265_address1 | port    | offset   |
+| v1265    | v1265_ce1      | port    |          |
+| v1265    | v1265_d1       | port    |          |
+| v1265    | v1265_q1       | port    |          |
+| v1265    | v1265_we1      | port    |          |
+| v1266    | v1266_address0 | port    | offset   |
+| v1266    | v1266_ce0      | port    |          |
+| v1266    | v1266_d0       | port    |          |
+| v1266    | v1266_q0       | port    |          |
+| v1266    | v1266_we0      | port    |          |
+| v1266    | v1266_address1 | port    | offset   |
+| v1266    | v1266_ce1      | port    |          |
+| v1266    | v1266_d1       | port    |          |
+| v1266    | v1266_q1       | port    |          |
+| v1266    | v1266_we1      | port    |          |
+| v1267    | v1267_address0 | port    | offset   |
+| v1267    | v1267_ce0      | port    |          |
+| v1267    | v1267_d0       | port    |          |
+| v1267    | v1267_q0       | port    |          |
+| v1267    | v1267_we0      | port    |          |
+| v1267    | v1267_address1 | port    | offset   |
+| v1267    | v1267_ce1      | port    |          |
+| v1267    | v1267_d1       | port    |          |
+| v1267    | v1267_q1       | port    |          |
+| v1267    | v1267_we1      | port    |          |
+| v1268    | v1268_address0 | port    | offset   |
+| v1268    | v1268_ce0      | port    |          |
+| v1268    | v1268_d0       | port    |          |
+| v1268    | v1268_q0       | port    |          |
+| v1268    | v1268_we0      | port    |          |
+| v1268    | v1268_address1 | port    | offset   |
+| v1268    | v1268_ce1      | port    |          |
+| v1268    | v1268_d1       | port    |          |
+| v1268    | v1268_q1       | port    |          |
+| v1268    | v1268_we1      | port    |          |
+| v1269    | v1269_address0 | port    | offset   |
+| v1269    | v1269_ce0      | port    |          |
+| v1269    | v1269_d0       | port    |          |
+| v1269    | v1269_q0       | port    |          |
+| v1269    | v1269_we0      | port    |          |
+| v1269    | v1269_address1 | port    | offset   |
+| v1269    | v1269_ce1      | port    |          |
+| v1269    | v1269_d1       | port    |          |
+| v1269    | v1269_q1       | port    |          |
+| v1269    | v1269_we1      | port    |          |
+| v1270    | v1270_address0 | port    | offset   |
+| v1270    | v1270_ce0      | port    |          |
+| v1270    | v1270_d0       | port    |          |
+| v1270    | v1270_q0       | port    |          |
+| v1270    | v1270_we0      | port    |          |
+| v1270    | v1270_address1 | port    | offset   |
+| v1270    | v1270_ce1      | port    |          |
+| v1270    | v1270_d1       | port    |          |
+| v1270    | v1270_q1       | port    |          |
+| v1270    | v1270_we1      | port    |          |
+| v1271    | v1271_address0 | port    | offset   |
+| v1271    | v1271_ce0      | port    |          |
+| v1271    | v1271_d0       | port    |          |
+| v1271    | v1271_q0       | port    |          |
+| v1271    | v1271_we0      | port    |          |
+| v1271    | v1271_address1 | port    | offset   |
+| v1271    | v1271_ce1      | port    |          |
+| v1271    | v1271_d1       | port    |          |
+| v1271    | v1271_q1       | port    |          |
+| v1271    | v1271_we1      | port    |          |
+| v1272    | v1272_address0 | port    | offset   |
+| v1272    | v1272_ce0      | port    |          |
+| v1272    | v1272_d0       | port    |          |
+| v1272    | v1272_q0       | port    |          |
+| v1272    | v1272_we0      | port    |          |
+| v1272    | v1272_address1 | port    | offset   |
+| v1272    | v1272_ce1      | port    |          |
+| v1272    | v1272_d1       | port    |          |
+| v1272    | v1272_q1       | port    |          |
+| v1272    | v1272_we1      | port    |          |
+| v1273    | v1273_address0 | port    | offset   |
+| v1273    | v1273_ce0      | port    |          |
+| v1273    | v1273_d0       | port    |          |
+| v1273    | v1273_q0       | port    |          |
+| v1273    | v1273_we0      | port    |          |
+| v1273    | v1273_address1 | port    | offset   |
+| v1273    | v1273_ce1      | port    |          |
+| v1273    | v1273_d1       | port    |          |
+| v1273    | v1273_q1       | port    |          |
+| v1273    | v1273_we1      | port    |          |
+| v1274    | v1274_address0 | port    | offset   |
+| v1274    | v1274_ce0      | port    |          |
+| v1274    | v1274_d0       | port    |          |
+| v1274    | v1274_q0       | port    |          |
+| v1274    | v1274_we0      | port    |          |
+| v1274    | v1274_address1 | port    | offset   |
+| v1274    | v1274_ce1      | port    |          |
+| v1274    | v1274_d1       | port    |          |
+| v1274    | v1274_q1       | port    |          |
+| v1274    | v1274_we1      | port    |          |
+| v1275    | v1275_address0 | port    | offset   |
+| v1275    | v1275_ce0      | port    |          |
+| v1275    | v1275_d0       | port    |          |
+| v1275    | v1275_q0       | port    |          |
+| v1275    | v1275_we0      | port    |          |
+| v1275    | v1275_address1 | port    | offset   |
+| v1275    | v1275_ce1      | port    |          |
+| v1275    | v1275_d1       | port    |          |
+| v1275    | v1275_q1       | port    |          |
+| v1275    | v1275_we1      | port    |          |
+| v1276    | v1276_address0 | port    | offset   |
+| v1276    | v1276_ce0      | port    |          |
+| v1276    | v1276_d0       | port    |          |
+| v1276    | v1276_q0       | port    |          |
+| v1276    | v1276_we0      | port    |          |
+| v1276    | v1276_address1 | port    | offset   |
+| v1276    | v1276_ce1      | port    |          |
+| v1276    | v1276_d1       | port    |          |
+| v1276    | v1276_q1       | port    |          |
+| v1276    | v1276_we1      | port    |          |
+| v1277    | v1277_address0 | port    | offset   |
+| v1277    | v1277_ce0      | port    |          |
+| v1277    | v1277_d0       | port    |          |
+| v1277    | v1277_q0       | port    |          |
+| v1277    | v1277_we0      | port    |          |
+| v1277    | v1277_address1 | port    | offset   |
+| v1277    | v1277_ce1      | port    |          |
+| v1277    | v1277_d1       | port    |          |
+| v1277    | v1277_q1       | port    |          |
+| v1277    | v1277_we1      | port    |          |
+| v1278    | v1278_address0 | port    | offset   |
+| v1278    | v1278_ce0      | port    |          |
+| v1278    | v1278_d0       | port    |          |
+| v1278    | v1278_q0       | port    |          |
+| v1278    | v1278_we0      | port    |          |
+| v1278    | v1278_address1 | port    | offset   |
+| v1278    | v1278_ce1      | port    |          |
+| v1278    | v1278_d1       | port    |          |
+| v1278    | v1278_q1       | port    |          |
+| v1278    | v1278_we1      | port    |          |
+| v1279    | v1279_address0 | port    | offset   |
+| v1279    | v1279_ce0      | port    |          |
+| v1279    | v1279_d0       | port    |          |
+| v1279    | v1279_q0       | port    |          |
+| v1279    | v1279_we0      | port    |          |
+| v1279    | v1279_address1 | port    | offset   |
+| v1279    | v1279_ce1      | port    |          |
+| v1279    | v1279_d1       | port    |          |
+| v1279    | v1279_q1       | port    |          |
+| v1279    | v1279_we1      | port    |          |
+| v1280    | v1280_address0 | port    | offset   |
+| v1280    | v1280_ce0      | port    |          |
+| v1280    | v1280_d0       | port    |          |
+| v1280    | v1280_q0       | port    |          |
+| v1280    | v1280_we0      | port    |          |
+| v1280    | v1280_address1 | port    | offset   |
+| v1280    | v1280_ce1      | port    |          |
+| v1280    | v1280_d1       | port    |          |
+| v1280    | v1280_q1       | port    |          |
+| v1280    | v1280_we1      | port    |          |
++----------+----------------+---------+----------+
+
+
+================================================================
+== Bind Op Report
+================================================================
++-------------------------------------+-----+--------+-------------+------+--------+---------+
+| Name                                | DSP | Pragma | Variable    | Op   | Impl   | Latency |
++-------------------------------------+-----+--------+-------------+------+--------+---------+
+| + top                               | 0   |        |             |      |        |         |
+|  + node_0_0                         | 0   |        |             |      |        |         |
+|   + node_0_0_Pipeline_l_S_t_0_t     | 0   |        |             |      |        |         |
+|     t_2_fu_6153_p2                  |     |        | t_2         | add  | fabric | 0       |
+|     v210_3_fu_6754_p2               |     |        | v210_3      | add  | fabric | 0       |
+|     v210_2_fu_6764_p2               |     |        | v210_2      | add  | fabric | 0       |
+|     v210_1_fu_6774_p2               |     |        | v210_1      | add  | fabric | 0       |
+|     v210_fu_6784_p2                 |     |        | v210        | add  | fabric | 0       |
+|     v159_fu_6823_p2                 |     |        | v159        | add  | fabric | 0       |
+|     v159_1_fu_6877_p2               |     |        | v159_1      | add  | fabric | 0       |
+|     v159_2_fu_6931_p2               |     |        | v159_2      | add  | fabric | 0       |
+|     v159_3_fu_6991_p2               |     |        | v159_3      | add  | fabric | 0       |
+|     idir_fu_7141_p2                 |     |        | idir        | sub  | fabric | 0       |
+|     v230_fu_8781_p2                 |     |        | v230        | add  | fabric | 0       |
+|     v220_fu_8801_p2                 |     |        | v220        | add  | fabric | 0       |
+|     v230_1_fu_8815_p2               |     |        | v230_1      | add  | fabric | 0       |
+|     v220_1_fu_8835_p2               |     |        | v220_1      | add  | fabric | 0       |
+|     v230_2_fu_8849_p2               |     |        | v230_2      | add  | fabric | 0       |
+|     v220_2_fu_8869_p2               |     |        | v220_2      | add  | fabric | 0       |
+|     v230_3_fu_8883_p2               |     |        | v230_3      | add  | fabric | 0       |
+|     v220_3_fu_8903_p2               |     |        | v220_3      | add  | fabric | 0       |
+|     v245_fu_8921_p2                 |     |        | v245        | add  | fabric | 0       |
+|     v245_1_fu_8940_p2               |     |        | v245_1      | add  | fabric | 0       |
+|     v245_3_fu_8959_p2               |     |        | v245_3      | add  | fabric | 0       |
+|     v245_4_fu_8978_p2               |     |        | v245_4      | add  | fabric | 0       |
+|     v319_fu_7382_p2                 |     |        | v319        | add  | fabric | 0       |
+|     v319_1_fu_7418_p2               |     |        | v319_1      | add  | fabric | 0       |
+|     v319_2_fu_7454_p2               |     |        | v319_2      | add  | fabric | 0       |
+|     v319_3_fu_7490_p2               |     |        | v319_3      | add  | fabric | 0       |
+|     v583_fu_8567_p2                 |     |        | v583        | add  | fabric | 0       |
+|     v573_fu_8579_p2                 |     |        | v573        | add  | fabric | 0       |
+|     iter_cnt_5_fu_8595_p2           |     |        | iter_cnt_5  | add  | fabric | 0       |
+|     hold_cnt_13_fu_9340_p2          |     |        | hold_cnt_13 | add  | fabric | 0       |
+|     hold_cnt_20_fu_9410_p2          |     |        | hold_cnt_20 | add  | fabric | 0       |
+|     hmul_16ns_16ns_16_4_no_dsp_1_U3 |     |        | v664        | hmul | fabric | 3       |
+|     hsub_16ns_16ns_16_4_no_dsp_1_U2 |     |        | v659        | hsub | fabric | 3       |
+|     hadd_16ns_16ns_16_4_no_dsp_1_U1 |     |        | v654        | hadd | fabric | 3       |
+|     v758_fu_9472_p2                 |     |        | v758        | add  | fabric | 0       |
+|  + drv_w_0                          | 0   |        |             |      |        |         |
+|    add_ln1471_fu_93_p2              |     |        | add_ln1471  | add  | fabric | 0       |
+|  + drv_e_0                          | 0   |        |             |      |        |         |
+|    add_ln1506_fu_93_p2              |     |        | add_ln1506  | add  | fabric | 0       |
+|  + drv_n_0                          | 0   |        |             |      |        |         |
+|    add_ln1541_fu_93_p2              |     |        | add_ln1541  | add  | fabric | 0       |
+|  + drv_s_0                          | 0   |        |             |      |        |         |
+|    add_ln1576_fu_93_p2              |     |        | add_ln1576  | add  | fabric | 0       |
+|  + col_w_0                          | 0   |        |             |      |        |         |
+|    t5_2_fu_90_p2                    |     |        | t5_2        | add  | fabric | 0       |
+|    v907_fu_136_p2                   |     |        | v907        | add  | fabric | 0       |
+|  + col_e_0                          | 0   |        |             |      |        |         |
+|    t6_2_fu_90_p2                    |     |        | t6_2        | add  | fabric | 0       |
+|    v930_fu_136_p2                   |     |        | v930        | add  | fabric | 0       |
+|  + col_n_0                          | 0   |        |             |      |        |         |
+|    t7_2_fu_90_p2                    |     |        | t7_2        | add  | fabric | 0       |
+|    v953_fu_136_p2                   |     |        | v953        | add  | fabric | 0       |
+|  + col_s_0                          | 0   |        |             |      |        |         |
+|    t8_2_fu_90_p2                    |     |        | t8_2        | add  | fabric | 0       |
+|    v976_fu_136_p2                   |     |        | v976        | add  | fabric | 0       |
+|  + rdrv_w_0                         | 0   |        |             |      |        |         |
+|    t9_2_fu_114_p2                   |     |        | t9_2        | add  | fabric | 0       |
+|    v990_fu_131_p2                   |     |        | v990        | add  | fabric | 0       |
+|    v1008_fu_165_p2                  |     |        | v1008       | add  | fabric | 0       |
+|    v1015_fu_170_p2                  |     |        | v1015       | add  | fabric | 0       |
+|  + rdrv_e_0                         | 0   |        |             |      |        |         |
+|    t10_2_fu_114_p2                  |     |        | t10_2       | add  | fabric | 0       |
+|    v1034_fu_131_p2                  |     |        | v1034       | add  | fabric | 0       |
+|    v1052_fu_165_p2                  |     |        | v1052       | add  | fabric | 0       |
+|    v1059_fu_170_p2                  |     |        | v1059       | add  | fabric | 0       |
+|  + rdrv_n_0                         | 0   |        |             |      |        |         |
+|    t11_2_fu_114_p2                  |     |        | t11_2       | add  | fabric | 0       |
+|    v1078_fu_131_p2                  |     |        | v1078       | add  | fabric | 0       |
+|    v1096_fu_165_p2                  |     |        | v1096       | add  | fabric | 0       |
+|    v1103_fu_170_p2                  |     |        | v1103       | add  | fabric | 0       |
+|  + rdrv_s_0                         | 0   |        |             |      |        |         |
+|    t12_2_fu_114_p2                  |     |        | t12_2       | add  | fabric | 0       |
+|    v1122_fu_131_p2                  |     |        | v1122       | add  | fabric | 0       |
+|    v1140_fu_165_p2                  |     |        | v1140       | add  | fabric | 0       |
+|    v1147_fu_170_p2                  |     |        | v1147       | add  | fabric | 0       |
+|  + rclc_w_0                         | 0   |        |             |      |        |         |
+|   + rclc_w_0_Pipeline_l_S_t_0_t13   | 0   |        |             |      |        |         |
+|     t13_2_fu_121_p2                 |     |        | t13_2       | add  | fabric | 0       |
+|     v1178_fu_159_p2                 |     |        | v1178       | add  | fabric | 0       |
+|  + rclc_e_0                         | 0   |        |             |      |        |         |
+|   + rclc_e_0_Pipeline_l_S_t_0_t14   | 0   |        |             |      |        |         |
+|     t14_2_fu_121_p2                 |     |        | t14_2       | add  | fabric | 0       |
+|     v1205_fu_159_p2                 |     |        | v1205       | add  | fabric | 0       |
+|  + rclc_n_0                         | 0   |        |             |      |        |         |
+|   + rclc_n_0_Pipeline_l_S_t_0_t15   | 0   |        |             |      |        |         |
+|     t15_2_fu_121_p2                 |     |        | t15_2       | add  | fabric | 0       |
+|     v1232_fu_159_p2                 |     |        | v1232       | add  | fabric | 0       |
+|  + rclc_s_0                         | 0   |        |             |      |        |         |
+|   + rclc_s_0_Pipeline_l_S_t_0_t16   | 0   |        |             |      |        |         |
+|     t16_2_fu_121_p2                 |     |        | t16_2       | add  | fabric | 0       |
+|     v1259_fu_159_p2                 |     |        | v1259       | add  | fabric | 0       |
++-------------------------------------+-----+--------+-------------+------+--------+---------+
+
+
+================================================================
+== Storage Report
+================================================================
++-----------+--------------+--------+------+------+--------+----------+------+---------+------------------+
+| Name      | Usage        | Type   | BRAM | URAM | Pragma | Variable | Impl | Latency | Bitwidth, Depth, |
+|           |              |        |      |      |        |          |      |         | Banks            |
++-----------+--------------+--------+------+------+--------+----------+------+---------+------------------+
+| + top     |              |        | 0    | 0    |        |          |      |         |                  |
+|   v1290_U | fifo channel | stream |      |      |        | v1290    | srl  | 0       | 26, 2, 1         |
+|   v1291_U | fifo channel | stream |      |      |        | v1291    | srl  | 0       | 26, 2, 1         |
+|   v1294_U | fifo channel | stream |      |      |        | v1294    | srl  | 0       | 26, 2, 1         |
+|   v1295_U | fifo channel | stream |      |      |        | v1295    | srl  | 0       | 26, 2, 1         |
+|   v1282_U | fifo channel | stream |      |      |        | v1282    | srl  | 0       | 17, 2, 1         |
+|   v1283_U | fifo channel | stream |      |      |        | v1283    | srl  | 0       | 17, 2, 1         |
+|   v1286_U | fifo channel | stream |      |      |        | v1286    | srl  | 0       | 17, 2, 1         |
+|   v1287_U | fifo channel | stream |      |      |        | v1287    | srl  | 0       | 17, 2, 1         |
+|   v1297_U | fifo channel | stream |      |      |        | v1297    | srl  | 0       | 32, 2, 1         |
+|   v1300_U | fifo channel | stream |      |      |        | v1300    | srl  | 0       | 32, 2, 1         |
+|   v1301_U | fifo channel | stream |      |      |        | v1301    | srl  | 0       | 32, 2, 1         |
+|   v1304_U | fifo channel | stream |      |      |        | v1304    | srl  | 0       | 32, 2, 1         |
+|   v1289_U | fifo channel | stream |      |      |        | v1289    | srl  | 0       | 26, 2, 1         |
+|   v1292_U | fifo channel | stream |      |      |        | v1292    | srl  | 0       | 26, 2, 1         |
+|   v1293_U | fifo channel | stream |      |      |        | v1293    | srl  | 0       | 26, 2, 1         |
+|   v1296_U | fifo channel | stream |      |      |        | v1296    | srl  | 0       | 26, 2, 1         |
+|   v1298_U | fifo channel | stream |      |      |        | v1298    | srl  | 0       | 32, 2, 1         |
+|   v1299_U | fifo channel | stream |      |      |        | v1299    | srl  | 0       | 32, 2, 1         |
+|   v1302_U | fifo channel | stream |      |      |        | v1302    | srl  | 0       | 32, 2, 1         |
+|   v1303_U | fifo channel | stream |      |      |        | v1303    | srl  | 0       | 32, 2, 1         |
+|   v1281_U | fifo channel | stream |      |      |        | v1281    | srl  | 0       | 17, 2, 1         |
+|   v1284_U | fifo channel | stream |      |      |        | v1284    | srl  | 0       | 17, 2, 1         |
+|   v1285_U | fifo channel | stream |      |      |        | v1285    | srl  | 0       | 17, 2, 1         |
+|   v1288_U | fifo channel | stream |      |      |        | v1288    | srl  | 0       | 17, 2, 1         |
++-----------+--------------+--------+------+------+--------+----------+------+---------+------------------+
+
+
+================================================================
+== Pragma Report
+================================================================
+* Valid Pragma Syntax
++-----------------+----------------------------------+--------------------------------------+
+| Type            | Options                          | Location                             |
++-----------------+----------------------------------+--------------------------------------+
+| array_partition | variable=irf complete dim=1      | kernel.cpp:44 in node_0_0, irf       |
+| array_partition | variable=drf complete dim=1      | kernel.cpp:50 in node_0_0, drf       |
+| array_partition | variable=drf_full complete dim=1 | kernel.cpp:56 in node_0_0, drf_full  |
+| array_partition | variable=hold_v complete dim=1   | kernel.cpp:100 in node_0_0, hold_v   |
+| array_partition | variable=hold_v complete dim=2   | kernel.cpp:101 in node_0_0, hold_v   |
+| array_partition | variable=hold_cnt complete dim=1 | kernel.cpp:109 in node_0_0, hold_cnt |
+| array_partition | variable=rbuf complete dim=1     | kernel.cpp:115 in node_0_0, rbuf     |
+| array_partition | variable=rbuf complete dim=2     | kernel.cpp:116 in node_0_0, rbuf     |
+| array_partition | variable=rbcnt complete dim=1    | kernel.cpp:124 in node_0_0, rbcnt    |
+| array_partition | variable=rcred complete dim=1    | kernel.cpp:130 in node_0_0, rcred    |
+| array_partition | variable=sb_v complete dim=1     | kernel.cpp:156 in node_0_0, sb_v     |
+| array_partition | variable=sb_dst complete dim=1   | kernel.cpp:162 in node_0_0, sb_dst   |
+| array_partition | variable=sb_cmp complete dim=1   | kernel.cpp:168 in node_0_0, sb_cmp   |
+| array_partition | variable=sb_rtr complete dim=1   | kernel.cpp:174 in node_0_0, sb_rtr   |
+| array_partition | variable=sb_inj complete dim=1   | kernel.cpp:180 in node_0_0, sb_inj   |
+| array_partition | variable=sb_dir complete dim=1   | kernel.cpp:186 in node_0_0, sb_dir   |
+| array_partition | variable=sb_id complete dim=1    | kernel.cpp:192 in node_0_0, sb_id    |
+| array_partition | variable=sb_rvld complete dim=1  | kernel.cpp:198 in node_0_0, sb_rvld  |
+| array_partition | variable=sb_ix complete dim=1    | kernel.cpp:204 in node_0_0, sb_ix    |
+| array_partition | variable=resq complete dim=1     | kernel.cpp:210 in node_0_0, resq     |
+| array_partition | variable=cmpq complete dim=1     | kernel.cpp:216 in node_0_0, cmpq     |
+| pipeline        | II=1                             | kernel.cpp:248 in node_0_0           |
+| dataflow        |                                  | kernel.cpp:2293 in top               |
+| stream          | variable=v1281 depth=2           | kernel.cpp:2295 in top, v1281        |
+| stream          | variable=v1282 depth=2           | kernel.cpp:2297 in top, v1282        |
+| stream          | variable=v1283 depth=2           | kernel.cpp:2299 in top, v1283        |
+| stream          | variable=v1284 depth=2           | kernel.cpp:2301 in top, v1284        |
+| stream          | variable=v1285 depth=2           | kernel.cpp:2303 in top, v1285        |
+| stream          | variable=v1286 depth=2           | kernel.cpp:2305 in top, v1286        |
+| stream          | variable=v1287 depth=2           | kernel.cpp:2307 in top, v1287        |
+| stream          | variable=v1288 depth=2           | kernel.cpp:2309 in top, v1288        |
+| stream          | variable=v1289 depth=2           | kernel.cpp:2311 in top, v1289        |
+| stream          | variable=v1290 depth=2           | kernel.cpp:2313 in top, v1290        |
+| stream          | variable=v1291 depth=2           | kernel.cpp:2315 in top, v1291        |
+| stream          | variable=v1292 depth=2           | kernel.cpp:2317 in top, v1292        |
+| stream          | variable=v1293 depth=2           | kernel.cpp:2319 in top, v1293        |
+| stream          | variable=v1294 depth=2           | kernel.cpp:2321 in top, v1294        |
+| stream          | variable=v1295 depth=2           | kernel.cpp:2323 in top, v1295        |
+| stream          | variable=v1296 depth=2           | kernel.cpp:2325 in top, v1296        |
+| stream          | variable=v1297 depth=2           | kernel.cpp:2327 in top, v1297        |
+| stream          | variable=v1298 depth=2           | kernel.cpp:2329 in top, v1298        |
+| stream          | variable=v1299 depth=2           | kernel.cpp:2331 in top, v1299        |
+| stream          | variable=v1300 depth=2           | kernel.cpp:2333 in top, v1300        |
+| stream          | variable=v1301 depth=2           | kernel.cpp:2335 in top, v1301        |
+| stream          | variable=v1302 depth=2           | kernel.cpp:2337 in top, v1302        |
+| stream          | variable=v1303 depth=2           | kernel.cpp:2339 in top, v1303        |
+| stream          | variable=v1304 depth=2           | kernel.cpp:2341 in top, v1304        |
++-----------------+----------------------------------+--------------------------------------+
+
+* Inferred Pragmas
++-------------------------+-----------------+-----------------------------------+--------------------------+
+| Source Pragma           | Inferred Pragma | Options                           | Location                 |
++-------------------------+-----------------+-----------------------------------+--------------------------+
+| pipeline kernel.cpp:248 | array_partition | dim=1 type=complete  variable=pop | variable pop in node_0_0 |
++-------------------------+-----------------+-----------------------------------+--------------------------+
+
+

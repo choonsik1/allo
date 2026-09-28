@@ -1,0 +1,24 @@
+
+
+Implementation tool: Xilinx Vivado v.2025.1
+Project:             pnr_nb_node
+Solution:            hls
+Device target:       xczu7ev-ffvc1156-2-e
+Report date:         Wed Jul 22 13:00:31 EDT 2026
+
+#=== Post-Implementation Resource usage ===
+SLICE:            0
+LUT:           1545
+FF:            1592
+DSP:              6
+BRAM:             2
+URAM:             0
+LATCH:            0
+SRL:              0
+CLB:            321
+
+#=== Final timing ===
+CP required:                     3.330
+CP achieved post-synthesis:      2.620
+CP achieved post-implementation: 2.851
+Timing met

@@ -1,0 +1,171 @@
+------ Core 0 ------
+
+Instructions:
+
+MOV r4, syslft      // r4 = xin_tmp = xin
+MOV r5, sysbtm      // r5 = yin_tmp = yin
+MOV r2, sysbtm      // r2 = sigma*2^(-j)
+MULT r3, r2, r4     // r3 = sigma*2^(-j)*xin
+MULT r2, r2, r5     // r2 = sigma*2^-j*yin
+SUB sysrgt, r4, r2  // sysrgt = xin-sigma*2^(-j)*yin
+ADD sysbtm, r5, r3  // sysbtm = yin+sigma*2^(-j)*xin
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 1 ------
+
+Instructions:
+
+MOV r4, syslft       // r4 = zin
+MOV r5, syslft       // r5 = yin
+MOV systop, r5       // systop = yin
+LE r3, r5, r0        // r3 = sigma
+MULT r7, r3, r2      // r7 = sigma*atan(2^(-j))
+MULT systop, r3, r1  // systop = sigma*2^(-j)
+SUB sysrgt, r4, r7   // sysrgt = zout
+MOV sysrgt, systop   // sysrgt = yout
+
+Data:
+
+r0: -0.0               // 0 for LE
+r1:  0.5               // 2^(-j)
+r2:  0.463647609000806 // atan(2^(-j))
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 2 ------
+
+Instructions:
+
+MOV r4, syslft      // r4 = xin_tmp = xin
+MOV r5, sysbtm      // r5 = yin_tmp = yin
+MOV r2, sysbtm      // r2 = sigma*2^(-j)
+MULT r3, r2, r4     // r3 = sigma*2^(-j)*xin
+MULT r2, r2, r5     // r2 = sigma*2^-j*yin
+SUB sysrgt, r4, r2  // sysrgt = xin-sigma*2^(-j)*yin
+ADD sysbtm, r5, r3  // sysbtm = yin+sigma*2^(-j)*xin
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 3 ------
+
+Instructions:
+
+MOV r4, syslft       // r4 = zin
+MOV r5, syslft       // r5 = yin
+MOV systop, r5       // systop = yin
+LE r3, r5, r0        // r3 = sigma
+MULT r7, r3, r2      // r7 = sigma*atan(2^(-j))
+MULT systop, r3, r1  // systop = sigma*2^(-j)
+SUB sysrgt, r4, r7   // sysrgt = zout
+MOV sysrgt, systop   // sysrgt = yout
+
+Data:
+
+r0: -0.0               // 0 for LE
+r1:  0.5               // 2^(-j)
+r2:  0.463647609000806 // atan(2^(-j))
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 4 ------
+
+Instructions:
+
+MOV r4, syslft      // r4 = xin_tmp = xin
+MOV r5, sysbtm      // r5 = yin_tmp = yin
+MOV r2, sysbtm      // r2 = sigma*2^(-j)
+MULT r3, r2, r4     // r3 = sigma*2^(-j)*xin
+MULT r2, r2, r5     // r2 = sigma*2^-j*yin
+SUB sysrgt, r4, r2  // sysrgt = xin-sigma*2^(-j)*yin
+ADD sysbtm, r5, r3  // sysbtm = yin+sigma*2^(-j)*xin
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 5 ------
+
+Instructions:
+
+MOV r4, syslft       // r4 = zin
+MOV r5, syslft       // r5 = yin
+MOV systop, r5       // systop = yin
+LE r3, r5, r0        // r3 = sigma
+MULT r7, r3, r2      // r7 = sigma*atan(2^(-j))
+MULT systop, r3, r1  // systop = sigma*2^(-j)
+SUB sysrgt, r4, r7   // sysrgt = zout
+MOV sysrgt, systop   // sysrgt = yout
+
+Data:
+
+r0: -0.0               // 0 for LE
+r1:  0.5               // 2^(-j)
+r2:  0.463647609000806 // atan(2^(-j))
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 6 ------
+
+Instructions:
+
+MOV r4, syslft      // r4 = xin_tmp = xin
+MOV r5, sysbtm      // r5 = yin_tmp = yin
+MOV r2, sysbtm      // r2 = sigma*2^(-j)
+MULT r3, r2, r4     // r3 = sigma*2^(-j)*xin
+MULT r2, r2, r5     // r2 = sigma*2^-j*yin
+SUB sysrgt, r4, r2  // sysrgt = xin-sigma*2^(-j)*yin
+ADD sysbtm, r5, r3  // sysbtm = yin+sigma*2^(-j)*xin
+
+Data:
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf
+
+------ Core 7 ------
+
+Instructions:
+
+MOV r4, syslft       // r4 = zin
+MOV r5, syslft       // r5 = yin
+MOV systop, r5       // systop = yin
+LE r3, r5, r0        // r3 = sigma
+MULT r7, r3, r2      // r7 = sigma*atan(2^(-j))
+MULT systop, r3, r1  // systop = sigma*2^(-j)
+SUB sysrgt, r4, r7   // sysrgt = zout
+MOV sysrgt, systop   // sysrgt = yout
+
+Data:
+
+r0: -0.0               // 0 for LE
+r1:  0.5               // 2^(-j)
+r2:  0.463647609000806 // atan(2^(-j))
+
+Configuration:
+
+data_rf_sync_mask: 00000000
+iteration: Inf

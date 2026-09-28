@@ -1,0 +1,42 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
+| Date         : Wed Jul 22 12:57:06 2026
+| Host         : zhang-21.ece.cornell.edu running 64-bit Red Hat Enterprise Linux release 8.10 (Ootpa)
+| Command      : report_utilization -hierarchical -hierarchical_depth 6 -file ./report/node_0_0_utilization_hierarchical_synth.rpt
+| Design       : bd_0_wrapper
+| Device       : xczu7ev-ffvc1156-2-e
+| Speed File   : -2
+| Design State : Synthesized
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. Utilization by Hierarchy
+
+1. Utilization by Hierarchy
+---------------------------
+
++--------------------------------------------------------+------------------------------------------------------------+------------+------------+---------+------+------+--------+--------+------+------------+
+|                        Instance                        |                           Module                           | Total LUTs | Logic LUTs | LUTRAMs | SRLs |  FFs | RAMB36 | RAMB18 | URAM | DSP Blocks |
++--------------------------------------------------------+------------------------------------------------------------+------------+------------+---------+------+------+--------+--------+------+------------+
+| bd_0_wrapper                                           |                                                      (top) |       1694 |       1585 |     109 |    0 | 1600 |      0 |      2 |    0 |          6 |
+|   bd_0_i                                               |                                                       bd_0 |       1694 |       1585 |     109 |    0 | 1600 |      0 |      2 |    0 |          6 |
+|     hls_inst                                           |                                            bd_0_hls_inst_0 |       1694 |       1585 |     109 |    0 | 1600 |      0 |      2 |    0 |          6 |
+|       inst                                             |                                   bd_0_hls_inst_0_node_0_0 |       1694 |       1585 |     109 |    0 | 1600 |      0 |      2 |    0 |          6 |
+|         (inst)                                         |                                   bd_0_hls_inst_0_node_0_0 |        533 |        533 |       0 |    0 | 1052 |      0 |      0 |    0 |          0 |
+|         grp_node_0_0_Outline_l_S_d_0_d_fu_1566         |        bd_0_hls_inst_0_node_0_0_node_0_0_Outline_l_S_d_0_d |         59 |         59 |       0 |    0 |   37 |      0 |      0 |    0 |          0 |
+|         hadd_16ns_16ns_16_5_full_dsp_1_U93             |    bd_0_hls_inst_0_node_0_0_hadd_16ns_16ns_16_5_full_dsp_1 |        112 |        112 |       0 |    0 |   96 |      0 |      0 |    0 |          2 |
+|           node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip_u | bd_0_hls_inst_0_node_0_0_hadd_16ns_16ns_16_5_full_dsp_1_ip |        112 |        112 |       0 |    0 |   64 |      0 |      0 |    0 |          2 |
+|             U0                                         |                     bd_0_hls_inst_0_floating_point_v7_1_20 |        112 |        112 |       0 |    0 |   64 |      0 |      0 |    0 |          2 |
+|         hold_v_U                                       |              bd_0_hls_inst_0_node_0_0_hold_v_RAM_AUTO_1R1W |        106 |         74 |      32 |    0 |   32 |      0 |      0 |    0 |          0 |
+|         hsub_16ns_16ns_16_5_full_dsp_1_U94             |    bd_0_hls_inst_0_node_0_0_hsub_16ns_16ns_16_5_full_dsp_1 |        112 |        112 |       0 |    0 |   64 |      0 |      0 |    0 |          2 |
+|           node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip_u | bd_0_hls_inst_0_node_0_0_hsub_16ns_16ns_16_5_full_dsp_1_ip |        112 |        112 |       0 |    0 |   64 |      0 |      0 |    0 |          2 |
+|             U0                                         |     bd_0_hls_inst_0_floating_point_v7_1_20__parameterized1 |        112 |        112 |       0 |    0 |   64 |      0 |      0 |    0 |          2 |
+|         irf_U                                          |                 bd_0_hls_inst_0_node_0_0_irf_RAM_AUTO_1R1W |         55 |         39 |      16 |    0 |   16 |      0 |      0 |    0 |          0 |
+|         rbuf_U                                         |                bd_0_hls_inst_0_node_0_0_rbuf_RAM_AUTO_1R1W |         53 |         27 |      26 |    0 |   26 |      0 |      0 |    0 |          0 |
++--------------------------------------------------------+------------------------------------------------------------+------------+------------+---------+------+------+--------+--------+------+------------+
+
+

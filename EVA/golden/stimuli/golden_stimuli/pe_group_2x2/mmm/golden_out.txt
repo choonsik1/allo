@@ -1,0 +1,21 @@
+# 2x2 pe_group MMM — golden outputs (south edge, sys_tx_btm_data)
+# Captured from EVA_untouched golden RTL by adding an output monitor to
+#   EVA_org_claude/EVA/tb/pe_group/mmm/tb_pe_group_mmm.sv  (lines 279-280):
+#     if (sys_tx_btm_2_rq && sys_tx_btm_2_gt) $display("sys_tx_btm_data[2] = %h", sys_tx_btm_2_data);
+#     if (sys_tx_btm_3_rq && sys_tx_btm_3_gt) $display("sys_tx_btm_data[3] = %h", sys_tx_btm_3_data);
+# VCS: /opt/synopsys/vcs/W-2024.09, SNPSLMD_LICENSE_FILE=27020@en-license-05.coecis.cornell.edu
+#
+# The pe_group is 2x2 = cols 2,3 of the 8x8; here REMAPPED to cols 0,1.
+# fp16 hex -> value (numpy: np.uint16(h).view(np.float16)):
+#
+# column 0 (was pe_group col 2):
+sys_tx_btm_data[0] = 4d80   # 22.0
+sys_tx_btm_data[0] = 51c0   # 46.0
+# column 1 (was pe_group col 3):
+sys_tx_btm_data[1] = 5040   # 34.0
+sys_tx_btm_data[1] = 54a0   # 74.0
+#
+# CROSS-CHECK (self-consistent): out = W^T @ act, with
+#   W   = [[1,3],[5,7]]  (weights, drf addr 0)   act row0=[2,6], row1=[4,8]
+#   col0: 1*2+5*4=22, 1*6+5*8=46
+#   col1: 3*2+7*4=34, 3*6+7*8=74

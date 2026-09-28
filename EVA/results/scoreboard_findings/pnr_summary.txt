@@ -1,0 +1,4 @@
+Post-Route CP: 4.358 ns (~229.5 MHz)
+Target: 3.333 ns (300 MHz) NOT met, routes clean
+II=1 (node loop, Depth 4)
+LUT 5103 / FF 4042 / CARRY8 268 / DSP 2 / BRAM 0

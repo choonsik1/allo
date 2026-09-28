@@ -1,0 +1,7 @@
+==== CORRECTED VERDICTS (RTL cosim, one shared bitstream) ====
+   fft (prime=1): PASS: one-bitstream cosim obs_fft_eva_sb_syscredit_rtprime_8x8 prime=1 (8/8 rows bit-exact
+   cordic_cr (prime=1): PASS: one-bitstream cosim obs_cordic_cr_eva_sb_syscredit_rtprime_8x8 prime=1 (8/8 rows bit-exact
+   cordic_cv (prime=1): PASS: one-bitstream cosim obs_cordic_cv_eva_sb_syscredit_rtprime_8x8 prime=1 (8/8 rows bit-exact
+   cordic_hr (prime=1): PASS: one-bitstream cosim obs_cordic_hr_eva_sb_syscredit_rtprime_8x8 prime=1 (8/8 rows bit-exact
+   cordic_hv (prime=1): PASS: one-bitstream cosim obs_cordic_hv_eva_sb_syscredit_rtprime_8x8 prime=1 (8/8 rows bit-exact
+   mmm (prime=6): PASS: one-bitstream cosim obs_mmm_eva_sb_syscredit_rtprime_8x8 prime=6 (8/8 rows bit-exact

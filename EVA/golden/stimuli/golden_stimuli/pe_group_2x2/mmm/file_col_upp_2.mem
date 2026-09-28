@@ -1,0 +1,12 @@
+id = 0, mode = 1, addr = 8, data = 310E
+id = 0, mode = 1, addr = 9, data = 2201
+id = 0, mode = 1, addr = A, data = 3F01
+id = 0, mode = 1, addr = B, data = 0D2C
+id = 0, mode = 0, addr = 0, data = 3C00
+id = 0, mode = 1, addr = 0, data = 8300
+id = 1, mode = 1, addr = 8, data = 310E
+id = 1, mode = 1, addr = 9, data = 2201
+id = 1, mode = 1, addr = A, data = 3F01
+id = 1, mode = 1, addr = B, data = 0D2C
+id = 1, mode = 0, addr = 0, data = 4500
+id = 1, mode = 1, addr = 0, data = 8300

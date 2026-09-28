@@ -1,0 +1,21 @@
+  FULL-TOP post-route:
+CP achieved post-implementation: 4.641
+Timing not met
+    <SLACK_FINAL>-1.311</SLACK_FINAL>
+    <SLACK_ROUTE>-1.311</SLACK_ROUTE>
+    <SLACK_SYNTH>-1.674</SLACK_SYNTH>
+    <WNS_FINAL>-1.311</WNS_FINAL>
+    <WNS_ROUTE>-1.311</WNS_ROUTE>
+    <WNS_SYNTH>-1.674</WNS_SYNTH>
+    <TPATH DATAPATH_DELAY="4.622" DATAPATH_LOGIC_DELAY="2.327" DATAPATH_NET_DELAY="2.295" ENDPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/resq_4_fu_636_reg[1]/D" LOGIC_LEVELS="17" MAX_FANOUT="33" SLACK="-1.311" STARTPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/drf_full_fu_524_reg[0]/C">
+    <TPATH DATAPATH_DELAY="4.611" DATAPATH_LOGIC_DELAY="2.477" DATAPATH_NET_DELAY="2.134" ENDPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/resq_6_fu_644_reg[6]/D" LOGIC_LEVELS="16" MAX_FANOUT="33" SLACK="-1.301" STARTPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/drf_full_fu_524_reg[0]/C">
+    <TPATH DATAPATH_DELAY="4.605" DATAPATH_LOGIC_DELAY="2.477" DATAPATH_NET_DELAY="2.128" ENDPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/resq_2_fu_628_reg[6]/D" LOGIC_LEVELS="16" MAX_FANOUT="33" SLACK="-1.294" STARTPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/drf_full_fu_524_reg[0]/C">
+    <TPATH DATAPATH_DELAY="4.605" DATAPATH_LOGIC_DELAY="2.327" DATAPATH_NET_DELAY="2.278" ENDPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/resq_6_fu_644_reg[1]/D" LOGIC_LEVELS="17" MAX_FANOUT="33" SLACK="-1.294" STARTPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/drf_full_fu_524_reg[0]/C">
+    <TPATH DATAPATH_DELAY="4.602" DATAPATH_LOGIC_DELAY="2.527" DATAPATH_NET_DELAY="2.075" ENDPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/resq_fu_620_reg[4]/D" LOGIC_LEVELS="16" MAX_FANOUT="33" SLACK="-1.292" STARTPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/drf_full_fu_524_reg[0]/C">
+    <TPATH DATAPATH_DELAY="4.601" DATAPATH_LOGIC_DELAY="2.477" DATAPATH_NET_DELAY="2.124" ENDPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/resq_5_fu_640_reg[6]/D" LOGIC_LEVELS="16" MAX_FANOUT="33" SLACK="-1.291" STARTPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/drf_full_fu_524_reg[0]/C">
+    <TPATH DATAPATH_DELAY="4.598" DATAPATH_LOGIC_DELAY="2.504" DATAPATH_NET_DELAY="2.094" ENDPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/resq_5_fu_640_reg[15]/D" LOGIC_LEVELS="17" MAX_FANOUT="33" SLACK="-1.287" STARTPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/drf_full_fu_524_reg[0]/C">
+    <TPATH DATAPATH_DELAY="4.598" DATAPATH_LOGIC_DELAY="2.327" DATAPATH_NET_DELAY="2.271" ENDPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/resq_4_fu_636_reg[3]/D" LOGIC_LEVELS="17" MAX_FANOUT="33" SLACK="-1.287" STARTPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/drf_full_fu_524_reg[0]/C">
+    <TPATH DATAPATH_DELAY="4.597" DATAPATH_LOGIC_DELAY="2.477" DATAPATH_NET_DELAY="2.120" ENDPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/resq_4_fu_636_reg[6]/D" LOGIC_LEVELS="16" MAX_FANOUT="33" SLACK="-1.287" STARTPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/drf_full_fu_524_reg[0]/C">
+    <TPATH DATAPATH_DELAY="4.596" DATAPATH_LOGIC_DELAY="2.327" DATAPATH_NET_DELAY="2.269" ENDPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/resq_7_fu_648_reg[3]/D" LOGIC_LEVELS="17" MAX_FANOUT="33" SLACK="-1.286" STARTPOINT_PIN="node_0_0_U0/grp_node_0_0_Pipeline_l_S_t_1_t_fu_340/drf_full_fu_524_reg[0]/C">
+| LUT                                                       | 70%       | 2.35%  | OK     |
+| LUTRAM+SRL                                                | 25%       | 0.24%  | OK     |

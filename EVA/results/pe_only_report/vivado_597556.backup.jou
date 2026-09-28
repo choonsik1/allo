@@ -1,0 +1,24 @@
+#-----------------------------------------------------------
+# Vivado v2025.1 (64-bit)
+# SW Build 6140274 on Wed May 21 22:58:25 MDT 2025
+# IP Build 6138677 on Thu May 22 03:10:11 MDT 2025
+# SharedData Build 6139179 on Tue May 20 17:58:58 MDT 2025
+# Start of session at: Wed Aug  5 15:54:08 2026
+# Process ID         : 597556
+# Current directory  : /home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/pe_only_report
+# Command line       : vivado -mode batch -source report_pe_shell.tcl
+# Log file           : /home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/pe_only_report/vivado.log
+# Journal file       : /home/zsm9/pe_core_implementation/Vitis_HLS/bubble_model/scoreboard_allo_eva_final/final_final/pe_only_report/vivado.jou
+# Running On         : zhang-21.ece.cornell.edu
+# Platform           : RedHatEnterprise
+# Operating System   : Red Hat Enterprise Linux release 8.10 (Ootpa)
+# Processor Detail   : Intel(R) Xeon(R) Gold 6242 CPU @ 2.80GHz
+# CPU Frequency      : 2800.000 MHz
+# CPU Physical cores : 32
+# CPU Logical cores  : 64
+# Host memory        : 403750 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 408045 MB
+# Available Virtual  : 273708 MB
+#-----------------------------------------------------------
+source report_pe_shell.tcl

@@ -1,0 +1,10 @@
+# generated / build artifacts of the test suite
+__pycache__/
+# cosim: kernel caches, Vitis projects, generated headers/tcl/logs
+# (vec_*.npz golden vectors ARE tracked - they are the replay test data)
+cosim/allo_prj_*/
+cosim/prj_*/
+cosim/vectors_*.h
+cosim/run_*.tcl
+cosim/log_*.txt
+cosim/*.log

@@ -1,0 +1,3 @@
+INFO: [COSIM 212-316] Starting C post checking ...
+PASS: NB replay val_eva_sb_syscredit_4x4 vs analytical X@W (out_s: 0 mismatches)
+INFO: [COSIM 212-1000] *** C/RTL co-simulation finished: PASS ***

@@ -1,0 +1,1 @@
+int16_skid rbuf2 1x1 (top=node_0_0): Fmax=225.0MHz WNS=-1.114ns LUT=2719 DSP=1
