@@ -56,8 +56,7 @@ All rows are `syn.top=node_0_0`, non-wrapper placed utilization + routed timing.
 ## 5. Correctness
 
 All four chips are **8/8 bit-exact** against the golden EVA RTL by 8×8 RTL cosim, on all six
-workloads (mmm, fft, cordic ×4). The earlier fft "holdout" was a config-before-data hazard,
-fixed (Option B) and re-confirmed on all four chips.
+workloads (mmm, fft, cordic ×4).
 
 ## 6. Methodology & fairness
 
