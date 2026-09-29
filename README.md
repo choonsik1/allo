@@ -11,11 +11,10 @@
 > to ASIC RTL, plus a JIT dataflow simulator. Everything below the "Upstream Allo" heading is
 > unchanged from upstream. Start at [`notes/README.md`](notes/README.md) for project state.
 >
-> **Branch `systemc-all`** is the final line: the emitter plus both IP-integration
-> lines merged, and two directories that live nowhere else —
-> [`EVA/`](EVA/README.md) (EVA chips through SystemC → Catapult, with the measured
-> area/timing tables) and [`ip_integration/`](ip_integration/README.md) (a RISC-V core
-> wrapped as an Allo `IPModule`, driving the EVA PE grid).
+> This line merges the SystemC emitter with both IP-integration lines, and adds two
+> directories — [`EVA/`](EVA/README.md) (EVA chips through SystemC → Catapult, with the
+> measured area/timing tables) and [`ip_integration/`](ip_integration/README.md)
+> (a RISC-V core wrapped as an Allo `IPModule`, driving the EVA PE grid).
 
 Allo is a Python-embedded, MLIR-based language and compiler for building large-scale,
 high-performance accelerators from composable parts.
@@ -55,7 +54,7 @@ is a design decision, not a label:
 > csim and synthesis compile **different code** (five `#ifdef __SYNTHESIS__` splits).
 > A green csim does *not* prove the RTL is right — run `cosim`.
 
-## Quick start
+## Quickstart — SystemC emitter
 
 ```bash
 conda activate allo
@@ -104,19 +103,6 @@ Swap `mode="csim"` for `"csyn"` to synthesize, or `"cosim"` to check the RTL aga
 csim golden.
 
 Runnable, with MLIR/SystemC dumps: [`examples/systemc/pc_channel.py`](examples/systemc/pc_channel.py).
-
-## Results
-
-Genus 20.1 high effort, Nangate 45 nm, 2.0 ns, `concat_rtl.v`, 0 black boxes. Allo designs
-measured against hand-written industrial references:
-
-| design | Allo | reference | verdict |
-|---|---|---|---|
-| WHVCRouter | 2 cyc/step, 510 MHz, 32,415 µm² | MatchLib 1 cyc, 509 MHz, 31,784 µm² | MatchLib 2.04× per area |
-| Crossbar | 1 cyc/step, 746 MHz, 6,466 µm² | MatchLib 3 cyc, 775 MHz, 6,056 µm² | **Allo 2.71× per area** |
-| RaveNoC-equivalent | 2 cyc/step, 606 MHz, 10,001 µm² | RaveNoC 1 cyc, 567 MHz, 7,857 µm² | RaveNoC 2.38× per area |
-
-The NoC evaluation itself lives in a **separate repo**, `final_noc`.
 
 ## Repository map
 
