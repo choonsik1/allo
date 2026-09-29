@@ -7,8 +7,22 @@ comparison between the Allo rebuild and a hand-written Vitis HLS implementation 
 *same execution model* (today's Vitis version uses a different model — event-driven
 `read_nb` + FIFO backpressure — so QoR differences conflate model vs tool).
 
-Reference model: `/home/zsm9/pe_core_implementation/Allo/EVA/eva.py` (4×4, fused
-router+PE node, `for t in range(NSTEP)` II=1 loop, three overlaid 4-dir networks).
+Reference model: `Allo/EVA/eva.py` (4×4, fused router+PE node, `for t in range(NSTEP)`
+II=1 loop, three overlaid 4-dir networks).
+
+## Status
+
+The Allo rebuild is **complete and verified** — 8×8 RTL cosim bit-exact vs the golden EVA
+RTL, with throughput and P&R numbers in [`results/final_chips/`](results/final_chips/) and
+[`results/EVALUATION.md`](results/EVALUATION.md). Everything below is the original
+architecture plan and findings log, kept for reference.
+
+**Open technical point (II=1 forwarding safety).** For any II=1 (dep-false) build the
+forwarding read `a = resq[fwd_a_ix]` is gated only by `inflight >= FP_LAT`, while the `resq`
+slot commits `L` cycles after issue — so safety needs `FP_LAT >= L`. The shipped `FP_LAT=1`
+with `L=3` sits on a ~1-stage scan-offset margin; NOSCHED builds dodge it (no pipeline
+overlap). Note the final NOSCHED rtprime chip is **not** II=1 (its short-path Fmax is a
+NOSCHED mirage); the real II=1 builds are the scheduled forwarding chips.
 
 ## 1. The two models, side by side
 

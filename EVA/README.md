@@ -1,41 +1,22 @@
-# bubble_model — always-fire EVA: hand-Vitis vs Allo, verified by cosim
+# EVA — the EVA accelerator (A-tile), rebuilt in Allo
 
-Two implementations of the same always-fire/bubble EVA architecture, plus the
-replay infrastructure that proves their RTL executes and matches the Allo
-simulator bit-for-bit. `BUBBLE_MODEL_PLAN.md` = canonical plan, findings log
-(deadlock fix, both Allo signedness bugs) and status.
+The EVA accelerator (A-tile) — a tiled fp16/int16 spatial array — rebuilt in Allo and
+verified bit-exact against the original EVA RTL by 8×8 RTL cosim. The measured throughput
+and place-and-route numbers live in `results/final_chips/`.
 
-## vitis_bubble/ — hand-written C++ model
-- `bubble_types.h`     packed word formats (PKT/sys/credit), fp16 bit-puns
-- `eva_node.h`         the fused router+PE node, templated <ROW,COL>;
-                       arms: EVA_COMB_FP (bind_op latency=0 fp, II=1),
-                       EVA_PRIME (initial-token deadlock fix), EVA_NOPIPE
-- `eva_perimeter.h`    drivers/collectors (4-lane + 1-lane variants)
-- `eva_node_solo.cpp`  single-node csynth top
-- `mesh_1x1_bubble.cpp` 1 PE + full perimeter (13 processes), cosim-proven
-- `tb/tb_mesh_1x1_bubble.cpp` hand-written passthrough TB (cosim-only)
-- `tcl/run_eva_node.tcl | run_mesh_1x1.tcl | run_mesh_1x1_comb.tcl |
-   run_mesh_1x1_cosim.tcl`  — run from vitis_bubble/
-- `reports_mesh_1x1/`  archived csynth reports (RPT_DIR to rename)
+## Layout
+| dir | what |
+|---|---|
+| `results/` | evaluation + **the deliverable**. Start at `results/final_chips/` — 4 verified chips (fp16/int16 × blocking/non-blocking) with throughput + P&R tables. Also `EVALUATION.md`, `COMPARISON.md`, `DESIGN_RATIONALE.md`, `CHIP_MAP.md`. |
+| `final/` | canonical chip sources (`syscredit_1x1/` = blocking, `non_syscredit_1x1/` = non-blocking) + the golden-replay harness (`sim/`). |
+| `generators/` | program generators (`build_fft.py`, `build_golden_cosim.py`, …) that emit per-workload kernels/vectors. |
+| `golden/` | golden-RTL testbench stimuli + capture scripts (the cosim oracle). |
+| `archive/` | superseded experiments + earlier chip variants (`archive/chips/`), kept for provenance. |
 
-## allo_bubble/ — Allo-generated RTL, cosim-verified
-Chip SOURCE lives in `Allo/EVA/eva_prime.py` (end-put primed variant of
-eva.py; eva.py itself untouched) + `Allo/EVA/run_tests_prime.py` (sim suite
-shim). Here:
-- `allo_1x1_cosim/`    first Allo cosim bring-up: gen_kernel.py (1x1),
-                       gen_kernel_4x4.py (QoR-compare kernel, csynth PARKED),
-                       tb_allo_1x1.cpp (hand TB), run_allo_1x1_cosim.tcl
-- `allo_cosim_suite/`  the REPLAY PIPELINE (verdict source of truth):
-    dump_vectors.py    capture golden vectors from the 7 eva_tests
-    dump_workloads.py  same for workloads (mmmr, fft2r, fft8r)
-    vec_*.npz          captured inputs+outputs + chip params (M/N/NSTEP/IRF)
-    run_suite.py       npz -> header -> cached kernel -> tcl -> cosim -> verdict
-    tb_replay.cpp      THE one generic TB (bitwise compare, no test logic)
-    log_*.txt          full vitis_hls log per replay
-  Usage:  python dump_*.py  then  python run_suite.py [filter]   (allo env)
-  Status: functional suite 9/9 bit-exact + mmmr PASS; 0 deadlocks.
+## Docs
+- `results/EVALUATION.md` — throughput (outputs/cycle) + P&R tables, methodology.
+- `BUBBLE_MODEL_PLAN.md` — status + the always-fire/bubble architecture plan + findings log.
 
-## old_event_driven/ — reference only
-Copies of the previous event-driven Vitis design (pe_core, router, 8x8
-mesh/tile/fft + their tbs/tcls). Superseded by the bubble model; kept for
-comparison arm 4 (context row) and code reference.
+## Reproduce
+Each config in `results/final_chips/<config>/` has `chip/` (source), `pnr/` (P&R reports),
+and `cosim/` (`rcmon.txt` throughput stamps + `RESULT.txt` verdicts).
