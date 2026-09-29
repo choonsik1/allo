@@ -71,11 +71,3 @@ With A+B, correctness no longer depends on arrival timestep → **any II is corr
 is the shipped **v3.0 non-blocking** design. Practical notes from the bring-up: use circular-buffer
 (head/tail) internal buffers to avoid the II-relaxation that deadlocked `buf4`, and validate small
 (2×2 → 4×4 → 8×8) rather than jumping to 8×8 csynth.
-
----
-
-## 4. Open items
-- **Scheduled II=1 at 8×8** for the fp16 blocking chip (full-schedule codegen is the intractable >3.5 h job;
-  int16 already closes at II=1).
-- The **II=1 forwarding-safety invariant** `FP_LAT >= L` (see `BUBBLE_MODEL_PLAN.md` §Status) — the shipped
-  `FP_LAT=1` sits on a ~1-stage margin.
