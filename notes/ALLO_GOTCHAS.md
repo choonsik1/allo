@@ -4,9 +4,9 @@ Findings from the SystemC/Catapult backend and NoC rebuild work. Everything here
 and confirmed on real designs; each entry says how it showed up, because most of these
 give **wrong answers rather than errors**.
 
-Inherited notes from the `sup` fork (`ALLO_SHORTCOMINGS.md`, `ALLO_LESSONS.md`,
-`PITFALLS_DATAFLOW_REGION.md`) are in `archive/` — they describe a different project
-(`allo-tpu`) and were not re-verified here. At least one of their claims is wrong now:
+Inherited / superseded notes (`ALLO_SHORTCOMINGS.md`, `ALLO_LESSONS.md`,
+`PITFALLS_DATAFLOW_REGION.md`) are in `archive/` — they describe an earlier, different
+project and were not re-verified here. At least one of their claims is wrong now:
 they say bitwise `&` is unsupported, but `&` works and is used throughout
 `final_noc/designs/whvcrouter/whvcrouter.py`.
 
