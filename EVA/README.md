@@ -7,7 +7,7 @@ and place-and-route numbers live in `results/final_chips/`.
 ## Layout
 | dir | what |
 |---|---|
-| `results/` | evaluation + **the deliverable**. Start at `results/final_chips/` — 4 verified chips (fp16/int16 × blocking/non-blocking) with throughput + P&R tables. Also `EVALUATION.md`, `COMPARISON.md`, `DESIGN_RATIONALE.md`, `CHIP_MAP.md`. |
+| `results/` | evaluation + **the deliverable**. Start at `results/final_chips/` — 4 verified chips (fp16/int16 × blocking/non-blocking) with throughput + P&R tables. Also `EVALUATION.md`, `COMPARISON.md`, `DESIGN_RATIONALE.md`. |
 | `final/` | canonical chip sources (`syscredit_1x1/` = blocking, `non_syscredit_1x1/` = non-blocking) + the golden-replay harness (`sim/`). |
 | `generators/` | program generators (`build_fft.py`, `build_golden_cosim.py`, …) that emit per-workload kernels/vectors. |
 | `golden/` | golden-RTL testbench stimuli + capture scripts (the cosim oracle). |
