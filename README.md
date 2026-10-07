@@ -9,7 +9,7 @@
 > **This is a research fork of [cornell-zhang/allo](https://github.com/cornell-zhang/allo).**
 > It adds a **SystemC / Catapult-HLS backend** that takes an Allo dataflow design all the way
 > to ASIC RTL, plus a JIT dataflow simulator. Everything below the "Upstream Allo" heading is
-> unchanged from upstream. Start at [`notes/README.md`](notes/README.md) for project state.
+> unchanged from upstream. Start at [`working_notes/README.md`](working_notes/README.md) for project state.
 >
 > This line merges the SystemC emitter with both IP-integration lines, and adds two
 > directories — [`EVA/`](EVA/README.md) (EVA chips through SystemC → Catapult, with the
@@ -114,22 +114,22 @@ Runnable, with MLIR/SystemC dumps: [`examples/systemc/pc_channel.py`](examples/s
 | `examples/systemc/` | runnable SystemC examples + per-example verdicts |
 | `tests/dataflow/` | the dataflow suite (24 of 30 designs also run cosim) |
 | `docs/` | user-facing backend and link-type docs |
-| `notes/` | project state, simulator, backend, gotchas — **start here** |
+| `working_notes/` | project state, simulator, backend, gotchas — **start here** |
 | `devtools/` | compiler-pipeline introspection and sweep scripts |
 
 ## Documentation
 
 | Doc | Covers |
 |---|---|
-| [`notes/README.md`](notes/README.md) | index of all project documentation |
-| [`notes/STATE.md`](notes/STATE.md) | branches, current work, known gaps, next steps |
-| [`notes/ALLO_GOTCHAS.md`](notes/ALLO_GOTCHAS.md) | **pitfalls that cost a day** — silent wrong answers first |
-| [`notes/SIMULATOR.md`](notes/SIMULATOR.md) | the JIT dataflow simulator |
-| [`notes/BACKEND.md`](notes/BACKEND.md) | SystemC/Catapult backend design notes |
+| [`working_notes/README.md`](working_notes/README.md) | index of all project documentation |
+| [`working_notes/STATE.md`](working_notes/STATE.md) | branches, current work, known gaps, next steps |
+| [`working_notes/ALLO_GOTCHAS.md`](working_notes/ALLO_GOTCHAS.md) | **pitfalls that cost a day** — silent wrong answers first |
+| [`working_notes/SIMULATOR.md`](working_notes/SIMULATOR.md) | the JIT dataflow simulator |
+| [`working_notes/BACKEND.md`](working_notes/BACKEND.md) | SystemC/Catapult backend design notes |
 | [`docs/SYSTEMC_BACKEND.md`](docs/SYSTEMC_BACKEND.md) | user-facing backend guide |
 | [`docs/DATAFLOW_LINKS.md`](docs/DATAFLOW_LINKS.md) | link types, with a runnable companion |
 
-**Read `notes/ALLO_GOTCHAS.md` before writing Allo code.** Several Allo constructs fail
+**Read `working_notes/ALLO_GOTCHAS.md` before writing Allo code.** Several Allo constructs fail
 *silently* rather than erroring — e.g. `~x` is wrong (use `0 - x`), and `UInt(N)` locals read
 back signed.
 
