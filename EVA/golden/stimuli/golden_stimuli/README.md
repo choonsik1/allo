@@ -42,12 +42,12 @@ pe_array_8x8/             # full 8x8
 The 2x2 remaps cols 2,3 → 0,1 via `enumerate` (the pe_array generator takes the col straight from
 the filename, so it is 8x8-only — do NOT point it at pe_group `.mem`).
 
-## Driving an Allo chip with it (the proven path)
-`build_golden_{skid,elastic,bubble}_pg.py` (2x2) and `build_8x8.py` (8x8) do:
-`chip.get_scheduled_eva(...)` **or** `get_eva_top[_elastic](...)` → NOSCHED codegen → (inject II=1
-for get_eva_top chips) → `vectors.h` (IN/IV/RIN/EOUT + `PRIMECFG` for rtprime chips) → cosim vs the
-captured golden. TB = `../tb_skid_cosim.cpp` (rtprime chips, has `prime_cfg`) or
-`../tb_replay_golden.cpp` (elastic, no `prime_cfg`) — the two differ ONLY by `prime_cfg`.
+## Driving an Allo chip with it
+A generator (see [`../../../generators/`](../../../generators/)) parses the `.mem` program
+(`nrev()` translation), emits a `vectors.h` (IN/IV/RIN/EOUT, + `PRIMECFG` for runtime-prime chips),
+and cosims it against the captured golden. Testbenches are in
+[`../../testbenches/`](../../testbenches/): `tb_skid_cosim.cpp` (blocking/credit chips — has
+`prime_cfg`) and `tb_replay_golden.cpp` (elastic — no `prime_cfg`); the two differ only by `prime_cfg`.
 
 ## Gotchas (learned the hard way)
 - **NEVER** use synthetic `load_mmm_router` for multi-PE — "exact for 1×1 only" (omits the `i+3j`
