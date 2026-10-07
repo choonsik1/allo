@@ -8,10 +8,12 @@ and place-and-route numbers live in `results/final_chips/`.
 | dir | what |
 |---|---|
 | `results/` | evaluation + **the deliverable**. Start at `results/final_chips/` — 4 verified chips (fp16/int16 × blocking/non-blocking) with throughput + P&R tables. Also `EVALUATION.md`, `COMPARISON.md`, `DESIGN_RATIONALE.md`. |
-| `final/` | canonical chip sources (`syscredit_1x1/` = blocking, `non_syscredit_1x1/` = non-blocking) + the golden-replay harness (`sim/`). |
+| `sim/` | golden-replay harness (`replay_golden_*.py`) — runs a golden EVA program through an Allo chip and diffs bit-exact vs the golden RTL (the functional cross-check). |
 | `generators/` | program generators (`build_fft.py`, `build_golden_cosim.py`, …) that emit per-workload kernels/vectors. |
 | `golden/` | golden-RTL testbench stimuli + capture scripts (the cosim oracle). |
-| `archive/` | superseded experiments + earlier chip variants (`archive/chips/`), kept for provenance. |
+| `archive/` | superseded experiments, earlier chip variants (`archive/chips/`), old results (`archive/old_results/`), and the full version log (`archive/VERSION_LOG.md`), kept for provenance. |
+
+The verified chip **sources** live under `results/final_chips/<config>/chip/` — see that folder.
 
 ## Docs
 - `results/EVALUATION.md` — throughput (outputs/cycle) + P&R tables, methodology.
