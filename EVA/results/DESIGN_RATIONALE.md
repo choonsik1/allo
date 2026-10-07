@@ -71,3 +71,29 @@ With A+B, correctness no longer depends on arrival timestep → **any II is corr
 is the shipped **v3.0 non-blocking** design. Practical notes from the bring-up: use circular-buffer
 (head/tail) internal buffers to avoid the II-relaxation that deadlocked `buf4`, and validate small
 (2×2 → 4×4 → 8×8) rather than jumping to 8×8 csynth.
+
+---
+
+## 4. The always-fire / bubble model — v2.0 mechanics & caveats
+
+v2.0 is a direct port of the reference `eva.py` execution model:
+
+- **Lockstep.** One fused router+PE process per node, a bounded `for t in range(NSTEP)` II=1 loop;
+  iteration *t* of every node is architectural cycle *t*. A word is put on every link every cycle —
+  a **bubble** (all-zero / `rq=0`) when there's nothing to say. Deadlock-free by construction: each
+  node puts (from registers) before it gets, and all link streams are depth-2.
+- **Credit backpressure for lossy buffers.** The internal 2-deep systolic `hold` buffers *drop* a
+  word when full; the credit plane is what makes the path lossless. This drop-on-full is a **modeling
+  deviation** from golden EVA, whose `sync_register` *stalls* the sender (rq/gt, stall-not-drop) —
+  equivalent under every original workload schedule (hence the bit-exact replays), differing only
+  under overload.
+- **Honest throughput metric = clocks-per-result, not II.** On serial (RAW-dependent) kernels a
+  dependent instruction costs ~1+SB_DEPTH architectural cycles, so II=1 alone doesn't beat the
+  baseline — it pays off only with ILP ≥ SB_DEPTH. (This is why int16's genuine 1-cycle recurrence,
+  not just the II number, is what matters.)
+- **II=1 forwarding safety.** For a dep-false II=1 build the forwarding read is gated by
+  `inflight >= FP_LAT`, while the `resq` slot commits `L` cycles after issue — so safety needs
+  `FP_LAT >= L` (the shipped `FP_LAT=1` / `L=3` sits on a ~1-stage margin; NOSCHED dodges it).
+
+Full original build plan, porting crib, and bring-up log:
+[`../archive/BUBBLE_MODEL_PLAN_full.md`](../archive/BUBBLE_MODEL_PLAN_full.md).

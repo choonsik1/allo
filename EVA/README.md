@@ -17,7 +17,8 @@ The verified chip **sources** live under `results/final_chips/<config>/chip/` �
 
 ## Docs
 - `results/EVALUATION.md` — throughput (outputs/cycle) + P&R tables, methodology.
-- `BUBBLE_MODEL_PLAN.md` — status + the always-fire/bubble architecture plan + findings log.
+- `results/DESIGN_RATIONALE.md` — the two models (v2.0 blocking / v3.0 non-blocking), the decision matrix, and the always-fire/bubble mechanics.
+- `results/COMPARISON.md` — vs the golden RTL: faithfulness, simplification audit, Allo-expressiveness gaps.
 
 ## Reproduce
 Each config in `results/final_chips/<config>/` has `chip/` (source), `pnr/` (P&R reports),
